@@ -1,0 +1,73 @@
+[
+  {
+    "product_id": "PROD-001",
+    "name": "Classic Cotton T-Shirt",
+    "category": "Tops / Tees",
+    "price": 38.00,
+    "currency": "USD",
+    "sizes_in_stock": ["S", "M", "L", "XL"],
+    "sizes_out_of_stock": ["XS"],
+    "fit_guide": "Regular relaxed fit. True to size.",
+    "fabric_and_care": "100% Organic Combed Ring-Spun Cotton (220 GSM). Machine wash cold with like colors, tumble dry low.",
+    "final_sale": false,
+    "clearance": false,
+    "description": "UrbanThread signature heavyweight Classic Cotton T-Shirt with reinforced ribbed collar."
+  },
+  {
+    "product_id": "PROD-002",
+    "name": "Metro Fleece Zip Hoodie",
+    "category": "Outerwear / Hoodies",
+    "price": 85.00,
+    "currency": "USD",
+    "sizes_in_stock": ["M", "L"],
+    "sizes_out_of_stock": ["XS", "S", "XL"],
+    "fit_guide": "Slightly boxy streetwear fit. Size up one size if layering over heavy knitwear.",
+    "fabric_and_care": "80% Organic Cotton, 20% Recycled Polyester brushed fleece. Machine wash cold, hang dry.",
+    "final_sale": false,
+    "clearance": false,
+    "description": "Heavyweight 400 GSM full-zip fleece hoodie with double-lined hood and matte metal hardware."
+  },
+  {
+    "product_id": "PROD-003",
+    "name": "Archive Distressed Denim Jacket (Final Sale)",
+    "category": "Clearance / Outerwear",
+    "price": 64.00,
+    "original_price": 150.00,
+    "currency": "USD",
+    "sizes_in_stock": ["S", "M"],
+    "sizes_out_of_stock": ["L", "XL"],
+    "fit_guide": "Structured vintage trucker fit through chest and shoulders.",
+    "fabric_and_care": "100% 13oz Cotton Denim. Machine wash cold inside out, hang dry.",
+    "final_sale": true,
+    "clearance": true,
+    "description": "Limited archive release distressed denim jacket offered at deep clearance discount. Marked Final Sale."
+  },
+  {
+    "product_id": "PROD-004",
+    "name": "Everyday Chino Tapered Pants",
+    "category": "Bottoms / Pants",
+    "price": 72.00,
+    "currency": "USD",
+    "sizes_in_stock": ["28", "30", "32", "34", "36"],
+    "sizes_out_of_stock": [],
+    "fit_guide": "Mid-rise tailored taper from knee to ankle with comfort stretch waistband.",
+    "fabric_and_care": "97% Organic Cotton Twill, 3% Elastane. Wash cold, tumble dry low.",
+    "final_sale": false,
+    "clearance": false,
+    "description": "Versatile stretch cotton twill chino engineered for daily wear."
+  },
+  {
+    "product_id": "PROD-005",
+    "name": "Merino Ribbed Crewneck Sweater",
+    "category": "Knitwear / Tops",
+    "price": 110.00,
+    "currency": "USD",
+    "sizes_in_stock": ["S", "M", "L"],
+    "sizes_out_of_stock": ["XS", "XL"],
+    "fit_guide": "Tailored classic fit.",
+    "fabric_and_care": "100% Extra-Fine Merino Wool. Hand wash cold or gentle wool cycle; lay flat to dry.",
+    "final_sale": false,
+    "clearance": false,
+    "description": "Soft breathable merino wool crewneck sweater with ribbed cuffs and hem."
+  }
+]
