@@ -1,0 +1,57 @@
+Analyzed final-plan.md:L1-30
+
+I have created the complete execution blueprint in [`final-plan.md`](file:///d:/my%20TRY/Noir-Atelier/final-plan.md) based on [`Noir Atelier — Agentic System Architecture & Implementation Plan.docx`](file:///d:/my%20TRY/Noir-Atelier/docs/plan/Noir%20Atelier%20%E2%80%94%20Agentic%20System%20Architecture%20&%20Implementation%20Plan.docx).
+
+Here is the direct breakdown of **what is currently there (and its whitelist)**, **what the gap is**, and **what we follow**:
+
+---
+
+### 1. What Is Now There & Current Whitelist
+Right now, the repository is a **single-agent Customer Support Prototype** ([`src/agent.py`](file:///d:/my%20TRY/Noir-Atelier/src/agent.py), [`src/llm_agent.py`](file:///d:/my%20TRY/Noir-Atelier/src/llm_agent.py), [`src/data_store.py`](file:///d:/my%20TRY/Noir-Atelier/src/data_store.py)) backed by local SQLite (`data/noir_atelier.db`).
+
+* **Current Tool Whitelist ([`ALLOWED_TOOLS` in `src/llm_agent.py`](file:///d:/my%20TRY/Noir-Atelier/src/llm_agent.py#L18-L24)):**
+  1. `lookup_products(query)`
+  2. `lookup_policies(topic)`
+  3. `get_order_status(order_id, customer_email)`
+  4. `process_return_or_cancel(order_id, customer_email, action, reason, request_key)`
+  5. `escalate_to_human(reason, category, severity, order_id, customer_email)`
+* **Current Gate & Security Whitelist ([`ToolPolicyGate`](file:///d:/my%20TRY/Noir-Atelier/src/llm_agent.py#L85-L120) & [`src/guardrails.py`](file:///d:/my%20TRY/Noir-Atelier/src/guardrails.py)):**
+  * **Identity Whitelist:** `order_id`, `customer_email`, and `request_key` cannot be guessed by the LLM—they must be extracted directly from the customer's message (`CustomerFacts`).
+  * **Action Whitelist:** Only `"return"` and `"cancel"` are allowed when explicitly requested by the customer; exchange requests are forced to escalate.
+  * **Turn & Session Caps:** Max `1` mutation and `1` escalation per turn; session locks after `3` failed verification attempts.
+  * **PII Scrubber:** Replies only allow emails/phones/addresses belonging to `verified_emails`.
+
+---
+
+### 2. What Is the Gap to Fulfill the Architecture Plan?
+
+| Area | What Exists Now | Target Architecture Plan | Gap to Build |
+|---|---|---|---|
+| **Agents & Whitelists** | 1 Support Agent (5 tools) | **9 Specialized Agents** (`Catalog`, `Shopping`, `Order`, `Payment`, `Fulfillment`, `Returns`, `Support`, `Compliance`, `Admin`) + **Intent Router** | Add 8 domain agents + `AgentOrchestrator` + per-agent RBAC tool & table whitelists (~45 tools total). |
+| **Transactional DB** | SQLite (`data/noir_atelier.db`) | **PostgreSQL 16+** (ACID + JSONB + FTS) | Add PostgreSQL 16 schema (variants, carts, coupons, PIN codes, payments, shipments, GST invoices, immutable `audit_logs`). |
+| **Vector DB** | None (SQL `LIKE` only) | **Qdrant** | Add Qdrant collection (`noir_atelier_products`) for hybrid style search (`search_by_style`) + metadata filters (price, color, size). |
+| **Cache & State** | In-memory Python dict | **Redis** | Add Redis for Cart (`30m TTL`), Session (`24h TTL`), Product/Stock cache (`24h TTL`), and 5-min duplicate order lock. |
+| **Search** | Substring matching | **PostgreSQL Full-Text Search now** (Elasticsearch deferred until >10K products) | Add Postgres `tsvector` + `GIN` index + synonym dictionary (`tee` → `t-shirt`, `kurta` → `tunic`). |
+| **Object Storage** | None | **Local Object Store (`./storage/`)** with short, understandable IDs | Build [`src/storage/object_store.py`](file:///d:/my%20TRY/Noir-Atelier/final-plan.md#L118-L157) with clean folders and short IDs. |
+| **India Retail & Compliance** | USD (`$`), no tax/PIN logic | **INR (`₹`)**, **5% Clothing GST (HSN)**, `₹1,999` free shipping, serviceable PINs, No COD, DPDP Act 2023 | Update pricing to INR (`₹`), add GST/PIN validation, and add `ComplianceAgent` publication/privacy gates. |
+
+---
+
+### 3. What We Follow (Confirmed Stack & Short-ID Local Object Storage)
+
+1. **Databases We Follow:**
+   * **PostgreSQL 16+**: Source of truth for all transactional data + `JSONB` for flexible attributes + Full-Text Search (`tsvector`/`GIN`) for Phase 1–2 (replacing the need for MongoDB, and deferring Elasticsearch until >10K products).
+   * **Redis**: Ephemeral state for carts, sessions, rate-limiting, and inventory caching.
+   * **Qdrant**: Self-hosted Vector DB for semantic style search and recommendations.
+2. **Local Object Storage (`./storage/`) with Short, Understandable IDs (6–10 chars max):**
+   * `storage/products/PRD-001/` → `main.jpg`, `back.jpg`, `size-chart.png`, `meta.json`
+   * `storage/orders/ORD-1001/` → `INV-1001.json`, `INV-1001.txt` (GST Tax Invoice), `SHP-3001-label.txt` (AWB label)
+   * `storage/payments/PAY-5001/` → `receipt-ORD-1001.json`
+   * `storage/returns/RET-8802/` → `defect-photo-1.jpg`, `inspection-note.json`
+   * `storage/support/ESC-9001/` → `transcript-ORD-1001.json`
+   * `storage/compliance/POL-RET-01/` → `approval-cert.json`
+
+---
+
+### Next Step
+Review [`final-plan.md`](file:///d:/my%20TRY/Noir-Atelier/final-plan.md). Let me know if you want any adjustments to the plan or if we should start executing **Stage 1 (Docker Compose for Postgres/Redis/Qdrant + Local Object Store `./storage/` with short IDs)**.
