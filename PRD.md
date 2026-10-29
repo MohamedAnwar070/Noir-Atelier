@@ -1,13 +1,13 @@
-# Product Requirements Document (PRD): UrbanThread Autonomous Customer Support Agent
+# Product Requirements Document (PRD): Noir Atelier Autonomous Customer Support Agent
 
 **Document Owner:** AI Engineering  
 **Status:** v1.0 Release  
-**Brand / Domain:** UrbanThread Apparel Co. (100% Fictional Apparel Brand)
+**Brand / Domain:** Noir Atelier Apparel Co. (100% Fictional Apparel Brand)
 
 ---
 
 ## 1. Executive Summary
-UrbanThread is a fictional direct-to-consumer apparel company offering everyday essentials such as the **Classic Cotton T-Shirt**, fleece hoodies, chinos, knitwear, and archive outerwear. This PRD defines the customer needs, scope, assumptions, hybrid SQLite architecture, and success criteria for the **UrbanThread AI Customer Support Agent**.
+Noir Atelier is a fictional direct-to-consumer apparel company offering everyday essentials such as the **Classic Cotton T-Shirt**, fleece hoodies, chinos, knitwear, and archive outerwear. This PRD defines the customer needs, scope, assumptions, hybrid SQLite architecture, and success criteria for the **Noir Atelier AI Customer Support Agent**.
 
 ---
 
@@ -43,7 +43,7 @@ UrbanThread is a fictional direct-to-consumer apparel company offering everyday 
 
 1. **100% Fictional Data (`data/`):** All products (such as the `Classic Cotton T-Shirt`), policies, customers, and orders are synthetic.
 2. **Hybrid SQLite + JSON Persistence (`src/data_store.py`):**
-   - Version-controlled JSON seed files (`data/*.json`) automatically populate a relational **SQLite database** (`data/urbanthread.db`) with normalized tables (`products`, `policies`, `policy_conflicts`, `customers`, `orders`, `order_items`, `idempotency_ledger`, `escalations`).
+   - Version-controlled JSON seed files (`data/*.json`) automatically populate a relational **SQLite database** (`data/noir_atelier.db`) with normalized tables (`products`, `policies`, `policy_conflicts`, `customers`, `orders`, `order_items`, `idempotency_ledger`, `escalations`).
    - Every mock refund / return / cancellation is recorded with a **unique `request_key`** in `idempotency_ledger` inside an ACID transaction.
 3. **Centralized Constants & `.env` Configuration (`src/constants.py`, `src/config.py`):**
    - All constants, prompts, regexes, SQLite schemas, and status codes are centralized in `src/constants.py`, with `.env` configuration managed in `src/config.py`.

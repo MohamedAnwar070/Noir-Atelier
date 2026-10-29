@@ -1,4 +1,4 @@
-# UrbanThread — Official Customer Support Policy Handbook
+# Noir Atelier — Official Customer Support Policy Handbook
 
 ## 1. Standard 7-Day Return & Refund Policy (`POL-RET-01`)
 - **Return Window:** **7 calendar days** from the confirmed delivery date.

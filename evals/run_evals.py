@@ -7,7 +7,7 @@ import sys
 import time
 from typing import Any, Dict, List
 
-os.environ.setdefault("URBANTHREAD_SQLITE_DB", ":memory:")
+os.environ.setdefault("NOIR_ATELIER_SQLITE_DB", ":memory:")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.agent import CustomerSupportAgent

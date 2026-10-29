@@ -18,7 +18,7 @@ def _print_reference_guide(agent: CustomerSupportAgent) -> None:
     print("  /whoami                    : Show currently verified customer session")
     print("  /logout                    : Clear verified customer session")
     print("  /orders                    : Show live SQLite orders table")
-    print("  /products                  : Show UrbanThread product catalog")
+    print(f"  /products                  : Show {BRAND_NAME} product catalog")
     print("  /policies                  : Show store policies (7-day return rule, Final Sale, VIP Gold)")
     print("  /fail on | /fail off       : Toggle simulated SQLite 503 database outage (Failure #5)")
     print("  /reset                     : Reset SQLite database and multi-turn session memory")

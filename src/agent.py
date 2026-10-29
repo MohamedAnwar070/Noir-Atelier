@@ -799,7 +799,7 @@ class CustomerSupportAgent:
                 )
 
             checkout_note = (
-                "\n\n*(Note: As a Customer Support Agent, I can verify stock and sizing, while new purchases are completed directly on the UrbanThread storefront checkout.)*"
+                f"\n\n*(Note: As a Customer Support Agent, I can verify stock and sizing, while new purchases are completed directly on the {BRAND_NAME} storefront checkout.)*"
                 if intent == "purchase_inquiry"
                 else ""
             )

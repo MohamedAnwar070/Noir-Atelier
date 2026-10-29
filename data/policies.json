@@ -1,11 +1,11 @@
 {
-  "company_name": "UrbanThread",
+  "company_name": "Noir Atelier",
   "policies": [
     {
       "policy_id": "POL-RET-01",
       "topic": "returns",
       "title": "Standard 7-Day Return & Mock Refund Policy",
-      "rule": "Standard full-price UrbanThread items may be returned for a full refund within 7 calendar days of the delivery date, provided items are unworn, unwashed, and have original tags attached. Approved returns generate a mock refund with a unique request_key credited to the original payment method within 3-5 business days.",
+      "rule": "Standard full-price Noir Atelier items may be returned for a full refund within 7 calendar days of the delivery date, provided items are unworn, unwashed, and have original tags attached. Approved returns generate a mock refund with a unique request_key credited to the original payment method within 3-5 business days.",
       "applies_to": "standard_items",
       "return_window_days": 7
     },
@@ -22,7 +22,7 @@
       "policy_id": "POL-VIP-01",
       "topic": "vip_loyalty",
       "title": "VIP Gold Member 14-Day All-Access Return Guarantee",
-      "rule": "Customers in the VIP_GOLD loyalty tier receive an extended 14-day return and refund guarantee on ALL UrbanThread purchases, explicitly including clearance, archive, and Final Sale items, with complimentary return shipping.",
+      "rule": "Customers in the VIP_GOLD loyalty tier receive an extended 14-day return and refund guarantee on ALL Noir Atelier purchases, explicitly including clearance, archive, and Final Sale items, with complimentary return shipping.",
       "applies_to": "VIP_GOLD",
       "return_window_days": 14,
       "includes_final_sale": true

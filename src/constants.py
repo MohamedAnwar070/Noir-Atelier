@@ -3,10 +3,10 @@ import re
 from typing import List, Tuple
 
 
-BRAND_NAME = "UrbanThread"
+BRAND_NAME = "Noir Atelier"
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
-SQLITE_DB_PATH = DATA_DIR / "urbanthread.db"
+SQLITE_DB_PATH = DATA_DIR / "noir_atelier.db"
 ENV_FILE_PATH = PROJECT_ROOT / ".env"
 
 DEFAULT_BACKEND = "hybrid"
@@ -258,7 +258,9 @@ PRODUCT_INQUIRY_KEYWORDS = (
     "pants",
     "sweater",
     "merino",
-    "urbanthread",
+    "noir atelier",
+    "noiratelier",
+    "noir",
     "prod-",
     "in stock",
     "available",
@@ -376,7 +378,7 @@ CREATE TABLE IF NOT EXISTS escalations (
 );
 """
 
-AGENT_PLANNER_SYSTEM_PROMPT = """You are the autonomous Customer Support Agent for UrbanThread Apparel Co. (a fictional apparel brand).
+AGENT_PLANNER_SYSTEM_PROMPT = """You are the autonomous Customer Support Agent for Noir Atelier Apparel Co. (a fictional apparel brand).
 You decide which tools to call and when to answer. You may call tools several times before replying.
 
 TOOLS (call by exact name, arguments as JSON):

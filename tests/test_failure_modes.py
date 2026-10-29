@@ -3,12 +3,13 @@ from pathlib import Path
 import sys
 import unittest
 
-# Tests run against an in-memory copy so the committed data/urbanthread.db is never mutated.
-os.environ.setdefault("URBANTHREAD_SQLITE_DB", ":memory:")
+# Tests run against an in-memory copy so the committed data/noir_atelier.db is never mutated.
+os.environ.setdefault("NOIR_ATELIER_SQLITE_DB", ":memory:")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.agent import CustomerSupportAgent
 from src.constants import (
+    BRAND_NAME,
     CODE_REQUEST_KEY_MISMATCH,
     CODE_UNAUTHORIZED,
     DECISION_ACTION_COMPLETED,
@@ -331,7 +332,7 @@ def generate_failure_report(output_path: Path) -> None:
         )
 
     md_content = (
-        "# UrbanThread Support Agent — Six Failure Types (Expected vs. Actual)\n\n"
+        f"# {BRAND_NAME} Support Agent — Six Failure Types (Expected vs. Actual)\n\n"
         "This report documents the automated verification of all **six required failure modes** "
         "backed by the hybrid SQLite + JSON architecture in `tests/test_failure_modes.py`.\n\n"
         "## Summary Comparison Table (Expected vs. Actual)\n\n"

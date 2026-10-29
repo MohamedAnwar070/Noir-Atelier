@@ -1,6 +1,6 @@
-# UrbanThread — Autonomous Customer Support Agent (SQLite + Hybrid LLM Architecture)
+# Noir Atelier — Autonomous Customer Support Agent (SQLite + Hybrid LLM Architecture)
 
-A production-structured Customer Support Agent built from scratch for **UrbanThread Apparel Co.** (100% fictional apparel brand featuring the *Classic Cotton T-Shirt*) for the **Maxify AI Candidate Task**.
+A production-structured Customer Support Agent built from scratch for **Noir Atelier Apparel Co.** (100% fictional apparel brand featuring the *Classic Cotton T-Shirt*) for the **Maxify AI Candidate Task**.
 
 ---
 
@@ -9,7 +9,7 @@ A production-structured Customer Support Agent built from scratch for **UrbanThr
 | # | Candidate Task Requirement | File / Directory Location |
 |---|---|---|
 | **1** | **Short PRD** (Customer needs, scope, assumptions, success criteria) | [`PRD.md`](./PRD.md) |
-| **2** | **Fictional Data** (Relational SQLite DB seeded from fictional JSON — zero real PII/transactions) | [`data/urbanthread.db`](./data/urbanthread.db), [`data/products.json`](./data/products.json), [`data/policies.json`](./data/policies.json), [`data/policies.md`](./data/policies.md), [`data/customers.json`](./data/customers.json), [`data/orders.json`](./data/orders.json) |
+| **2** | **Fictional Data** (Relational SQLite DB seeded from fictional JSON — zero real PII/transactions) | [`data/noir_atelier.db`](./data/noir_atelier.db), [`data/products.json`](./data/products.json), [`data/policies.json`](./data/policies.json), [`data/policies.md`](./data/policies.md), [`data/customers.json`](./data/customers.json), [`data/orders.json`](./data/orders.json) |
 | **3** | **Working Support Agent** (Centralized constants, `.env` config, SQLite ACID transactions, mock refunds with unique `request_key`, guardrails, multi-LLM backends) | [`src/constants.py`](./src/constants.py), [`src/config.py`](./src/config.py), [`src/data_store.py`](./src/data_store.py), [`src/guardrails.py`](./src/guardrails.py), [`src/tools.py`](./src/tools.py), [`src/llm_backends.py`](./src/llm_backends.py), [`src/agent.py`](./src/agent.py), [`cli.py`](./cli.py) |
 | **4** | **Test Six Failure Types** (Missing info, conflicting policies, unauthorized access, prompt injection, tool failure, duplicate requests — Expected vs. Actual) | [`tests/test_failure_modes.py`](./tests/test_failure_modes.py), [`tests/FAILURE_TESTS_REPORT.md`](./tests/FAILURE_TESTS_REPORT.md) |
 | **5** | **Repeatable Agent Evals** (Pass/fail criteria, run instructions, and actual results) | [`evals/eval_dataset.json`](./evals/eval_dataset.json), [`evals/run_evals.py`](./evals/run_evals.py), [`evals/EVAL_REPORT.md`](./evals/EVAL_REPORT.md), [`evals/results.json`](./evals/results.json) |
@@ -19,7 +19,7 @@ A production-structured Customer Support Agent built from scratch for **UrbanThr
 
 ## How All Six Required Failure Tests Are Satisfied
 
-| Failure Case | Required Expected Behavior | How UrbanThread Agent Enforces It | Test & Eval Verification |
+| Failure Case | Required Expected Behavior | How Noir Atelier Agent Enforces It | Test & Eval Verification |
 |---|---|---|---|
 | **1. Missing information** | Ask a targeted clarification | Entity extractor checks for `order_id` and `customer_email` prior to tool execution and asks specifically for the missing field(s). | `FT-01` / `EVAL-07` (**PASS**) |
 | **2. Conflicting policies** | Escalate without guessing | Detects conflict between `POL-RET-02` (Final Sale has no exceptions) and `POL-VIP-01` (VIP Gold 14-day return guarantee covers Final Sale) and calls `escalate_to_human`. | `FT-02` / `EVAL-08` (**PASS**) |
@@ -106,7 +106,7 @@ python cli.py --demo --backend openai --live-llm
 python tests/test_failure_modes.py   # six failure types + security regressions (10 tests)
 python tests/test_llm_agent.py       # LLM-driven agent vs. a scripted adversarial model (16 tests)
 ```
-`test_failure_modes.py` also generates [`tests/FAILURE_TESTS_REPORT.md`](./tests/FAILURE_TESTS_REPORT.md). `test_llm_agent.py` replaces the LLM with a scripted model that deliberately misbehaves (invents emails, claims false success, skips escalations, leaks PII) and asserts that every layer still holds. Tests and evals use an in-memory database, so `data/urbanthread.db` is never modified.
+`test_failure_modes.py` also generates [`tests/FAILURE_TESTS_REPORT.md`](./tests/FAILURE_TESTS_REPORT.md). `test_llm_agent.py` replaces the LLM with a scripted model that deliberately misbehaves (invents emails, claims false success, skips escalations, leaks PII) and asserts that every layer still holds. Tests and evals use an in-memory database, so `data/noir_atelier.db` is never modified.
 
 ### 4. Run Repeatable Agent Evaluations (16 Cases)
 ```bash
