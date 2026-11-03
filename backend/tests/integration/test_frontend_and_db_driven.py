@@ -65,7 +65,15 @@ class TestFrontendAndDbDrivenArchitecture(unittest.TestCase):
 
         res_styles = self.client.get("/storefront/styles.css")
         self.assertEqual(res_styles.status_code, 200)
-        self.assertIn("@container", res_styles.text)
+        self.assertIn("@container hero", res_styles.text)
+        self.assertIn("@container catalog", res_styles.text)
+        self.assertIn("@container card", res_styles.text)
+        self.assertIn("@container kpis", res_styles.text)
+        self.assertIn("100dvh", res_styles.text)
+        self.assertIn("mobile-bottom-nav", res_styles.text)
+        self.assertIn("sheet-grabber", res_styles.text)
+        self.assertIn("responsive-cards-mobile", res_styles.text)
+        self.assertIn("scroll-snap-type: x mandatory", res_styles.text)
         self.assertNotIn("phone-device", res_styles.text)
 
         res_app = self.client.get("/storefront/app.js")

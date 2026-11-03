@@ -179,6 +179,36 @@ function SvgIcon({ name, size = 16 }) {
           </svg>
         </span>
       );
+    case "menu":
+      return (
+        <span className="ui-icon">
+          <svg {...common}>
+            <line x1="4" x2="20" y1="6" y2="6" />
+            <line x1="4" x2="20" y1="12" y2="12" />
+            <line x1="4" x2="20" y1="18" y2="18" />
+          </svg>
+        </span>
+      );
+    case "home":
+      return (
+        <span className="ui-icon">
+          <svg {...common}>
+            <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+            <polyline points="9 22 9 12 15 12 15 22" />
+          </svg>
+        </span>
+      );
+    case "package":
+      return (
+        <span className="ui-icon">
+          <svg {...common}>
+            <path d="m7.5 4.27 9 5.15" />
+            <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+            <path d="m3.3 7 8.7 5 8.7-5" />
+            <path d="M12 22V12" />
+          </svg>
+        </span>
+      );
     case "arrow-right":
     default:
       return (
@@ -198,6 +228,7 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
 
   const [activePage, setActivePage] = useState(initialPage);
   const [activeDrawer, setActiveDrawer] = useState(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [detailModalProduct, setDetailModalProduct] = useState(null);
   const [showDiagnosticsBar, setShowDiagnosticsBar] = useState(false);
   const [fontScale, setFontScale] = useState("default");
@@ -646,41 +677,61 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
               />
             </form>
 
-            <select
-              className="header-pill-select"
-              aria-label="Account profile"
-              value={actor.token}
-              onChange={async (e) => {
-                const found = actors.find((a) => a.token === e.target.value) || actor;
-                setActor(found);
-                apiRef.current.setToken(found.token);
-                setPermissionDeniedInfo(null);
-                if (activePage === "admin") await loadAdminData(found);
-                else await bootstrapData(found);
-              }}
-            >
-              {actors.map((a) => (
-                <option key={a.token} value={a.token}>
-                  {a.label}
-                </option>
-              ))}
-            </select>
+            <div className="header-desktop-controls">
+              <select
+                className="header-pill-select"
+                aria-label="Account profile"
+                value={actor.token}
+                onChange={async (e) => {
+                  const found = actors.find((a) => a.token === e.target.value) || actor;
+                  setActor(found);
+                  apiRef.current.setToken(found.token);
+                  setPermissionDeniedInfo(null);
+                  if (activePage === "admin") await loadAdminData(found);
+                  else await bootstrapData(found);
+                }}
+              >
+                {actors.map((a) => (
+                  <option key={a.token} value={a.token}>
+                    {a.label}
+                  </option>
+                ))}
+              </select>
 
-            <select
-              className="header-pill-select"
-              aria-label="Typography scale"
-              value={fontScale}
-              onChange={(e) => {
-                setFontScale(e.target.value);
-                applyFontScale(e.target.value);
-              }}
-            >
-              {DESIGN_TOKENS.fontScales.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.label}
-                </option>
-              ))}
-            </select>
+              <select
+                className="header-pill-select"
+                aria-label="Typography scale"
+                value={fontScale}
+                onChange={(e) => {
+                  setFontScale(e.target.value);
+                  applyFontScale(e.target.value);
+                }}
+              >
+                {DESIGN_TOKENS.fontScales.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                className={`chip-pill ${showDiagnosticsBar ? "active" : ""}`}
+                onClick={() => setShowDiagnosticsBar(!showDiagnosticsBar)}
+                aria-expanded={showDiagnosticsBar}
+              >
+                <SvgIcon name="sliders" size={14} />
+                <span>UI States</span>
+              </button>
+
+              <button
+                className="btn-pill btn-pill-outline"
+                style={{ padding: "0.48rem 1rem", fontSize: "var(--text-xs)" }}
+                onClick={() => setActiveDrawer("ai")}
+              >
+                <SvgIcon name="sparkles" size={14} />
+                <span>AI Stylist</span>
+              </button>
+            </div>
 
             <button
               className="chip-pill"
@@ -696,24 +747,6 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
             </button>
 
             <button
-              className={`chip-pill ${showDiagnosticsBar ? "active" : ""}`}
-              onClick={() => setShowDiagnosticsBar(!showDiagnosticsBar)}
-              aria-expanded={showDiagnosticsBar}
-            >
-              <SvgIcon name="sliders" size={14} />
-              <span>UI States</span>
-            </button>
-
-            <button
-              className="btn-pill btn-pill-outline"
-              style={{ padding: "0.48rem 1rem", fontSize: "var(--text-xs)" }}
-              onClick={() => setActiveDrawer("ai")}
-            >
-              <SvgIcon name="sparkles" size={14} />
-              <span>AI Stylist</span>
-            </button>
-
-            <button
               className="btn-pill"
               style={{ padding: "0.48rem 1.05rem", fontSize: "var(--text-xs)" }}
               onClick={() => setActiveDrawer("bag")}
@@ -721,6 +754,102 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
               <SvgIcon name="bag" size={14} />
               <span>Bag ({cartCount})</span>
             </button>
+
+            <button
+              type="button"
+              className="mobile-menu-btn"
+              aria-label="Toggle mobile navigation menu"
+              aria-expanded={mobileMenuOpen}
+              aria-controls="mobile-nav-panel"
+              onClick={() => setMobileMenuOpen((prev) => !prev)}
+            >
+              <SvgIcon name={mobileMenuOpen ? "close" : "menu"} size={18} />
+            </button>
+          </div>
+        </div>
+
+        <div
+          id="mobile-nav-panel"
+          className={`mobile-nav-drawer ${mobileMenuOpen ? "open" : ""}`}
+          aria-label="Mobile Navigation & Profile Settings"
+        >
+          <div className="mobile-nav-grid">
+            <button
+              className={`chip-pill ${activePage === "shop" && selectedDepartment === "ALL" ? "active" : ""}`}
+              onClick={() => {
+                setMobileMenuOpen(false);
+                handleDepartmentSelect("ALL");
+              }}
+            >
+              The Edit (All)
+            </button>
+            {categories.map((cat) => (
+              <button
+                key={cat.category_id}
+                className={`chip-pill ${activePage === "shop" && selectedDepartment === cat.department ? "active" : ""}`}
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  handleDepartmentSelect(cat.department);
+                }}
+              >
+                {cat.name}
+              </button>
+            ))}
+            <button
+              className={`chip-pill ${activePage === "policies" ? "active" : ""}`}
+              onClick={() => {
+                setMobileMenuOpen(false);
+                navigateToPage("policies");
+              }}
+            >
+              Atelier Policies
+            </button>
+            <button
+              className={`chip-pill ${showDiagnosticsBar ? "active" : ""}`}
+              onClick={() => setShowDiagnosticsBar(!showDiagnosticsBar)}
+            >
+              <SvgIcon name="sliders" size={14} />
+              <span>UI States Inspector</span>
+            </button>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+            <select
+              className="header-pill-select"
+              aria-label="Mobile account profile"
+              value={actor.token}
+              onChange={async (e) => {
+                const found = actors.find((a) => a.token === e.target.value) || actor;
+                setActor(found);
+                apiRef.current.setToken(found.token);
+                setPermissionDeniedInfo(null);
+                setMobileMenuOpen(false);
+                if (activePage === "admin") await loadAdminData(found);
+                else await bootstrapData(found);
+              }}
+            >
+              {actors.map((a) => (
+                <option key={a.token} value={a.token}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+
+            <select
+              className="header-pill-select"
+              aria-label="Mobile typography scale"
+              value={fontScale}
+              onChange={(e) => {
+                setFontScale(e.target.value);
+                applyFontScale(e.target.value);
+              }}
+            >
+              {DESIGN_TOKENS.fontScales.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -812,7 +941,8 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
 
         {activePage === "shop" && (
           <>
-            <section className="hero-banner" aria-label="Editorial Spotlight">
+            <div className="hero-banner-wrap">
+              <section className="hero-banner" aria-label="Editorial Spotlight">
               <div className="hero-content">
                 <div>
                   <div className="hero-eyebrow">
@@ -897,7 +1027,8 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                   </div>
                 )}
               </div>
-            </section>
+              </section>
+            </div>
 
             <section className="catalog-section" aria-label="Garment Catalog">
               <div className="catalog-toolbar">
@@ -1717,12 +1848,7 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                     Live Business Config Policy Editor (<code>PUT /api/admin/config/policies</code>)
                   </h3>
                   <form
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                      gap: "0.85rem",
-                      alignItems: "end",
-                    }}
+                    className="admin-policy-grid"
                     onSubmit={async (e) => {
                       e.preventDefault();
                       const check = validatePolicyConfigForm(policyConfigForm);
@@ -1791,6 +1917,74 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                     </button>
                   </form>
                 </div>
+
+                <div className="surface-card">
+                  <h3 className="font-editorial" style={{ fontSize: "var(--text-2xl)", marginBottom: "0.75rem" }}>
+                    Immutable Audit Log (<code>GET /api/audit/log</code>)
+                  </h3>
+                  <div className="responsive-table-desktop">
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                      <thead>
+                        <tr
+                          style={{
+                            textAlign: "left",
+                            borderBottom: "1px solid var(--border-strong)",
+                            color: "var(--text-secondary)",
+                          }}
+                        >
+                          <th style={{ padding: "0.55rem" }}>Trace ID</th>
+                          <th style={{ padding: "0.55rem" }}>Actor</th>
+                          <th style={{ padding: "0.55rem" }}>Resource</th>
+                          <th style={{ padding: "0.55rem" }}>Action</th>
+                          <th style={{ padding: "0.55rem" }}>Reason</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {adminAuditLog.map((log, i) => (
+                          <tr key={log.trace_id || i} style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+                            <td style={{ padding: "0.55rem", fontFamily: "var(--font-mono)" }}>{log.trace_id}</td>
+                            <td style={{ padding: "0.55rem" }}>
+                              {log.actor_type}:{log.actor_id}
+                            </td>
+                            <td style={{ padding: "0.55rem" }}>
+                              {log.resource_type}/{log.resource_id}
+                            </td>
+                            <td style={{ padding: "0.55rem", fontWeight: 600 }}>{log.action}</td>
+                            <td style={{ padding: "0.55rem", color: "var(--text-secondary)" }}>
+                              {log.reason || "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="responsive-cards-mobile">
+                    {adminAuditLog.map((log, i) => (
+                      <div key={log.trace_id || i} className="audit-mobile-card">
+                        <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 600 }}>
+                          <span style={{ fontFamily: "var(--font-mono)" }}>{log.trace_id}</span>
+                          <span className="meta-tag">{log.action}</span>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11 }}>
+                          <span style={{ color: "var(--text-secondary)" }}>Actor:</span>
+                          <span>
+                            {log.actor_type}:{log.actor_id}
+                          </span>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11 }}>
+                          <span style={{ color: "var(--text-secondary)" }}>Resource:</span>
+                          <span>
+                            {log.resource_type}/{log.resource_id}
+                          </span>
+                        </div>
+                        {log.reason && (
+                          <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{log.reason}</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
           </>
@@ -1840,15 +2034,31 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
 
             <div className="detail-modal-content">
               <div>
+                <div className="sheet-grabber" aria-hidden="true" />
                 <span className="product-card-dept">
                   {detailModalProduct.department} COLLECTION · {detailModalProduct.sku}
                 </span>
                 <h2 className="font-editorial" style={{ fontSize: "var(--text-3xl)", margin: "0.4rem 0 0.6rem" }}>
                   {detailModalProduct.name}
                 </h2>
-                <p style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)", marginBottom: "1.1rem" }}>
+                <p style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)", marginBottom: "1rem" }}>
                   {detailModalProduct.description}
                 </p>
+
+                <div className="detail-specs-grid">
+                  <div>
+                    <div className="field-label" style={{ marginBottom: "0.2rem" }}>
+                      Fit & Silhouette
+                    </div>
+                    <div style={{ color: "var(--text-secondary)" }}>{detailModalProduct.fit_guide}</div>
+                  </div>
+                  <div>
+                    <div className="field-label" style={{ marginBottom: "0.2rem" }}>
+                      Fabric & Atelier Care
+                    </div>
+                    <div style={{ color: "var(--text-secondary)" }}>{detailModalProduct.fabric_and_care}</div>
+                  </div>
+                </div>
 
                 {recommendations.length > 0 && (
                   <div style={{ marginBottom: "1rem" }}>
@@ -2086,7 +2296,7 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                       )}
                     </div>
 
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
+                    <div className="checkout-2col-grid">
                       <div className="field-group">
                         <label className="field-label" htmlFor="next-chk-pin">
                           6-Digit PIN Code *
@@ -2281,6 +2491,58 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
           </aside>
         </div>
       )}
+
+      <nav className="mobile-bottom-nav" aria-label="Mobile Bottom Navigation">
+        <button
+          type="button"
+          className={`mobile-tab-btn ${activePage === "shop" && !activeDrawer ? "active" : ""}`}
+          onClick={() => {
+            setActiveDrawer(null);
+            navigateToPage("shop");
+          }}
+        >
+          <SvgIcon name="home" size={18} />
+          <span>The Edit</span>
+        </button>
+        <button
+          type="button"
+          className={`mobile-tab-btn ${activePage === "orders" && !activeDrawer ? "active" : ""}`}
+          onClick={() => {
+            setActiveDrawer(null);
+            navigateToPage("orders");
+          }}
+        >
+          <SvgIcon name="package" size={18} />
+          <span>Orders ({orders.length})</span>
+        </button>
+        <button
+          type="button"
+          className={`mobile-tab-btn ${activeDrawer === "ai" ? "active" : ""}`}
+          onClick={() => setActiveDrawer(activeDrawer === "ai" ? null : "ai")}
+        >
+          <SvgIcon name="sparkles" size={18} />
+          <span>AI Stylist</span>
+        </button>
+        <button
+          type="button"
+          className={`mobile-tab-btn ${activeDrawer === "bag" ? "active" : ""}`}
+          onClick={() => setActiveDrawer(activeDrawer === "bag" ? null : "bag")}
+        >
+          <SvgIcon name="bag" size={18} />
+          <span>Bag ({cartCount})</span>
+        </button>
+        <button
+          type="button"
+          className={`mobile-tab-btn ${activePage === "admin" && !activeDrawer ? "active" : ""}`}
+          onClick={() => {
+            setActiveDrawer(null);
+            navigateToPage("admin");
+          }}
+        >
+          <SvgIcon name="shield" size={18} />
+          <span>Admin</span>
+        </button>
+      </nav>
     </div>
   );
 }

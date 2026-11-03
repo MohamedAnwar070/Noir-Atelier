@@ -32,6 +32,7 @@ import {
 const state = {
   activePage: "shop",
   activeDrawer: null,
+  mobileMenuOpen: false,
   detailModalProduct: null,
   showDiagnosticsBar: false,
   fontScale: "default",
@@ -377,17 +378,39 @@ function renderHeader() {
             />
           </form>
 
-          <select class="header-pill-select" data-action="change-actor" aria-label="Account profile">
-            ${(state.actors.length > 0 ? state.actors : [state.actor]).map(
-              (a) => `<option value="${a.token}" ${state.actor.token === a.token ? "selected" : ""}>${a.label}</option>`
-            ).join("")}
-          </select>
+          <div class="header-desktop-controls">
+            <select class="header-pill-select" data-action="change-actor" aria-label="Account profile">
+              ${(state.actors.length > 0 ? state.actors : [state.actor]).map(
+                (a) => `<option value="${a.token}" ${state.actor.token === a.token ? "selected" : ""}>${a.label}</option>`
+              ).join("")}
+            </select>
 
-          <select class="header-pill-select" data-action="change-font-scale" aria-label="Typography scale">
-            ${DESIGN_TOKENS.fontScales
-              .map((f) => `<option value="${f.id}" ${state.fontScale === f.id ? "selected" : ""}>${f.label}</option>`)
-              .join("")}
-          </select>
+            <select class="header-pill-select" data-action="change-font-scale" aria-label="Typography scale">
+              ${DESIGN_TOKENS.fontScales
+                .map((f) => `<option value="${f.id}" ${state.fontScale === f.id ? "selected" : ""}>${f.label}</option>`)
+                .join("")}
+            </select>
+
+            <button
+              class="chip-pill ${state.showDiagnosticsBar ? "active" : ""}"
+              data-action="toggle-diagnostics"
+              aria-expanded="${state.showDiagnosticsBar}"
+              title="Inspect 10+ UI/UX Design States"
+            >
+              ${renderIcon("sliders", "xs")}
+              <span>UI States</span>
+            </button>
+
+            <button
+              class="btn-pill btn-pill-outline"
+              style="padding:0.48rem 1rem;font-size:var(--text-xs);"
+              data-action="open-drawer"
+              data-drawer="ai"
+            >
+              ${renderIcon("sparkles", "xs")}
+              <span>AI Stylist</span>
+            </button>
+          </div>
 
           <button
             class="chip-pill"
@@ -400,26 +423,6 @@ function renderHeader() {
           </button>
 
           <button
-            class="chip-pill ${state.showDiagnosticsBar ? "active" : ""}"
-            data-action="toggle-diagnostics"
-            aria-expanded="${state.showDiagnosticsBar}"
-            title="Inspect 10+ UI/UX Design States"
-          >
-            ${renderIcon("sliders", "xs")}
-            <span>UI States</span>
-          </button>
-
-          <button
-            class="btn-pill btn-pill-outline"
-            style="padding:0.48rem 1rem;font-size:var(--text-xs);"
-            data-action="open-drawer"
-            data-drawer="ai"
-          >
-            ${renderIcon("sparkles", "xs")}
-            <span>AI Stylist</span>
-          </button>
-
-          <button
             class="btn-pill"
             style="padding:0.48rem 1.05rem;font-size:var(--text-xs);"
             data-action="open-drawer"
@@ -428,6 +431,74 @@ function renderHeader() {
             ${renderIcon("bag", "xs")}
             <span>Bag (${cartCount})</span>
           </button>
+
+          <button
+            type="button"
+            class="mobile-menu-btn"
+            data-action="toggle-mobile-menu"
+            aria-label="Toggle mobile navigation menu"
+            aria-expanded="${state.mobileMenuOpen}"
+            aria-controls="mobile-nav-panel"
+          >
+            ${renderIcon(state.mobileMenuOpen ? "close" : "menu", "sm")}
+          </button>
+        </div>
+      </div>
+
+      <div
+        id="mobile-nav-panel"
+        class="mobile-nav-drawer ${state.mobileMenuOpen ? "open" : ""}"
+        aria-label="Mobile Navigation & Profile Settings"
+      >
+        <div class="mobile-nav-grid">
+          <button
+            class="chip-pill ${state.activePage === "shop" && state.selectedDepartment === "ALL" ? "active" : ""}"
+            data-action="nav-dept"
+            data-department="ALL"
+          >
+            The Edit (All)
+          </button>
+          ${state.categories
+            .map(
+              (cat) => `
+              <button
+                class="chip-pill ${state.activePage === "shop" && state.selectedDepartment === cat.department ? "active" : ""}"
+                data-action="nav-dept"
+                data-department="${cat.department}"
+              >
+                ${cat.name}
+              </button>
+            `
+            )
+            .join("")}
+          <button
+            class="chip-pill ${state.activePage === "policies" ? "active" : ""}"
+            data-action="nav-page"
+            data-page="policies"
+          >
+            Atelier Policies
+          </button>
+          <button
+            class="chip-pill ${state.showDiagnosticsBar ? "active" : ""}"
+            data-action="toggle-diagnostics"
+          >
+            ${renderIcon("sliders", "xs")}
+            <span>UI States Inspector</span>
+          </button>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
+          <select class="header-pill-select" data-action="change-actor" aria-label="Mobile account profile">
+            ${(state.actors.length > 0 ? state.actors : [state.actor]).map(
+              (a) => `<option value="${a.token}" ${state.actor.token === a.token ? "selected" : ""}>${a.label}</option>`
+            ).join("")}
+          </select>
+
+          <select class="header-pill-select" data-action="change-font-scale" aria-label="Mobile typography scale">
+            ${DESIGN_TOKENS.fontScales
+              .map((f) => `<option value="${f.id}" ${state.fontScale === f.id ? "selected" : ""}>${f.label}</option>`)
+              .join("")}
+          </select>
         </div>
       </div>
 
@@ -487,7 +558,8 @@ function renderHeroSection() {
   const aiPrompts = uiCfg.ai_quick_prompts || [];
 
   return `
-    <section class="hero-banner" aria-label="Editorial Spotlight">
+    <div class="hero-banner-wrap">
+      <section class="hero-banner" aria-label="Editorial Spotlight">
       <div class="hero-content">
         <div>
           <div class="hero-eyebrow">
@@ -563,7 +635,8 @@ function renderHeroSection() {
             : ""
         }
       </div>
-    </section>
+      </section>
+    </div>
   `;
 }
 
@@ -810,6 +883,7 @@ function renderProductDetailModal() {
 
         <div class="detail-modal-content">
           <div>
+            <div class="sheet-grabber" aria-hidden="true"></div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;">
               <span class="product-card-dept">${p.department} COLLECTION · ${p.sku}</span>
               <span class="meta-tag">HSN ${p.hsn_code} · ${taxInfo.label}</span>
@@ -820,7 +894,7 @@ function renderProductDetailModal() {
               ${p.description}
             </p>
 
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;padding:0.9rem;border-radius:16px;background:var(--bg-subtle);margin-bottom:1.25rem;font-size:12px;">
+            <div class="detail-specs-grid">
               <div>
                 <div class="field-label" style="margin-bottom:0.2rem;">Fit & Silhouette</div>
                 <div style="color:var(--text-secondary);">${p.fit_guide}</div>
@@ -1324,7 +1398,7 @@ function renderAdminConsolePage() {
         <p style="font-size:var(--text-xs);color:var(--text-secondary);margin-bottom:1rem;">
           Updates the database <code>business_config</code> shipping rules in real time and appends a signed record to <code>audit_log</code>.
         </p>
-        <form data-form="admin-policy-form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0.85rem;align-items:end;" novalidate>
+        <form data-form="admin-policy-form" class="admin-policy-grid" novalidate>
           <div class="field-group">
             <label class="field-label" for="cfg-free-ship">Free Shipping Threshold (₹) *</label>
             <input
@@ -1369,7 +1443,7 @@ function renderAdminConsolePage() {
         <h3 class="font-editorial" style="font-size:var(--text-2xl);margin-bottom:0.75rem;">
           Immutable Audit Log (<code>GET /api/audit/log</code>)
         </h3>
-        <div style="overflow-x:auto;">
+        <div class="responsive-table-desktop">
           <table style="width:100%;border-collapse:collapse;font-size:12px;">
             <thead>
               <tr style="text-align:left;border-bottom:1px solid var(--border-strong);color:var(--text-secondary);">
@@ -1396,6 +1470,29 @@ function renderAdminConsolePage() {
                 .join("")}
             </tbody>
           </table>
+        </div>
+        <div class="responsive-cards-mobile">
+          ${state.adminAuditLog
+            .map(
+              (log) => `
+              <div class="audit-mobile-card">
+                <div style="display:flex;justify-content:space-between;font-weight:600;">
+                  <span style="font-family:var(--font-mono);">${log.trace_id}</span>
+                  <span class="meta-tag">${log.action}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:11px;">
+                  <span style="color:var(--text-secondary);">Actor:</span>
+                  <span>${log.actor_type}:${log.actor_id}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:11px;">
+                  <span style="color:var(--text-secondary);">Resource:</span>
+                  <span>${log.resource_type}/${log.resource_id}</span>
+                </div>
+                ${log.reason ? `<div style="font-size:11px;color:var(--text-secondary);">${log.reason}</div>` : ""}
+              </div>
+            `
+            )
+            .join("")}
         </div>
       </div>
     </div>
@@ -1514,7 +1611,7 @@ function renderShoppingBagDrawer() {
                     ${errors.street ? `<span id="err-checkout-street" class="field-error">${errors.street}</span>` : ""}
                   </div>
 
-                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;">
+                  <div class="checkout-2col-grid">
                     <div class="field-group">
                       <label class="field-label" for="checkout-pin">6-Digit PIN Code *</label>
                       <input
@@ -1727,6 +1824,59 @@ function renderFooter() {
   `;
 }
 
+function renderMobileBottomNav() {
+  const cartCount = (state.cart?.items || []).reduce((acc, i) => acc + Number(i.quantity || 0), 0);
+  return `
+    <nav class="mobile-bottom-nav" aria-label="Mobile Bottom Navigation">
+      <button
+        type="button"
+        class="mobile-tab-btn ${state.activePage === "shop" && !state.activeDrawer ? "active" : ""}"
+        data-action="nav-page"
+        data-page="shop"
+      >
+        ${renderIcon("home", "sm")}
+        <span>The Edit</span>
+      </button>
+      <button
+        type="button"
+        class="mobile-tab-btn ${state.activePage === "orders" && !state.activeDrawer ? "active" : ""}"
+        data-action="nav-page"
+        data-page="orders"
+      >
+        ${renderIcon("package", "sm")}
+        <span>Orders (${state.orders.length})</span>
+      </button>
+      <button
+        type="button"
+        class="mobile-tab-btn ${state.activeDrawer === "ai" ? "active" : ""}"
+        data-action="open-drawer"
+        data-drawer="ai"
+      >
+        ${renderIcon("sparkles", "sm")}
+        <span>AI Stylist</span>
+      </button>
+      <button
+        type="button"
+        class="mobile-tab-btn ${state.activeDrawer === "bag" ? "active" : ""}"
+        data-action="open-drawer"
+        data-drawer="bag"
+      >
+        ${renderIcon("bag", "sm")}
+        <span>Bag (${cartCount})</span>
+      </button>
+      <button
+        type="button"
+        class="mobile-tab-btn ${state.activePage === "admin" && !state.activeDrawer ? "active" : ""}"
+        data-action="nav-page"
+        data-page="admin"
+      >
+        ${renderIcon("shield", "sm")}
+        <span>Admin</span>
+      </button>
+    </nav>
+  `;
+}
+
 export function renderApp() {
   const root = document.getElementById("noir-app");
   if (!root) return;
@@ -1753,6 +1903,7 @@ export function renderApp() {
     ${renderProductDetailModal()}
     ${renderShoppingBagDrawer()}
     ${renderAiConciergeDrawer()}
+    ${renderMobileBottomNav()}
   `;
 }
 
@@ -1771,6 +1922,12 @@ document.addEventListener("click", async (e) => {
 
   if (action === "toggle-diagnostics") {
     state.showDiagnosticsBar = !state.showDiagnosticsBar;
+    renderApp();
+    return;
+  }
+
+  if (action === "toggle-mobile-menu") {
+    state.mobileMenuOpen = !state.mobileMenuOpen;
     renderApp();
     return;
   }
