@@ -4,9 +4,10 @@ from typing import AsyncGenerator
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from .api import admin, agents, audit, cart, config, customers, orders, products, returns
-from .config import get_settings
+from .config import PROJECT_ROOT, get_settings
 from .database import get_active_db_backend, get_sync_engine
 from .utils.exceptions import AppError
 
@@ -86,4 +87,13 @@ async def root() -> dict:
         "message": f"Welcome to {settings.app_name} Unified AI-Native Commerce API",
         "documentation": "/docs",
         "health": "/health",
+        "storefront_ui": "/storefront/",
     }
+
+
+_packages_dir = PROJECT_ROOT / "frontend" / "packages"
+_storefront_dir = PROJECT_ROOT / "frontend" / "apps" / "storefront"
+if _packages_dir.is_dir():
+    app.mount("/packages", StaticFiles(directory=str(_packages_dir)), name="frontend_packages")
+if _storefront_dir.is_dir():
+    app.mount("/storefront", StaticFiles(directory=str(_storefront_dir), html=True), name="storefront_ui")
