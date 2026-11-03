@@ -7,6 +7,7 @@ from .intent_parser import (
     extract_quantity,
     extract_size,
     format_inr,
+    format_price_range,
     resolve_product_from_message,
 )
 
@@ -76,7 +77,7 @@ def run_order_node(state: AgentGraphState, client: PlatformApiClient) -> AgentGr
             resolved_prod, all_prods = resolve_product_from_message(msg, state.request.context, client)
             if resolved_prod is None and msg_lower.strip() in ("buy", "i want to buy", "place order", "purchase"):
                 state.status = "clarify_missing_info"
-                names = [f"• {p['name']} ({format_inr(p['mrp_inr'])})" for p in all_prods[:5]]
+                names = [f"• {p['name']} ({format_price_range(p)})" for p in all_prods[:5]]
                 state.data = {
                     "products": all_prods,
                     "action_feedback": {

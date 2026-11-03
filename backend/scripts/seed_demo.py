@@ -29,6 +29,7 @@ from backend.app.models import (
     ShippingZone,
 )
 from backend.app.storage.object_store import LocalObjectStore
+from backend.app.services.variant_service import set_variant_prices
 
 
 def seed_database(engine: Optional[Engine] = None) -> dict:
@@ -55,15 +56,15 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
         products_spec = [
             {
                 "product_id": "PRD-001",
-                "sku": "PRD-001-BLK-M",
+                "sku": "PRD-001-BLK",
                 "name": "Tailored Belgian Linen Shirt",
                 "description": "Noir Atelier signature relaxed-tailored shirt crafted from 100% European flax linen.",
                 "category_id": "CAT-MEN",
                 "department": "MEN",
-                "mrp_inr": Decimal("2499.00"),
                 "hsn_code": "6205",
                 "color": "Noir Black",
-                "sizes_available": ["S", "M", "L", "XL"],
+                # Per-size prices: each size is its own SKU ("PRD-001-BLK-<SIZE>") and price.
+                "variant_prices": {"S": Decimal("2399.00"), "M": Decimal("2499.00"), "L": Decimal("2599.00"), "XL": Decimal("2699.00")},
                 "fit_guide": "Tailored regular fit through chest and shoulders. True to size.",
                 "fabric_and_care": "100% Belgian Linen (185 GSM). Cold gentle wash, hang dry in shade.",
                 "final_sale": False,
@@ -75,15 +76,15 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
             },
             {
                 "product_id": "PRD-002",
-                "sku": "PRD-002-CHR-L",
+                "sku": "PRD-002-CHR",
                 "name": "Structured Merino-Wool Overshirt",
                 "description": "Architectural double-faced merino wool-blend overshirt with horn buttons.",
                 "category_id": "CAT-MEN",
                 "department": "MEN",
-                "mrp_inr": Decimal("6499.00"),
                 "hsn_code": "6201",
                 "color": "Charcoal",
-                "sizes_available": ["M", "L", "XL"],
+                # Per-size prices: each size is its own SKU ("PRD-002-CHR-<SIZE>") and price.
+                "variant_prices": {"M": Decimal("6499.00"), "L": Decimal("6699.00"), "XL": Decimal("6899.00")},
                 "fit_guide": "Structured boxy outerwear cut. Designed to layer over fine knitwear.",
                 "fabric_and_care": "80% Australian Merino Wool, 20% Recycled Polyamide. Dry clean only.",
                 "final_sale": False,
@@ -95,15 +96,15 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
             },
             {
                 "product_id": "PRD-003",
-                "sku": "PRD-003-NOI-S",
+                "sku": "PRD-003-NOI",
                 "name": "Silk-Crepe Draped Midi Dress",
                 "description": "Fluid bias-cut midi dress in heavyweight mulberry silk crepe de chine.",
                 "category_id": "CAT-WMN",
                 "department": "WOMEN",
-                "mrp_inr": Decimal("7999.00"),
                 "hsn_code": "6204",
                 "color": "Obsidian",
-                "sizes_available": ["XS", "S", "M", "L"],
+                # Per-size prices: each size is its own SKU ("PRD-003-NOI-<SIZE>") and price.
+                "variant_prices": {"XS": Decimal("7799.00"), "S": Decimal("7999.00"), "M": Decimal("7999.00"), "L": Decimal("8299.00")},
                 "fit_guide": "Bias cut contours naturally to the silhouette. True to atelier sizing.",
                 "fabric_and_care": "100% Mulberry Silk Crepe (22 Momme). Specialist dry clean only.",
                 "final_sale": False,
@@ -115,15 +116,15 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
             },
             {
                 "product_id": "PRD-004",
-                "sku": "PRD-004-IVR-M",
+                "sku": "PRD-004-IVR",
                 "name": "Minimalist Pima Cotton Tee",
                 "description": "High-twist Peruvian Pima cotton jersey tee with rib-bound neckline.",
                 "category_id": "CAT-WMN",
                 "department": "WOMEN",
-                "mrp_inr": Decimal("1899.00"),
                 "hsn_code": "6109",
                 "color": "Ivory",
-                "sizes_available": ["XS", "S", "M", "L", "XL"],
+                # Per-size prices: each size is its own SKU ("PRD-004-IVR-<SIZE>") and price.
+                "variant_prices": {"XS": Decimal("1799.00"), "S": Decimal("1899.00"), "M": Decimal("1899.00"), "L": Decimal("1999.00"), "XL": Decimal("2099.00")},
                 "fit_guide": "Clean straight silhouette. Take your normal size.",
                 "fabric_and_care": "100% Organic Peruvian Pima Cotton (220 GSM). Machine wash cold, dry flat.",
                 "final_sale": False,
@@ -135,15 +136,15 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
             },
             {
                 "product_id": "PRD-005",
-                "sku": "PRD-005-NVY-8Y",
+                "sku": "PRD-005-NVY",
                 "name": "Kids Organic Merino Crewneck",
                 "description": "Ultra-soft itch-free superfine merino knit pullover for children.",
                 "category_id": "CAT-KID",
                 "department": "KIDS",
-                "mrp_inr": Decimal("2199.00"),
                 "hsn_code": "6110",
                 "color": "Midnight Navy",
-                "sizes_available": ["4Y", "6Y", "8Y", "10Y", "12Y"],
+                # Per-size prices: each size is its own SKU ("PRD-005-NVY-<SIZE>") and price.
+                "variant_prices": {"4Y": Decimal("1899.00"), "6Y": Decimal("1999.00"), "8Y": Decimal("2199.00"), "10Y": Decimal("2299.00"), "12Y": Decimal("2399.00")},
                 "fit_guide": "Comfort kids cut with ribbed cuffs for room to grow.",
                 "fabric_and_care": "100% Extra-Fine ZQ Merino Wool. Gentle wool cycle 30C, dry flat.",
                 "final_sale": False,
@@ -177,10 +178,10 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 description=p["description"],
                 category_id=p["category_id"],
                 department=p["department"],
-                mrp_inr=p["mrp_inr"],
+                mrp_inr=min(p["variant_prices"].values()),  # re-derived by set_variant_prices
                 hsn_code=p["hsn_code"],
                 color=p["color"],
-                sizes_available=p["sizes_available"],
+                sizes_available=list(p["variant_prices"]),
                 fit_guide=p["fit_guide"],
                 fabric_and_care=p["fabric_and_care"],
                 final_sale=p["final_sale"],
@@ -188,6 +189,7 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
             )
             session.add(prod)
             session.flush()
+            set_variant_prices(session, prod, p["variant_prices"])
             session.add(
                 ProductImage(
                     product_id=p["product_id"],
@@ -215,7 +217,9 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                     "sku": p["sku"],
                     "name": p["name"],
                     "department": p["department"],
-                    "mrp_inr": str(p["mrp_inr"]),
+                    "variants": [
+                        {"size": v.size, "sku": v.sku, "mrp_inr": str(v.mrp_inr)} for v in prod.variants
+                    ],
                     "hsn_code": p["hsn_code"],
                     "image_url": image_url,
                     "accent_tag": p["accent_tag"],

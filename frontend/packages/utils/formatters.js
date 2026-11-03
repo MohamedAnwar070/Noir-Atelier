@@ -6,6 +6,16 @@ export function formatInr(amount, currencySymbol = "₹") {
   })}`;
 }
 
+/**
+ * Price of a product whose sizes may be priced differently: "₹2,399 – ₹2,699",
+ * or a single price when every size costs the same. Expects a normalized
+ * product ({ priceRange: { min, max } }).
+ */
+export function formatPriceRange(product) {
+  const { min, max } = product?.priceRange || { min: product?.price, max: product?.price };
+  return min === max ? formatInr(min) : `${formatInr(min)} – ${formatInr(max)}`;
+}
+
 export function computeGstSlabFromConfig(mrpInr, taxConfig = {}) {
   const mrp = Number(mrpInr || 0);
   const threshold = Number(taxConfig.garment_slab_threshold_inr ?? 0);

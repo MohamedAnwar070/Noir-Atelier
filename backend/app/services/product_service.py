@@ -6,10 +6,22 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..auth import ActorContext
-from ..models import Category, Inventory, Product, ProductImage, ProductReview, Recommendation
-from ..schemas.product_schema import InventoryUpdateRequest, ProductCreateRequest, ProductUpdateRequest
+from ..models import Category, Inventory, Product, ProductImage, ProductReview, ProductVariant, Recommendation
+from ..schemas.product_schema import (
+    InventoryUpdateRequest,
+    ProductCreateRequest,
+    ProductUpdateRequest,
+    VariantUpdateRequest,
+)
 from ..utils.exceptions import AppError
 from .audit_service import next_entity_id, record_audit
+from .variant_service import (
+    normalize_size,
+    price_range,
+    serialize_variants,
+    set_variant_active,
+    set_variant_prices,
+)
 
 SYNONYM_MAP: Dict[str, List[str]] = {
     "tee": ["tee", "t-shirt", "cotton"],
@@ -68,7 +80,10 @@ def serialize_product(p: Product, db: Optional[Session] = None) -> Dict[str, Any
         "description": p.description,
         "category_id": p.category_id,
         "department": p.department,
+        # "From" price (lowest active size). Per-size prices are in `variants`.
         "mrp_inr": p.mrp_inr,
+        "price_range": price_range(p),
+        "variants": serialize_variants(p),
         "hsn_code": p.hsn_code,
         "color": p.color,
         "sizes_available": list(p.sizes_available or []),
@@ -157,11 +172,15 @@ def search_products(
 
 
 def get_product_by_id_or_sku(db: Session, identifier: str) -> Product:
+    """Resolve a product by product ID, style code or any of its variant SKUs."""
     clean = identifier.strip().upper()
+    variant_owner = select(ProductVariant.product_id).where(func.upper(ProductVariant.sku) == clean)
     prod = db.scalar(
         select(Product).where(
             Product.is_active.is_(True),
-            (func.upper(Product.product_id) == clean) | (func.upper(Product.sku) == clean),
+            (func.upper(Product.product_id) == clean)
+            | (func.upper(Product.sku) == clean)
+            | Product.product_id.in_(variant_owner),
         )
     )
     if prod is None:
@@ -269,24 +288,29 @@ def create_product(db: Session, actor: ActorContext, req: ProductCreateRequest) 
     if not req.hsn_code.startswith(("61", "62")):
         raise AppError("invalid_hsn", "Only HSN Chapter 61 and 62 garments are permitted.", 422)
 
+    # Per-size prices if given, otherwise every listed size at the base price.
+    size_prices = req.variant_prices or {size: req.mrp_inr for size in req.sizes_available}
+    sizes = [normalize_size(s) for s in size_prices]
+
     pid = req.product_id or next_entity_id(db, Product, Product.product_id, "product", start_seq=1)
     prod = Product(
         product_id=pid,
-        sku=req.sku.strip().upper(),
+        sku=req.sku.strip().upper(),  # style code; variant SKUs are derived from it
         name=req.name.strip(),
         description=req.description.strip(),
         category_id=req.category_id.strip().upper(),
         department=dept,
-        mrp_inr=req.mrp_inr,
+        mrp_inr=req.mrp_inr,  # provisional; re-derived from variants below
         hsn_code=req.hsn_code,
         color=req.color,
-        sizes_available=req.sizes_available,
+        sizes_available=sizes,
         fit_guide=req.fit_guide,
         fabric_and_care=req.fabric_and_care,
         final_sale=req.final_sale,
         security_tag_required=True,
     )
     db.add(prod)
+    set_variant_prices(db, prod, size_prices)
     default_img = "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=900&q=80"
     db.add(ProductImage(product_id=pid, url=default_img, alt_text=f"{dept} Atelier Edition", display_order=1))
     db.add(
@@ -295,10 +319,18 @@ def create_product(db: Session, actor: ActorContext, req: ProductCreateRequest) 
             quantity_available=req.initial_stock,
             quantity_reserved=0,
             quantity_damaged=0,
-            size_breakdown={sz: max(1, req.initial_stock // max(1, len(req.sizes_available))) for sz in req.sizes_available},
+            size_breakdown={sz: max(1, req.initial_stock // max(1, len(sizes))) for sz in sizes},
         )
     )
-    record_audit(db, actor, "product", pid, "create_product", {"sku": prod.sku, "mrp_inr": float(prod.mrp_inr)}, "admin_catalog_create")
+    record_audit(
+        db,
+        actor,
+        "product",
+        pid,
+        "create_product",
+        {"sku": prod.sku, "variant_prices": {v.size: float(v.mrp_inr) for v in prod.variants}},
+        "admin_catalog_create",
+    )
     db.commit()
     db.refresh(prod)
     return serialize_product(prod, db)
@@ -307,13 +339,51 @@ def create_product(db: Session, actor: ActorContext, req: ProductCreateRequest) 
 def update_product(db: Session, actor: ActorContext, product_id: str, req: ProductUpdateRequest) -> Dict[str, Any]:
     prod = get_product_by_id_or_sku(db, product_id)
     changes: Dict[str, Any] = {}
-    for field_name in ("name", "description", "mrp_inr", "fit_guide", "fabric_and_care", "final_sale"):
+    for field_name in ("name", "description", "fit_guide", "fabric_and_care", "final_sale"):
         val = getattr(req, field_name)
         if val is not None:
             setattr(prod, field_name, val)
-            changes[field_name] = float(val) if isinstance(val, Decimal) else val
+            changes[field_name] = val
+
+    # Price lives on variants. A single mrp_inr means "every active size at this
+    # price"; per-size pricing goes through update_variant.
+    if req.mrp_inr is not None:
+        set_variant_prices(db, prod, {v.size: req.mrp_inr for v in prod.variants if v.is_active})
+        changes["mrp_inr_all_sizes"] = float(req.mrp_inr)
 
     record_audit(db, actor, "product", prod.product_id, "update_product", changes, "admin_catalog_update")
+    db.commit()
+    db.refresh(prod)
+    return serialize_product(prod, db)
+
+
+def update_variant(
+    db: Session, actor: ActorContext, product_id: str, size: str, req: VariantUpdateRequest
+) -> Dict[str, Any]:
+    """Reprice and/or activate/retire one size of a product."""
+    prod = get_product_by_id_or_sku(db, product_id)
+    size = normalize_size(size)
+    before = next((v for v in prod.variants if v.size == size), None)
+    previous = {"mrp_inr": float(before.mrp_inr), "is_active": before.is_active} if before else None
+
+    if req.mrp_inr is not None:
+        set_variant_prices(db, prod, {size: req.mrp_inr})
+    if req.is_active is not None:
+        set_variant_active(prod, size, req.is_active)
+
+    variant = next((v for v in prod.variants if v.size == size), None)
+    if variant is None:
+        raise AppError("variant_not_found", f"Product '{prod.product_id}' has no size '{size}'. Provide mrp_inr to add it.", 404)
+
+    record_audit(
+        db,
+        actor,
+        "product_variant",
+        variant.sku,
+        "update_variant",
+        {"before": previous, "after": {"mrp_inr": float(variant.mrp_inr), "is_active": variant.is_active}},
+        "admin_variant_pricing",
+    )
     db.commit()
     db.refresh(prod)
     return serialize_product(prod, db)

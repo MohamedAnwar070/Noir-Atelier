@@ -1,7 +1,10 @@
 /*
  * @noir/ui design tokens — the single source of truth for colour, type,
- * spacing, radius, elevation, motion and z-index. Tokens only: no element
- * or component selectors belong here (apps own their own reset/components).
+ * spacing, radius, elevation, motion and z-index.
+ *
+ * Contents: custom-property blocks, plus two global accessibility guarantees
+ * every Noir app inherits (visible focus ring, reduced motion) at the end of
+ * this file. Element resets and components belong to each app, not here.
  */
 
 :root,
@@ -231,5 +234,22 @@
   :root {
     --space-6: 1.15rem;
     --space-8: 1.5rem;
+  }
+}
+
+/* Global accessibility guarantees — apply to every Noir app */
+:focus-visible {
+  outline: 2px solid var(--accent-gold);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

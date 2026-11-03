@@ -54,24 +54,43 @@ function gstByRate(lines, { rateKey, amountKey }) {
 /* Catalog                                                                     */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Products have one variant per size, each with its own SKU and price
+ * (backend: product_variants). `price` is the "from" price (cheapest size) for
+ * listing/sorting; anything that shows or charges a specific size must use
+ * `priceFor(size)`.
+ */
 export function normalizeProduct(p) {
   if (!p) return p;
-  const price = toNumber(p.price ?? p.mrp_inr);
+  const fromPrice = toNumber(p.mrp_inr ?? p.price);
   const stock = toNumber(p.stock_quantity ?? p.stock);
-  const sizes =
-    Array.isArray(p.sizes) && p.sizes.length
-      ? p.sizes
-      : Array.isArray(p.sizes_available) && p.sizes_available.length
-      ? p.sizes_available
-      : ["S", "M", "L", "XL"];
+  const variants = (p.variants || [])
+    .filter((v) => v.is_active !== false)
+    .map((v) => ({ size: v.size, sku: v.sku, price: toNumber(v.mrp_inr) }));
+  const priceBySize = new Map(variants.map((v) => [v.size, v.price]));
+  const prices = variants.map((v) => v.price);
+  const priceRange = prices.length
+    ? { min: Math.min(...prices), max: Math.max(...prices) }
+    : { min: fromPrice, max: fromPrice };
+  const sizes = variants.length
+    ? variants.map((v) => v.size)
+    : Array.isArray(p.sizes_available) && p.sizes_available.length
+    ? p.sizes_available
+    : ["S", "M", "L", "XL"];
   const rating = toNumber(p.average_rating ?? p.rating, 5);
   const reviewCount = toNumber(p.review_count ?? p.reviews?.length, 1);
   const accentTag = p.accent_tag || (p.department ? `100% Tailored ${p.department}` : "Atelier Edition");
 
   return {
     ...p,
-    price,
-    mrp_inr: p.mrp_inr ?? price.toFixed(2),
+    price: fromPrice,
+    mrp_inr: fromPrice,
+    variants,
+    priceRange,
+    /** True when sizes are priced differently. */
+    hasSizePricing: priceRange.max > priceRange.min,
+    /** Price of one size; falls back to the "from" price for unknown sizes. */
+    priceFor: (size) => priceBySize.get(size) ?? fromPrice,
     stock,
     stock_quantity: stock,
     sizes,

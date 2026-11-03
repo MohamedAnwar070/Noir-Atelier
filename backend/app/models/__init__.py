@@ -20,6 +20,7 @@ from .product import (
     Product,
     ProductImage,
     ProductReview,
+    ProductVariant,
     ProductVector,
     Recommendation,
 )
@@ -33,6 +34,7 @@ __all__ = [
     "Category",
     "Product",
     "ProductImage",
+    "ProductVariant",
     "Inventory",
     "ProductVector",
     "ProductReview",

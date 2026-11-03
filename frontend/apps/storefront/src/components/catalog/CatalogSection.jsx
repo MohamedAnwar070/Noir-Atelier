@@ -55,7 +55,8 @@ export function CatalogSection({ onSelectProduct }) {
 
     // Price tier filter
     const tier = priceTiers.find((t) => t.id === selectedPriceTier);
-    if (tier) list = list.filter((p) => tier.match(Number(p.price ?? 0)));
+    // A product belongs to a tier if any of its sizes is priced in it
+    if (tier) list = list.filter((p) => p.variants.length ? p.variants.some((v) => tier.match(v.price)) : tier.match(p.price));
 
     // Sort
     if (selectedSort === "price_asc") {

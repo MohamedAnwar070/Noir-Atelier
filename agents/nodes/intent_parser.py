@@ -73,6 +73,26 @@ def format_inr(val: Any) -> str:
         return f"₹{val}"
 
 
+def _active_variants(prod: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return [v for v in (prod.get("variants") or []) if v.get("is_active", True)]
+
+
+def format_price_range(prod: Dict[str, Any]) -> str:
+    """Product price as the storefront shows it: one price, or "₹min – ₹max" when sizes differ."""
+    prices = sorted({float(v["mrp_inr"]) for v in _active_variants(prod)})
+    if len(prices) > 1:
+        return f"{format_inr(prices[0])} – {format_inr(prices[-1])}"
+    return format_inr(prices[0] if prices else prod.get("mrp_inr", 0))
+
+
+def format_size_prices(prod: Dict[str, Any]) -> str:
+    """Per-size price list, e.g. "S ₹2,399 · M ₹2,499"; falls back to plain sizes."""
+    variants = _active_variants(prod)
+    if variants:
+        return " · ".join(f"{v['size']} {format_inr(v['mrp_inr'])}" for v in variants)
+    return ", ".join(prod.get("sizes_available", []))
+
+
 def extract_quantity(msg: str, context: Dict[str, Any]) -> int:
     if context.get("quantity") is not None:
         return max(1, min(99, int(context["quantity"])))

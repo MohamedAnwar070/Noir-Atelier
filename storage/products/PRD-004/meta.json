@@ -1,9 +1,35 @@
 {
   "product_id": "PRD-004",
-  "sku": "PRD-004-IVR-M",
+  "sku": "PRD-004-IVR",
   "name": "Minimalist Pima Cotton Tee",
   "department": "WOMEN",
-  "mrp_inr": "1899.00",
+  "variants": [
+    {
+      "size": "XS",
+      "sku": "PRD-004-IVR-XS",
+      "mrp_inr": "1799.00"
+    },
+    {
+      "size": "S",
+      "sku": "PRD-004-IVR-S",
+      "mrp_inr": "1899.00"
+    },
+    {
+      "size": "M",
+      "sku": "PRD-004-IVR-M",
+      "mrp_inr": "1899.00"
+    },
+    {
+      "size": "L",
+      "sku": "PRD-004-IVR-L",
+      "mrp_inr": "1999.00"
+    },
+    {
+      "size": "XL",
+      "sku": "PRD-004-IVR-XL",
+      "mrp_inr": "2099.00"
+    }
+  ],
   "hsn_code": "6109",
   "image_url": "/media/products/PRD-004/product.jpg",
   "accent_tag": "220 GSM Peruvian Pima"

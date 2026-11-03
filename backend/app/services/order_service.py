@@ -41,6 +41,7 @@ from ..utils.exceptions import AppError
 from .audit_service import get_idempotent_result, next_entity_id, record_audit, save_idempotent_result
 from .config_service import get_business_config_map
 from .product_service import get_product_by_id_or_sku
+from .variant_service import build_line_item
 from .tax_service import calculate_order_financials
 
 MAX_ORDER_LINES = 25
@@ -295,17 +296,7 @@ def calculate_order_preview(db: Session, req: OrderCalculateRequest) -> Dict[str
     raw_lines: List[Dict[str, Any]] = []
     for item in req.items:
         prod = get_product_by_id_or_sku(db, item.product_id)
-        raw_lines.append(
-            {
-                "product_id": prod.product_id,
-                "sku": prod.sku,
-                "product_name": prod.name,
-                "size": item.size,
-                "quantity": item.quantity,
-                "unit_mrp_inr": prod.mrp_inr,
-                "final_sale": prod.final_sale,
-            }
-        )
+        raw_lines.append(build_line_item(prod, item.size, item.quantity))
     merged_lines = merge_order_lines(raw_lines)
     return calculate_order_financials(
         db,
@@ -355,17 +346,7 @@ def _create_order_locked(db: Session, actor: ActorContext, req: OrderCreateReque
             raise AppError("validation_error", "items must be a non-empty array.", 400)
         for line in req.items:
             prod = get_product_by_id_or_sku(db, line.product_id)
-            raw_lines.append(
-                {
-                    "product_id": prod.product_id,
-                    "sku": prod.sku,
-                    "product_name": prod.name,
-                    "size": line.size,
-                    "quantity": line.quantity,
-                    "unit_mrp_inr": prod.mrp_inr,
-                    "final_sale": prod.final_sale,
-                }
-            )
+            raw_lines.append(build_line_item(prod, line.size, line.quantity))
     else:
         sess_id = req.session_id or f"sess-{customer_id}"
         cart_rows_to_clear = list(
@@ -375,17 +356,7 @@ def _create_order_locked(db: Session, actor: ActorContext, req: OrderCreateReque
             raise AppError("empty_cart", "Cannot create order: no items provided and cart is empty.", 422)
         for c in cart_rows_to_clear:
             prod = get_product_by_id_or_sku(db, c.product_id)
-            raw_lines.append(
-                {
-                    "product_id": prod.product_id,
-                    "sku": prod.sku,
-                    "product_name": prod.name,
-                    "size": c.size,
-                    "quantity": c.quantity,
-                    "unit_mrp_inr": prod.mrp_inr,
-                    "final_sale": prod.final_sale,
-                }
-            )
+            raw_lines.append(build_line_item(prod, c.size, c.quantity))
 
     merged_lines = merge_order_lines(raw_lines)
     effective_idem_key = build_product_order_idempotency_key(

@@ -4,7 +4,13 @@ from typing import Optional
 from ..client import PlatformApiClient
 from ..schemas.state import AgentGraphState
 from ..tools.product_tools import CatalogTools
-from .intent_parser import format_inr, is_generic_browse_query, resolve_product_from_message
+from .intent_parser import (
+    format_inr,
+    format_price_range,
+    format_size_prices,
+    is_generic_browse_query,
+    resolve_product_from_message,
+)
 
 PRODUCT_ID_RE = re.compile(r"\b(PRD-\d{3}(?:-[A-Z0-9-]+)?)\b", re.IGNORECASE)
 PRICE_RE = re.compile(r"(?:under|below|max|upto|up\s+to|<=?)\s*(?:inr|rs\.?|₹)?\s*([\d,]+)", re.IGNORECASE)
@@ -31,7 +37,7 @@ def run_catalog_node(state: AgentGraphState, client: PlatformApiClient) -> Agent
             traces=state.tool_traces,
         )
         if code == 200 and isinstance(recs, list):
-            lines = [f"• {r['name']} ({r['department']}) — {format_inr(r['mrp_inr'])}" for r in recs]
+            lines = [f"• {r['name']} ({r['department']}) — {format_price_range(r)}" for r in recs]
             state.status = "answer"
             state.data = {
                 "source_product_id": target_id,
@@ -65,13 +71,13 @@ def run_catalog_node(state: AgentGraphState, client: PlatformApiClient) -> Agent
                     "type": "product_details",
                     "badge": f"{prod['department']} Collection",
                     "title": prod["name"],
-                    "summary": f"{format_inr(prod['mrp_inr'])} · Sizes: {', '.join(prod.get('sizes_available', []))} · {prod.get('stock', 0)} in stock",
+                    "summary": f"{format_price_range(prod)} · Sizes: {', '.join(prod.get('sizes_available', []))} · {prod.get('stock', 0)} in stock",
                 },
             }
             state.reply = (
                 f"Here are the details for the {prod['name']} ({prod['department']}):\n"
-                f"• Price: {format_inr(prod['mrp_inr'])} (incl. GST)\n"
-                f"• Available Sizes: {', '.join(prod.get('sizes_available', []))}\n"
+                f"• Price: {format_price_range(prod)} (incl. GST)\n"
+                f"• Price by size: {format_size_prices(prod)}\n"
                 f"• Fit: {prod['fit_guide']}\n"
                 f"• Fabric & Care: {prod['fabric_and_care']}\n"
                 f"• Availability: {prod.get('stock', 0)} pieces ready to ship"
@@ -143,7 +149,7 @@ def run_catalog_node(state: AgentGraphState, client: PlatformApiClient) -> Agent
     }
     if product_list:
         lines = [
-            f"• {p['name']} ({p['department']}) — {format_inr(p['mrp_inr'])} · Sizes: {', '.join(p.get('sizes_available', []))}"
+            f"• {p['name']} ({p['department']}) — {format_price_range(p)} · Sizes: {', '.join(p.get('sizes_available', []))}"
             for p in product_list
         ]
         intro = (

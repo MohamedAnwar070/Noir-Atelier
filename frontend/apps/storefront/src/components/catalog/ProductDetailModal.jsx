@@ -6,7 +6,7 @@ import { normalizeProduct } from "@/store/normalizers";
 import { Modal } from "@/components/ui/Overlay";
 import { Icon } from "@/components/ui/Icon";
 import { StarRating, QuantityStepper, Button } from "@/components/ui/Controls";
-import { formatInr, getProductImage, validateReviewForm } from "@noir/utils/formatters.js";
+import { formatInr, formatPriceRange, getProductImage, validateReviewForm } from "@noir/utils/formatters.js";
 
 export function ProductDetailModal({ product, isOpen, onClose }) {
   const {
@@ -40,7 +40,7 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
 
   useEffect(() => {
     if (product?.product_id && isOpen) {
-      setSelectedSize(product.sizes?.[0] || "M");
+      setSelectedSize(product.sizes_available?.[0] || "M");
       setQuantity(1);
       setReviews(product.reviews || []);
       setReviewCount(product.review_count || (product.reviews?.length ?? 0));
@@ -69,19 +69,15 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
 
   if (!product) return null;
 
-  const price = Number(product.price ?? product.mrp_inr ?? 0);
   const stock = Number(product.stock_quantity ?? product.stock ?? 0);
-  const availableSizes =
-    Array.isArray(product.sizes) && product.sizes.length
-      ? product.sizes
-      : Array.isArray(product.sizes_available) && product.sizes_available.length
-      ? product.sizes_available
-      : ["S", "M", "L", "XL"];
+  const availableSizes = product.sizes_available;
+  // Each size has its own price, so GST is resolved for the selected size too.
+  const price = product.priceFor(selectedSize);
+  const gstRate = taxRules.rateFor(price);
 
   const img = getProductImage(product);
   const outOfStock = stock <= 0;
   const maxStock = Math.min(Math.max(stock, 1), 10);
-  const gstRate = taxRules.rateFor(price); // slab rule from business config
 
   /** Resolves to true when the item reached the bag (the store toasts any error). */
   const handleAddToBag = async () => {
@@ -195,13 +191,16 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
 
           {/* Price & GST Slab */}
           <div className="detail-pricing-box">
-            <div className="detail-price-main">{formatInr(price)}</div>
+            <div className="detail-price-main" aria-live="polite">{formatInr(price)}</div>
             <div className="detail-gst-explainer">
               <span className="gst-tag">{gstRate}% GST Applicable</span>
               <span className="hsn-tag">HSN {product.hsn_code || "6203"}</span>
             </div>
             <p className="detail-tax-note">
-              Price includes Indian Goods & Services Tax under CBIC notification 15/2021.
+              {product.hasSizePricing
+                ? `Price for size ${selectedSize}; sizes range ${formatPriceRange(product)}. `
+                : ""}
+              Includes GST.
             </p>
           </div>
 
@@ -216,12 +215,15 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
                 <button
                   key={s}
                   type="button"
-                  className={`size-btn-pill ${selectedSize === s ? "active" : ""}`}
+                  className={`size-btn-pill ${product.hasSizePricing ? "size-btn-pill--priced" : ""} ${selectedSize === s ? "active" : ""}`}
                   onClick={() => setSelectedSize(s)}
                   role="radio"
                   aria-checked={selectedSize === s}
                 >
-                  {s}
+                  <span>{s}</span>
+                  {product.hasSizePricing && (
+                    <span className="size-btn-price">{formatInr(product.priceFor(s))}</span>
+                  )}
                 </button>
               ))}
             </div>
@@ -312,12 +314,12 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
                   </div>
                   <div className="rec-info">
                     <h4 className="rec-title">{rec.name}</h4>
-                    <span className="rec-price">{formatInr(rec.price)}</span>
+                    <span className="rec-price">{formatPriceRange(rec)}</span>
                   </div>
                   <button
                     type="button"
                     className="btn-pill btn-xs"
-                    onClick={() => addToBag(rec, rec.sizes?.[0] || "M", 1)}
+                    onClick={() => addToBag(rec, rec.sizes_available[0], 1)}
                   >
                     + Bag
                   </button>

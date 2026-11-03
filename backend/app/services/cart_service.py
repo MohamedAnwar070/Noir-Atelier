@@ -12,6 +12,7 @@ from ..utils.exceptions import AppError
 from .audit_service import next_entity_id, record_audit
 from .product_service import get_product_by_id_or_sku
 from .tax_service import calculate_order_financials, validate_and_compute_coupon
+from .variant_service import build_line_item, get_variant, variant_size_for_sku
 
 
 def _resolve_session_and_customer(
@@ -26,6 +27,9 @@ def _resolve_session_and_customer(
 
 def add_item_to_cart(db: Session, actor: ActorContext, req: CartAddRequest) -> Dict[str, Any]:
     prod = get_product_by_id_or_sku(db, req.product_id)
+    # A SKU identifies one size: if the caller passed a variant SKU, it decides the size.
+    sku_size = variant_size_for_sku(prod, req.product_id)
+    variant = get_variant(prod, sku_size or req.size)
     inv = prod.inventory
     if inv is None or inv.quantity_available < req.quantity:
         avail = inv.quantity_available if inv else 0
@@ -40,7 +44,7 @@ def add_item_to_cart(db: Session, actor: ActorContext, req: CartAddRequest) -> D
         select(Cart).where(
             Cart.session_id == sess_id,
             Cart.product_id == prod.product_id,
-            Cart.size == req.size,
+            Cart.size == variant.size,
         )
     )
     if existing:
@@ -60,8 +64,8 @@ def add_item_to_cart(db: Session, actor: ActorContext, req: CartAddRequest) -> D
             customer_id=cust_id,
             session_id=sess_id,
             product_id=prod.product_id,
-            sku=prod.sku,
-            size=req.size,
+            sku=variant.sku,
+            size=variant.size,
             quantity=req.quantity,
             expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
         )
@@ -73,7 +77,7 @@ def add_item_to_cart(db: Session, actor: ActorContext, req: CartAddRequest) -> D
         "cart",
         cart_row.cart_id,
         "add_to_cart",
-        {"product_id": prod.product_id, "size": req.size, "quantity": cart_row.quantity},
+        {"product_id": prod.product_id, "sku": variant.sku, "size": variant.size, "quantity": cart_row.quantity},
         "customer_or_agent_cart_add",
     )
     db.commit()
@@ -95,21 +99,21 @@ def get_cart_summary(
     rows = db.scalars(stmt.order_by(Cart.cart_id)).all()
     raw_lines: List[Dict[str, Any]] = []
     row_by_key: Dict[str, Cart] = {}
+    unavailable: List[Dict[str, Any]] = []
     for r in rows:
         prod = get_product_by_id_or_sku(db, r.product_id)
-        raw_lines.append(
-            {
-                "cart_id": r.cart_id,
-                "product_id": prod.product_id,
-                "sku": prod.sku,
-                "product_name": prod.name,
-                "size": r.size,
-                "quantity": r.quantity,
-                "unit_mrp_inr": prod.mrp_inr,
-                "final_sale": prod.final_sale,
-            }
-        )
-        row_by_key[f"{prod.product_id}:{r.size}"] = r
+        try:
+            line = build_line_item(prod, r.size, r.quantity)
+        except AppError as exc:
+            # The size was retired after it was added: keep the cart usable and
+            # report the line so the shopper can remove it.
+            unavailable.append(
+                {"cart_id": r.cart_id, "product_id": prod.product_id, "product_name": prod.name,
+                 "size": r.size, "quantity": r.quantity, "reason": exc.message}
+            )
+            continue
+        raw_lines.append(line)
+        row_by_key[f"{prod.product_id}:{line['size']}"] = r
 
     financials = calculate_order_financials(db, raw_lines, coupon_code=coupon_code)
     items_dto = []
@@ -144,6 +148,7 @@ def get_cart_summary(
         "shipping_fee_inr": financials["shipping_fee_inr"],
         "grand_total_inr": financials["grand_total_inr"],
         "free_shipping_applied": financials["free_shipping_applied"],
+        "unavailable_items": unavailable,
     }
 
 

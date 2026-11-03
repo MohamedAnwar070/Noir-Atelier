@@ -1,9 +1,25 @@
 {
   "product_id": "PRD-002",
-  "sku": "PRD-002-CHR-L",
+  "sku": "PRD-002-CHR",
   "name": "Structured Merino-Wool Overshirt",
   "department": "MEN",
-  "mrp_inr": "6499.00",
+  "variants": [
+    {
+      "size": "M",
+      "sku": "PRD-002-CHR-M",
+      "mrp_inr": "6499.00"
+    },
+    {
+      "size": "L",
+      "sku": "PRD-002-CHR-L",
+      "mrp_inr": "6699.00"
+    },
+    {
+      "size": "XL",
+      "sku": "PRD-002-CHR-XL",
+      "mrp_inr": "6899.00"
+    }
+  ],
   "hsn_code": "6201",
   "image_url": "/media/products/PRD-002/product.jpg",
   "accent_tag": "Double-Faced Merino Wool"

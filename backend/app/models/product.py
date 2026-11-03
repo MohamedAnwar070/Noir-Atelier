@@ -13,6 +13,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -38,6 +39,8 @@ class Product(Base, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "products"
 
     product_id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    # Style code shared by every size (e.g. "PRD-002-CHR"); each size has its own
+    # sellable SKU on ProductVariant.
     sku: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
@@ -45,10 +48,14 @@ class Product(Base, TimestampMixin, SoftDeleteMixin):
         String(16), ForeignKey("categories.category_id", ondelete="RESTRICT"), nullable=False
     )
     department: Mapped[str] = mapped_column(String(16), nullable=False)
+    # Derived "from" price = lowest active variant price. Kept on the product for
+    # catalog listing, sorting and price filters; maintained by variant_service,
+    # never charged directly (checkout always prices the variant).
     mrp_inr: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     original_mrp_inr: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
     hsn_code: Mapped[str] = mapped_column(String(12), default="6205", nullable=False)
     color: Mapped[str] = mapped_column(String(40), nullable=False)
+    # Derived from active variants (in display order); maintained by variant_service.
     sizes_available: Mapped[List[str]] = mapped_column(JSON, default=list, nullable=False)
     fit_guide: Mapped[str] = mapped_column(Text, nullable=False)
     fabric_and_care: Mapped[str] = mapped_column(Text, nullable=False)
@@ -63,10 +70,43 @@ class Product(Base, TimestampMixin, SoftDeleteMixin):
     inventory: Mapped[Optional["Inventory"]] = relationship(
         back_populates="product", uselist=False, cascade="all, delete-orphan"
     )
+    variants: Mapped[List["ProductVariant"]] = relationship(
+        back_populates="product",
+        cascade="all, delete-orphan",
+        order_by="ProductVariant.position",
+    )
 
     __table_args__ = (
         Index("ix_products_category_active_price", "category_id", "is_active", "mrp_inr"),
         CheckConstraint("mrp_inr > 0", name="ck_products_mrp_positive"),
+    )
+
+
+class ProductVariant(Base, TimestampMixin):
+    """A sellable size of a product: owns its SKU and its price.
+
+    Price lives here (not on Product) because sizes can be priced differently —
+    and because GST slabs are resolved per unit price, a size can even fall in a
+    different tax slab than its siblings.
+    """
+
+    __tablename__ = "product_variants"
+
+    variant_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    product_id: Mapped[str] = mapped_column(
+        String(16), ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    size: Mapped[str] = mapped_column(String(16), nullable=False)
+    sku: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, index=True)
+    mrp_inr: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    product: Mapped["Product"] = relationship(back_populates="variants")
+
+    __table_args__ = (
+        UniqueConstraint("product_id", "size", name="uq_product_variants_product_size"),
+        CheckConstraint("mrp_inr > 0", name="ck_product_variants_mrp_positive"),
     )
 
 

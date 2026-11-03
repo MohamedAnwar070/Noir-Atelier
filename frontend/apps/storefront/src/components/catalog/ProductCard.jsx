@@ -9,17 +9,16 @@ import { formatInr, getProductImage } from "@noir/utils/formatters.js";
 export function ProductCard({ product, onSelect }) {
   const { addToBag, toggleWishlist, isWishlisted, taxRules } = useStore();
 
-  const price = Number(product.price ?? product.mrp_inr ?? 0);
   const stock = Number(product.stock_quantity ?? product.stock ?? 0);
-  const availableSizes =
-    Array.isArray(product.sizes) && product.sizes.length
-      ? product.sizes
-      : Array.isArray(product.sizes_available) && product.sizes_available.length
-      ? product.sizes_available
-      : ["S", "M", "L", "XL"];
+  const availableSizes = product.sizes_available;
 
   const [selectedSize, setSelectedSize] = useState(availableSizes[0] || "M");
+  // Until the shopper picks a size, a product with size-based pricing shows "From ₹…".
+  const [sizeChosen, setSizeChosen] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
+
+  const price = product.priceFor(selectedSize);
+  const showFromPrice = product.hasSizePricing && !sizeChosen;
 
   const img = getProductImage(product);
   const wishlisted = isWishlisted(product.product_id);
@@ -112,7 +111,9 @@ export function ProductCard({ product, onSelect }) {
                 onClick={(e) => {
                   e.stopPropagation();
                   setSelectedSize(s);
+                  setSizeChosen(true);
                 }}
+                title={product.hasSizePricing ? formatInr(product.priceFor(s)) : undefined}
                 role="radio"
                 aria-checked={selectedSize === s}
               >
@@ -139,9 +140,13 @@ export function ProductCard({ product, onSelect }) {
 
         <div className="product-card-footer">
           <div className="product-price-stack">
-            <span className="product-price-main">{formatInr(price)}</span>
+            <span className="product-price-main">
+              {showFromPrice ? `From ${formatInr(product.priceRange.min)}` : formatInr(price)}
+            </span>
             <span className="product-gst-caption">
-              incl. {gstRate}% GST ({product.hsn_code || "HSN 6203"})
+              {showFromPrice
+                ? "Price varies by size · incl. GST"
+                : `Size ${selectedSize} · incl. ${gstRate}% GST`}
             </span>
           </div>
 

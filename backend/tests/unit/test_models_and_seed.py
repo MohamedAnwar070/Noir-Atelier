@@ -21,9 +21,9 @@ class TestModelsAndSeed(unittest.TestCase):
     def setUp(self) -> None:
         self.engine = create_engine("sqlite:///:memory:")
 
-    def test_32_tables_registered(self) -> None:
+    def test_33_tables_registered(self) -> None:
         tables = set(Base.metadata.tables.keys())
-        self.assertEqual(len(tables), 32)
+        self.assertEqual(len(tables), 33)
         for required in (
             "customers",
             "customer_addresses",
@@ -31,6 +31,7 @@ class TestModelsAndSeed(unittest.TestCase):
             "customer_vectors",
             "categories",
             "products",
+            "product_variants",
             "product_images",
             "inventory",
             "product_vectors",
@@ -77,6 +78,11 @@ class TestModelsAndSeed(unittest.TestCase):
                 self.assertTrue(p.hsn_code.startswith(("61", "62")))
                 self.assertTrue(p.security_tag_required)
                 self.assertGreater(p.mrp_inr, Decimal("0"))
+                # Every size is a variant with its own SKU; the product price is the lowest one.
+                self.assertTrue(p.variants)
+                self.assertEqual(p.mrp_inr, min(v.mrp_inr for v in p.variants))
+                self.assertEqual(p.sizes_available, [v.size for v in p.variants])
+                self.assertTrue(all(v.sku == f"{p.sku}-{v.size}" for v in p.variants))
 
             total_stock = session.scalar(select(func.sum(Inventory.quantity_available)))
             self.assertEqual(total_stock, 170)

@@ -1,9 +1,35 @@
 {
   "product_id": "PRD-005",
-  "sku": "PRD-005-NVY-8Y",
+  "sku": "PRD-005-NVY",
   "name": "Kids Organic Merino Crewneck",
   "department": "KIDS",
-  "mrp_inr": "2199.00",
+  "variants": [
+    {
+      "size": "4Y",
+      "sku": "PRD-005-NVY-4Y",
+      "mrp_inr": "1899.00"
+    },
+    {
+      "size": "6Y",
+      "sku": "PRD-005-NVY-6Y",
+      "mrp_inr": "1999.00"
+    },
+    {
+      "size": "8Y",
+      "sku": "PRD-005-NVY-8Y",
+      "mrp_inr": "2199.00"
+    },
+    {
+      "size": "10Y",
+      "sku": "PRD-005-NVY-10Y",
+      "mrp_inr": "2299.00"
+    },
+    {
+      "size": "12Y",
+      "sku": "PRD-005-NVY-12Y",
+      "mrp_inr": "2399.00"
+    }
+  ],
   "hsn_code": "6110",
   "image_url": "/media/products/PRD-005/product.jpg",
   "accent_tag": "Superfine ZQ Merino Knit"

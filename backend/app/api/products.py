@@ -12,6 +12,7 @@ from ..schemas.product_schema import (
     ProductCreateRequest,
     ProductReviewCreateRequest,
     ProductUpdateRequest,
+    VariantUpdateRequest,
 )
 from ..services.order_service import get_orders_analytics
 from ..services.product_service import (
@@ -26,6 +27,7 @@ from ..services.product_service import (
     serialize_product,
     update_inventory_stock,
     update_product,
+    update_variant,
 )
 
 router = APIRouter()
@@ -111,6 +113,18 @@ def api_update_product(
     actor: ActorContext = Depends(require_admin),
 ) -> Dict[str, Any]:
     return update_product(db, actor, product_id, req)
+
+
+@router.put("/api/products/{product_id}/variants/{size}")
+def api_update_variant(
+    product_id: str,
+    size: str,
+    req: VariantUpdateRequest,
+    db: Session = Depends(get_db),
+    actor: ActorContext = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Set the price of one size (adds the size if new) and/or retire it."""
+    return update_variant(db, actor, product_id, size, req)
 
 
 @router.delete("/api/products/{product_id}")

@@ -623,7 +623,7 @@ export function StoreProvider({ children, initialPage = "shop" }) {
   const addToBag = (product, size, qty = 1, { openCart = false } = {}) =>
     addToCart({
       productId: product.product_id,
-      size: size || product.sizes?.[0] || "M",
+      size: size || product.sizes_available?.[0], // never guess: the backend validates sizes
       quantity: qty,
       productName: product.name,
       openCart,

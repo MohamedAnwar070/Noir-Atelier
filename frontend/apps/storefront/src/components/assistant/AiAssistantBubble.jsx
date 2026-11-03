@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useStore } from "@/store/StoreProvider";
 import { useAssistant } from "@/hooks/useAssistant";
 import { Icon } from "@/components/ui/Icon";
-import { formatInr, getProductImage } from "@noir/utils/formatters.js";
+import { formatInr, formatPriceRange, getProductImage } from "@noir/utils/formatters.js";
 
 export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
   const { currentActor, catalog, addToBag, openDrawer, navigateTo } = useStore();
@@ -244,14 +244,14 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
                               <div className="ai-tile-info">
                                 <div className="ai-tile-name">{p.name}</div>
                                 <div className="ai-tile-price">
-                                  {formatInr(p.price)}
+                                  {formatPriceRange(p)}
                                 </div>
                               </div>
                               <div className="ai-tile-actions">
                                 <button
                                   type="button"
                                   className="btn-pill btn-xs"
-                                  onClick={() => addToBag(p, p.sizes?.[0] || "M", 1)}
+                                  onClick={() => addToBag(p, p.sizes_available[0], 1)}
                                 >
                                   + Bag
                                 </button>

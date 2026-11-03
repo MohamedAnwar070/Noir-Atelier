@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useStore } from "@/store/StoreProvider";
 import { StatePanel, ListSkeleton } from "@/components/ui/StatePanel";
-import { formatInr } from "@noir/utils/formatters.js";
+import { formatInr, formatPriceRange } from "@noir/utils/formatters.js";
 
 /** Refund statuses that still need an approver (Tier 3 needs two). */
 const PENDING_REFUND_STATUSES = new Set(["pending_approval", "awaiting_secondary_approval"]);
@@ -319,7 +319,7 @@ export function AdminView() {
                         {prod.stock_quantity} units
                       </span>
                     </td>
-                    <td>{formatInr(prod.price)}</td>
+                    <td>{formatPriceRange(prod)}</td>
                     <td>
                       <button
                         type="button"

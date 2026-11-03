@@ -131,7 +131,7 @@ class TestOrderHoldsPaymentsConcurrency(unittest.TestCase):
             json={
                 "items": [
                     {"product_id": "PRD-001", "size": "M", "quantity": 1},
-                    {"product_id": "PRD-005", "size": "L", "quantity": 5},
+                    {"product_id": "PRD-005", "size": "8Y", "quantity": 5},
                 ]
             },
         )
@@ -155,7 +155,7 @@ class TestOrderHoldsPaymentsConcurrency(unittest.TestCase):
                 resp = local_client.post(
                     "/api/orders/hold",
                     headers=self._headers("demo_cust_001"),
-                    json={"items": [{"product_id": "PRD-005", "size": "M", "quantity": 1}]},
+                    json={"items": [{"product_id": "PRD-005", "size": "8Y", "quantity": 1}]},
                 )
                 return resp.status_code
 
@@ -329,7 +329,7 @@ class TestOrderHoldsPaymentsConcurrency(unittest.TestCase):
         hold_late = self.client.post(
             "/api/orders/hold",
             headers=self._headers(),
-            json={"items": [{"product_id": "PRD-005", "size": "M", "quantity": 1}]},
+            json={"items": [{"product_id": "PRD-005", "size": "8Y", "quantity": 1}]},
         ).json()
         with self.SessionLocal() as db:
             ord_row = db.scalar(select(Order).where(Order.order_id == hold_late["order_id"]))
@@ -341,7 +341,7 @@ class TestOrderHoldsPaymentsConcurrency(unittest.TestCase):
         other_buyer = self.client.post(
             "/api/orders/hold",
             headers=self._headers("demo_cust_002"),
-            json={"items": [{"product_id": "PRD-005", "size": "M", "quantity": 1}]},
+            json={"items": [{"product_id": "PRD-005", "size": "8Y", "quantity": 1}]},
         )
         self.assertEqual(other_buyer.status_code, 201)
 

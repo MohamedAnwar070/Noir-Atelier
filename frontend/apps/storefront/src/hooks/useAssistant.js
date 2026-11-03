@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { NoirApiClient } from "@noir/api/client.js";
 import { ASSISTANT, LIMITS } from "@/config/ui.config";
 import { friendlyErrorMessage } from "@noir/ui/states.js";
+import { normalizeProduct } from "@/store/normalizers";
 
 const SESSION_KEY = "noir_chat_session";
 
@@ -112,7 +113,8 @@ export function useAssistant({ api, actor, onAfterAction, onActionCompleted } = 
           status: res.status,
           persona: ASSISTANT?.personas?.[res.routed_agent] || "Noir Atelier Stylist",
           actionCard,
-          productCards: Array.isArray(res.data?.products) ? res.data.products.slice(0, 4) : [],
+          // Normalized like catalog products so tiles show the same per-size price range
+          productCards: Array.isArray(res.data?.products) ? res.data.products.slice(0, 4).map(normalizeProduct) : [],
           reactSteps: res.react_steps || [],
           agentName: res.routed_agent || "supervisor",
           timestamp: Date.now(),
