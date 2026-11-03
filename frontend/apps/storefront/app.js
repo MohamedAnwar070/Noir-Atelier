@@ -1738,47 +1738,140 @@ function renderAiConciergeDrawer() {
               .join("")}
           </div>
 
-          <div style="display:flex;flex-direction:column;gap:0.65rem;flex:1;">
+          <div style="display:flex;flex-direction:column;gap:0.75rem;flex:1;">
             ${
               state.agentMessages.length === 0
                 ? `<div style="padding:1rem;background:var(--bg-surface);border-radius:16px;border:1px solid var(--border-subtle);font-size:12px;color:var(--text-secondary);line-height:1.55;">
-                    Welcome to Noir Atelier's AI-Native Stylist & Concierge. I can search Men, Women, and Kids garments, add sizes directly to your bag, apply promo codes, place or cancel orders, initiate 4-tier returns, or answer GST & policy questions.
+                    Welcome to <strong>Noir Atelier Personal Stylist & Concierge</strong>. Ask me to find garments by fabric or budget, add pieces to your bag, place an order (e.g. <em>"Buy 2 Minimalist Pima Cotton Tee"</em>), cancel an order, or start a return.
                   </div>`
                 : state.agentMessages
-                    .map(
-                      (m) => `
-                      <div style="padding:0.85rem 1rem;border-radius:16px;font-size:12px;background:${
+                    .map((m) => {
+                      const friendlyAgentTitle =
+                        {
+                          catalog_agent: "Personal Stylist",
+                          cart_agent: "Shopping Bag Concierge",
+                          order_agent: "Order & Checkout Concierge",
+                          fulfillment_agent: "Delivery Concierge",
+                          returns_agent: "Returns & Refund Specialist",
+                          support_agent: "Client Care Concierge",
+                          inventory_agent: "Stock Specialist",
+                          analytics_agent: "Store Insights Assistant",
+                          config_agent: "Atelier Policy Guide",
+                        }[m.routed_agent] || "Atelier Assistant";
+
+                      const statusBadgeLabel =
+                        {
+                          action_completed: "Action Completed",
+                          pending_approval: "Sent for Approval",
+                          escalated: "Concierge Assigned",
+                          clarify_missing_info: "Needs Details",
+                          blocked_unauthorized: "Access Restricted",
+                          blocked_prompt_injection: "Security Guardrail",
+                          error: "Action Failed",
+                          answer: "Verified Answer",
+                        }[m.status] || "Verified";
+
+                      const fb = m.data?.action_feedback;
+                      const chatProducts = Array.isArray(m.data?.products) ? m.data.products.slice(0, 4) : [];
+
+                      return `
+                      <div style="padding:0.9rem 1.05rem;border-radius:16px;font-size:12.5px;background:${
                         m.role === "user" ? "var(--accent-noir)" : "var(--bg-surface)"
-                      };color:${m.role === "user" ? "var(--text-on-dark)" : "var(--text-primary)"};border:1px solid var(--border-subtle);">
+                      };color:${m.role === "user" ? "var(--text-on-dark)" : "var(--text-primary)"};border:${
+                        m.status === "action_completed" ? "1.5px solid var(--state-success-border)" : "1px solid var(--border-subtle)"
+                      };">
                         ${
                           m.role === "agent"
-                            ? `<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:0.3rem;font-family:var(--font-mono);">
-                                <span>${m.routed_agent} · ${m.service_account}</span>
-                                <span>${m.status} · Steps ${m.steps_taken ?? 1}/${m.step_budget_max ?? 10}</span>
+                            ? `<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;margin-bottom:0.45rem;">
+                                <span style="font-weight:700;color:var(--text-primary);">${friendlyAgentTitle}</span>
+                                <span class="meta-tag">${statusBadgeLabel}</span>
                               </div>`
                             : ""
                         }
-                        <div style="white-space:pre-line;line-height:1.5;">${m.text}</div>
+                        <div style="white-space:pre-line;line-height:1.55;">${m.text}</div>
                         ${
-                          m.react_steps?.length
-                            ? `<div style="margin-top:0.5rem;padding-top:0.4rem;border-top:1px dashed var(--border-subtle);font-family:var(--font-mono);font-size:10px;color:var(--text-secondary);">
-                                <div style="font-weight:600;margin-bottom:2px;">4-Layer ReAct Trace:</div>
-                                ${m.react_steps.map((s) => `<div>[${s.layer.toUpperCase()}] ${s.thought}</div>`).join("")}
+                          fb
+                            ? `<div style="margin-top:0.65rem;padding:0.75rem 0.9rem;border-radius:14px;background:${
+                                m.status === "action_completed" ? "var(--state-success-bg)" : "var(--bg-page)"
+                              };border:${
+                                m.status === "action_completed" ? "1px solid var(--state-success-border)" : "1px solid var(--border-subtle)"
+                              };">
+                                <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;margin-bottom:0.25rem;">
+                                  <strong style="font-size:12.5px;">${fb.title}</strong>
+                                  ${fb.badge ? `<span class="meta-tag" style="font-size:10px;">${fb.badge}</span>` : ""}
+                                </div>
+                                ${fb.summary ? `<div style="font-size:11.5px;color:var(--text-secondary);">${fb.summary}</div>` : ""}
+                                ${
+                                  Array.isArray(fb.details) && fb.details.length
+                                    ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.35rem 0.75rem;padding-top:0.45rem;margin-top:0.45rem;border-top:1px solid var(--border-subtle);font-size:11px;">
+                                        ${fb.details
+                                          .map((d) => `<div><span style="color:var(--text-secondary);">${d.label}: </span><strong>${d.value}</strong></div>`)
+                                          .join("")}
+                                      </div>`
+                                    : ""
+                                }
+                                ${
+                                  fb.cta_drawer
+                                    ? `<div style="margin-top:0.6rem;">
+                                        <button type="button" class="btn-pill" style="padding:0.35rem 0.85rem;font-size:11px;min-height:32px;" data-action="open-drawer" data-drawer="${fb.cta_drawer}">
+                                          <span>${fb.cta_label || "Open"}</span>
+                                        </button>
+                                      </div>`
+                                    : fb.cta_page
+                                    ? `<div style="margin-top:0.6rem;">
+                                        <button type="button" class="btn-pill" style="padding:0.35rem 0.85rem;font-size:11px;min-height:32px;" data-action="nav-page" data-page="${fb.cta_page}">
+                                          <span>${fb.cta_label || "View Details"}</span>
+                                        </button>
+                                      </div>`
+                                    : ""
+                                }
                               </div>`
                             : ""
                         }
                         ${
-                          m.tool_traces?.length
-                            ? `<div style="margin-top:0.45rem;padding-top:0.4rem;border-top:1px dashed var(--border-subtle);font-family:var(--font-mono);font-size:10px;color:var(--text-secondary);">
-                                ${m.tool_traces
-                                  .map((t) => `${t.http_method} ${t.endpoint} [${t.risk_level || "read_only"}] → ${t.status_code} (${t.latency_ms}ms)`)
-                                  .join(" · ")}
+                          chatProducts.length
+                            ? `<div style="display:flex;flex-direction:column;gap:0.45rem;margin-top:0.65rem;">
+                                ${chatProducts
+                                  .map(
+                                    (cp) => `
+                                    <div style="display:flex;justify-content:space-between;align-items:center;gap:0.6rem;padding:0.55rem 0.75rem;border-radius:12px;background:var(--bg-page);border:1px solid var(--border-subtle);">
+                                      <div>
+                                        <div style="font-weight:600;font-size:12px;">${cp.name}</div>
+                                        <div style="font-size:11px;color:var(--text-secondary);">${formatInr(cp.mrp_inr)} · ${cp.department} · Sizes: ${(cp.sizes_available || []).join(", ")}</div>
+                                      </div>
+                                      <div style="display:flex;gap:0.35rem;flex-shrink:0;">
+                                        <button type="button" class="chip-pill" style="padding:0.28rem 0.65rem;font-size:11px;min-height:28px;" data-action="add-to-cart" data-product-id="${cp.product_id}">+ Bag</button>
+                                        <button type="button" class="btn-pill" style="padding:0.28rem 0.7rem;font-size:11px;min-height:28px;" data-action="send-quick-prompt" data-prompt="Buy 1 ${cp.name} in size ${(cp.sizes_available || ["M"])[0]}">Buy Now</button>
+                                      </div>
+                                    </div>
+                                  `
+                                  )
+                                  .join("")}
                               </div>`
+                            : ""
+                        }
+                        ${
+                          m.role === "agent" && (m.react_steps?.length || m.tool_traces?.length)
+                            ? `<details style="margin-top:0.55rem;padding-top:0.4rem;border-top:1px dashed var(--border-subtle);font-size:10px;color:var(--text-secondary);">
+                                <summary style="cursor:pointer;user-select:none;font-family:var(--font-mono);">
+                                  Technical Trace (${m.routed_agent} · Steps ${m.steps_taken ?? 1}/${m.step_budget_max ?? 10})
+                                </summary>
+                                <div style="margin-top:6px;font-family:var(--font-mono);">
+                                  ${(m.react_steps || []).map((s) => `<div>[${s.layer.toUpperCase()}] ${s.thought}</div>`).join("")}
+                                  ${
+                                    m.tool_traces?.length
+                                      ? `<div style="margin-top:4px;">${m.tool_traces
+                                          .map((t) => `${t.http_method} ${t.endpoint} [${t.risk_level || "read_only"}] → ${t.status_code} (${t.latency_ms}ms)`)
+                                          .join(" · ")}</div>`
+                                      : ""
+                                  }
+                                </div>
+                              </details>`
                             : ""
                         }
                       </div>
-                    `
-                    )
+                    `;
+                    })
                     .join("")
             }
             ${state.agentBusy ? `<div class="shimmer" style="height:44px;border-radius:14px;"></div>` : ""}
@@ -2397,13 +2490,34 @@ async function sendAgentChatMessage(message) {
       status: res.status,
       trace_id: res.trace_id,
       text: res.reply,
+      data: res.data || {},
       tool_traces: res.tool_traces || [],
       react_steps: res.react_steps || [],
       steps_taken: res.steps_taken ?? 1,
       step_budget_max: res.step_budget_max ?? 10,
     });
-    state.cart = await api.getCart().catch(() => state.cart);
-    state.orders = await api.listOrders().catch(() => state.orders);
+    const [updatedProds, updatedCart, updatedOrders] = await Promise.all([
+      api
+        .searchProducts({
+          q: state.searchQuery,
+          department: state.selectedDepartment === "ALL" ? "" : state.selectedDepartment,
+          maxPrice: state.maxPrice,
+        })
+        .catch(() => state.products),
+      api.getCart().catch(() => state.cart),
+      api.listOrders().catch(() => state.orders),
+    ]);
+    state.products = updatedProds;
+    state.cart = updatedCart;
+    state.orders = updatedOrders;
+    const fb = res.data?.action_feedback;
+    if (fb && (res.status === "action_completed" || res.status === "pending_approval" || res.status === "escalated")) {
+      state.toastSuccess = {
+        title: fb.title || "Action Completed",
+        message: fb.summary || res.reply,
+      };
+      state.liveAnnouncement = `${fb.title}. ${fb.summary || ""}`;
+    }
   } catch (err) {
     state.agentMessages.push({
       role: "agent",

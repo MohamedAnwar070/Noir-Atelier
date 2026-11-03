@@ -31,19 +31,28 @@ def run_fulfillment_node(state: AgentGraphState, client: PlatformApiClient) -> A
             trace_id=state.trace_id,
             traces=state.tool_traces,
         )
-        state.data = payload if isinstance(payload, dict) else {}
+        payload_dict = dict(payload) if isinstance(payload, dict) else {}
         state.status = "action_completed" if code == 200 else "error"
-        state.reply = (
-            f"Reserved {qty} unit(s) of {pid}. Remaining available: {payload.get('quantity_available')}."
-            if code == 200 and isinstance(payload, dict)
-            else "Failed to reserve stock."
-        )
+        if code == 200 and isinstance(payload, dict):
+            payload_dict["action_feedback"] = {
+                "type": "inventory_reserved",
+                "badge": "Stock Reserved",
+                "title": f"Reserved {qty} Unit(s) of {pid}",
+                "summary": f"{payload.get('quantity_available')} units remaining in available stock.",
+            }
+            state.reply = (
+                f"Done! I've reserved {qty} unit(s) of {pid}. "
+                f"There are {payload.get('quantity_available')} units remaining in available stock."
+            )
+        else:
+            state.reply = "I couldn't reserve stock for that item."
+        state.data = payload_dict
         return state
 
     if "schedule" in msg_lower or "dispatch" in msg_lower:
         if not identifier:
             state.status = "clarify_missing_info"
-            state.reply = "Please provide the order ID (e.g., ORD-1001) to schedule courier pickup."
+            state.reply = "Please share your Order ID (for example, ORD-1001) so I can schedule courier dispatch."
             return state
         carrier = state.request.context.get("carrier", "Noir Express")
         code, payload = tools.schedule_shipment(
@@ -52,21 +61,37 @@ def run_fulfillment_node(state: AgentGraphState, client: PlatformApiClient) -> A
             trace_id=state.trace_id,
             traces=state.tool_traces,
         )
-        state.data = payload if isinstance(payload, dict) else {}
+        payload_dict = dict(payload) if isinstance(payload, dict) else {}
         if code == 200 and isinstance(payload, dict):
             state.status = "action_completed"
+            payload_dict["action_feedback"] = {
+                "type": "shipment_scheduled",
+                "badge": "Shipment Dispatched",
+                "title": f"Order #{payload['order_id']} Dispatched via {payload['carrier']}",
+                "summary": f"Tracking Number: {payload['tracking_number']} · Shipment #{payload['shipment_id']}",
+                "details": [
+                    {"label": "Order ID", "value": payload["order_id"]},
+                    {"label": "Shipment ID", "value": payload["shipment_id"]},
+                    {"label": "Courier", "value": payload["carrier"]},
+                    {"label": "Tracking AWB", "value": payload["tracking_number"]},
+                ],
+                "cta_label": "Track in My Orders",
+                "cta_page": "orders",
+            }
+            state.data = payload_dict
             state.reply = (
-                f"Shipment {payload['shipment_id']} scheduled for {payload['order_id']} via {payload['carrier']} "
-                f"(Tracking: {payload['tracking_number']}, Status: {payload['status']})."
+                f"Your order (#{payload['order_id']}) has been dispatched via {payload['carrier']}! "
+                f"Your tracking number is {payload['tracking_number']}."
             )
         else:
             state.status = "error"
-            state.reply = payload.get("message", "Could not schedule shipment.")
+            state.data = payload_dict
+            state.reply = payload_dict.get("message", "Could not schedule shipment right now.")
         return state
 
     if not identifier:
         state.status = "clarify_missing_info"
-        state.reply = "Please share your order ID (`ORD-1001`) or shipment ID (`SHP-1001`) to track delivery."
+        state.reply = "Please share your Order ID (e.g., ORD-1001) or Shipment ID (e.g., SHP-1001) so I can track your delivery."
         return state
 
     code, payload = tools.get_shipment(
@@ -75,14 +100,22 @@ def run_fulfillment_node(state: AgentGraphState, client: PlatformApiClient) -> A
         trace_id=state.trace_id,
         traces=state.tool_traces,
     )
-    state.data = payload if isinstance(payload, dict) else {}
+    payload_dict = dict(payload) if isinstance(payload, dict) else {}
     if code == 200 and isinstance(payload, dict):
         state.status = "answer"
+        payload_dict["action_feedback"] = {
+            "type": "shipment_tracking",
+            "badge": f"Delivery: {str(payload['status']).title()}",
+            "title": f"Order #{payload['order_id']} · {payload['carrier']}",
+            "summary": f"Tracking AWB: {payload['tracking_number']}",
+        }
+        state.data = payload_dict
         state.reply = (
-            f"Shipment {payload['shipment_id']} for order {payload['order_id']} is '{payload['status']}' "
-            f"via {payload['carrier']} (Tracking: {payload['tracking_number']})."
+            f"Your delivery (#{payload['shipment_id']}) for Order #{payload['order_id']} is currently {payload['status']} "
+            f"with {payload['carrier']} (Tracking Number: {payload['tracking_number']})."
         )
     else:
         state.status = "answer"
-        state.reply = payload.get("message", f"No active shipment found for {identifier}.")
+        state.data = payload_dict
+        state.reply = payload_dict.get("message", f"No shipment has been dispatched yet for {identifier}.")
     return state

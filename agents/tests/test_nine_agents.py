@@ -253,6 +253,28 @@ class TestNineAgentsArchitecture(unittest.TestCase):
         self.assertLessEqual(body["steps_taken"], body["step_budget_max"])
         self.assertEqual(body["tool_traces"][0]["risk_level"], "read_only")
 
+    def test_07_natural_language_product_purchase_and_action_feedback(self) -> None:
+        browse_res = self.orchestrator.invoke(
+            AgentRequest(message="i want to buy", customer_id="CUS-001")
+        )
+        self.assertEqual(len(browse_res.data["products"]), 5)
+        self.assertIn("action_feedback", browse_res.data)
+
+        buy_res = self.orchestrator.invoke(
+            AgentRequest(
+                message="buy 2 Minimalist Pima Cotton Tee (WOMEN)",
+                customer_id="CUS-001",
+            )
+        )
+        self.assertEqual(buy_res.routed_agent, AgentRole.ORDER.value)
+        self.assertEqual(buy_res.status, "action_completed")
+        self.assertEqual(len(buy_res.data["items"]), 1)
+        self.assertEqual(buy_res.data["items"][0]["product_id"], "PRD-004")
+        self.assertEqual(buy_res.data["items"][0]["quantity"], 2)
+        self.assertEqual(float(buy_res.data["grand_total_inr"]), 3798.0)
+        self.assertEqual(buy_res.data["action_feedback"]["type"], "order_created")
+        self.assertIn("Minimalist Pima Cotton Tee", buy_res.reply)
+
 
 if __name__ == "__main__":
     unittest.main()

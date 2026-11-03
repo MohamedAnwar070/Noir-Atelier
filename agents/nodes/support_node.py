@@ -3,6 +3,7 @@ import re
 from ..client import PlatformApiClient
 from ..schemas.state import AgentGraphState
 from ..tools.refund_tools import SupportTools
+from .intent_parser import format_inr
 
 ORDER_ID_RE = re.compile(r"\b(ORD-\d{4})\b", re.IGNORECASE)
 
@@ -23,15 +24,22 @@ def run_support_node(state: AgentGraphState, client: PlatformApiClient) -> Agent
             traces=state.tool_traces,
         )
         state.status = "answer"
-        state.data = {"refunds": payload if isinstance(payload, list) else []}
-        if code == 200 and isinstance(payload, list) and payload:
-            r0 = payload[0]
+        refund_list = payload if isinstance(payload, list) else []
+        state.data = {"refunds": refund_list}
+        if code == 200 and refund_list:
+            r0 = refund_list[0]
+            state.data["action_feedback"] = {
+                "type": "refund_status",
+                "badge": f"Refund: {str(r0['status']).replace('_', ' ').title()}",
+                "title": f"Refund #{r0['refund_id']} ({format_inr(r0['amount_inr'])})",
+                "summary": f"Order #{r0['order_id']} · Status: {str(r0['status']).replace('_', ' ')}",
+            }
             state.reply = (
-                f"Latest refund {r0['refund_id']} for order {r0['order_id']} (INR {r0['amount_inr']}, "
-                f"Tier {r0['approval_tier']}) is currently '{r0['status']}'."
+                f"Your latest refund (#{r0['refund_id']}) for Order #{r0['order_id']} ({format_inr(r0['amount_inr'])}) "
+                f"is currently {str(r0['status']).replace('_', ' ')}."
             )
         else:
-            state.reply = "No refund records found."
+            state.reply = "No refund requests were found for your account."
         return state
 
     priority = "high" if any(k in msg_lower for k in ("urgent", "damaged", "conflict", "vip", "grievance")) else "medium"
@@ -47,15 +55,27 @@ def run_support_node(state: AgentGraphState, client: PlatformApiClient) -> Agent
         trace_id=state.trace_id,
         traces=state.tool_traces,
     )
-    state.data = tkt if isinstance(tkt, dict) else {}
+    tkt_dict = dict(tkt) if isinstance(tkt, dict) else {}
     if code in (200, 201) and isinstance(tkt, dict):
         state.status = "escalated"
+        tkt_dict["action_feedback"] = {
+            "type": "support_ticket_created",
+            "badge": "Concierge Ticket Created",
+            "title": f"Support Ticket #{tkt['ticket_id']} Opened",
+            "summary": f"Assigned to {tkt['assigned_to']} ({str(tkt['priority']).title()} Priority)",
+            "details": [
+                {"label": "Ticket Number", "value": tkt["ticket_id"]},
+                {"label": "Priority", "value": str(tkt["priority"]).title()},
+                {"label": "Assigned Specialist", "value": tkt["assigned_to"]},
+            ],
+        }
+        state.data = tkt_dict
         state.reply = (
-            f"I have created Noir Atelier Concierge Ticket {tkt['ticket_id']} "
-            f"(Priority: {tkt['priority']}, Assigned to: {tkt['assigned_to']}). "
-            f"Our specialist team will assist you promptly."
+            f"I've connected your request to our human Concierge team under Ticket #{tkt['ticket_id']} "
+            f"({tkt['priority']} priority, assigned to {tkt['assigned_to']}). Our team will follow up with you shortly."
         )
     else:
         state.status = "error"
-        state.reply = "Unable to create support ticket at this moment."
+        state.data = tkt_dict
+        state.reply = "I wasn't able to open a support ticket right now."
     return state

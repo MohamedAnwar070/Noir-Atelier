@@ -557,6 +557,7 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
           status: res.status,
           trace_id: res.trace_id,
           text: res.reply,
+          data: res.data || {},
           tool_traces: res.tool_traces || [],
           react_steps: res.react_steps || [],
           active_patterns: res.active_patterns || [],
@@ -566,12 +567,26 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
           reflection_verified: res.reflection_verified ?? true,
         },
       ]);
-      const [updatedCart, updatedOrders] = await Promise.all([
+      const [updatedProds, updatedCart, updatedOrders] = await Promise.all([
+        api.searchProducts({
+          q: searchQuery,
+          department: selectedDepartment === "ALL" ? "" : selectedDepartment,
+          maxPrice,
+        }).catch(() => products),
         api.getCart().catch(() => cart),
         api.listOrders().catch(() => orders),
       ]);
+      setProducts(updatedProds);
       setCart(updatedCart);
       setOrders(updatedOrders);
+      const fb = res.data?.action_feedback;
+      if (fb && (res.status === "action_completed" || res.status === "pending_approval" || res.status === "escalated")) {
+        setToastSuccess({
+          title: fb.title || "Action Completed",
+          message: fb.summary || res.reply,
+        });
+        setLiveAnnouncement(`${fb.title}. ${fb.summary || ""}`);
+      }
     } catch (err) {
       setAgentMessages((prev) => [
         ...prev,
@@ -2388,82 +2403,275 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                 ))}
               </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.65rem", flex: 1 }}>
-                {agentMessages.map((m, idx) => (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", flex: 1 }}>
+                {agentMessages.length === 0 && (
                   <div
-                    key={idx}
                     style={{
-                      padding: "0.85rem 1rem",
+                      padding: "1rem",
+                      background: "var(--bg-surface)",
                       borderRadius: 16,
-                      fontSize: 12,
-                      background: m.role === "user" ? "var(--accent-noir)" : "var(--bg-surface)",
-                      color: m.role === "user" ? "var(--text-on-dark)" : "var(--text-primary)",
                       border: "1px solid var(--border-subtle)",
+                      fontSize: 12,
+                      color: "var(--text-secondary)",
+                      lineHeight: 1.55,
                     }}
                   >
-                    {m.role === "agent" && (
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          fontSize: 10,
-                          color: "var(--text-muted)",
-                          marginBottom: "0.3rem",
-                          fontFamily: "var(--font-mono)",
-                        }}
-                      >
-                        <span>
-                          {m.routed_agent} · {m.service_account}
-                        </span>
-                        <span>
-                          Steps: {m.steps_taken ?? 1}/{m.step_budget_max ?? 10}
-                        </span>
-                      </div>
-                    )}
-                    <div style={{ whiteSpace: "pre-line", lineHeight: 1.5 }}>{m.text}</div>
-
-                    {m.react_steps?.length > 0 && (
-                      <div
-                        style={{
-                          marginTop: "0.55rem",
-                          paddingTop: "0.45rem",
-                          borderTop: "1px dashed var(--border-subtle)",
-                          fontSize: 10,
-                          color: "var(--text-secondary)",
-                        }}
-                      >
-                        <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                          4-Layer Agentic Loop (Perception → Reasoning → Action → Reflection):
-                        </div>
-                        {m.react_steps.map((s) => (
-                          <div key={s.step_number} style={{ fontFamily: "var(--font-mono)", marginBottom: 2 }}>
-                            [{s.layer.toUpperCase()}] {s.thought}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {m.tool_traces?.length > 0 && (
-                      <div
-                        style={{
-                          marginTop: "0.45rem",
-                          paddingTop: "0.4rem",
-                          borderTop: "1px dashed var(--border-subtle)",
-                          fontFamily: "var(--font-mono)",
-                          fontSize: 10,
-                          color: "var(--text-secondary)",
-                        }}
-                      >
-                        {m.tool_traces
-                          .map(
-                            (t) =>
-                              `${t.http_method} ${t.endpoint} [${t.risk_level || "read_only"}] → ${t.status_code} (${t.latency_ms}ms)`
-                          )
-                          .join(" · ")}
-                      </div>
-                    )}
+                    Welcome to <strong>{storeName} Personal Stylist & Concierge</strong>. Ask me to find garments by fabric or budget, add pieces to your bag, place an order (e.g. <em>"Buy 2 Minimalist Pima Cotton Tee"</em>), cancel an order, or start a return.
                   </div>
-                ))}
+                )}
+
+                {agentMessages.map((m, idx) => {
+                  const friendlyAgentTitle =
+                    {
+                      catalog_agent: "Personal Stylist",
+                      cart_agent: "Shopping Bag Concierge",
+                      order_agent: "Order & Checkout Concierge",
+                      fulfillment_agent: "Delivery Concierge",
+                      returns_agent: "Returns & Refund Specialist",
+                      support_agent: "Client Care Concierge",
+                      inventory_agent: "Stock Specialist",
+                      analytics_agent: "Store Insights Assistant",
+                      config_agent: "Atelier Policy Guide",
+                    }[m.routed_agent] || "Atelier Assistant";
+
+                  const statusBadgeLabel =
+                    {
+                      action_completed: "Action Completed",
+                      pending_approval: "Sent for Approval",
+                      escalated: "Concierge Assigned",
+                      clarify_missing_info: "Needs Details",
+                      blocked_unauthorized: "Access Restricted",
+                      blocked_prompt_injection: "Security Guardrail",
+                      error: "Action Failed",
+                      answer: "Verified Answer",
+                    }[m.status] || "Verified";
+
+                  const fb = m.data?.action_feedback;
+                  const chatProducts = Array.isArray(m.data?.products) ? m.data.products.slice(0, 4) : [];
+
+                  return (
+                    <div
+                      key={idx}
+                      style={{
+                        padding: "0.9rem 1.05rem",
+                        borderRadius: 16,
+                        fontSize: 12.5,
+                        background: m.role === "user" ? "var(--accent-noir)" : "var(--bg-surface)",
+                        color: m.role === "user" ? "var(--text-on-dark)" : "var(--text-primary)",
+                        border:
+                          m.status === "action_completed"
+                            ? "1.5px solid var(--state-success-border)"
+                            : "1px solid var(--border-subtle)",
+                      }}
+                    >
+                      {m.role === "agent" && (
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            fontSize: 11,
+                            marginBottom: "0.45rem",
+                          }}
+                        >
+                          <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>
+                            {friendlyAgentTitle}
+                          </span>
+                          <span
+                            className="meta-tag"
+                            style={{
+                              background:
+                                m.status === "action_completed"
+                                  ? "var(--state-success-bg)"
+                                  : m.status === "pending_approval" || m.status === "escalated"
+                                  ? "var(--state-warning-bg)"
+                                  : "var(--bg-subtle)",
+                              color:
+                                m.status === "action_completed"
+                                  ? "var(--state-success-text)"
+                                  : m.status === "pending_approval" || m.status === "escalated"
+                                  ? "var(--state-warning-text)"
+                                  : "var(--text-secondary)",
+                            }}
+                          >
+                            {statusBadgeLabel}
+                          </span>
+                        </div>
+                      )}
+
+                      <div style={{ whiteSpace: "pre-line", lineHeight: 1.55 }}>{m.text}</div>
+
+                      {fb && (
+                        <div
+                          style={{
+                            marginTop: "0.65rem",
+                            padding: "0.75rem 0.9rem",
+                            borderRadius: 14,
+                            background:
+                              m.status === "action_completed"
+                                ? "var(--state-success-bg)"
+                                : "var(--bg-page)",
+                            border:
+                              m.status === "action_completed"
+                                ? "1px solid var(--state-success-border)"
+                                : "1px solid var(--border-subtle)",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              gap: "0.5rem",
+                              marginBottom: "0.25rem",
+                            }}
+                          >
+                            <strong style={{ fontSize: 12.5 }}>{fb.title}</strong>
+                            {fb.badge && (
+                              <span className="meta-tag" style={{ fontSize: 10 }}>
+                                {fb.badge}
+                              </span>
+                            )}
+                          </div>
+                          {fb.summary && (
+                            <div style={{ fontSize: 11.5, color: "var(--text-secondary)", marginBottom: fb.details?.length ? "0.5rem" : 0 }}>
+                              {fb.summary}
+                            </div>
+                          )}
+                          {Array.isArray(fb.details) && fb.details.length > 0 && (
+                            <div
+                              style={{
+                                display: "grid",
+                                gridTemplateColumns: "1fr 1fr",
+                                gap: "0.35rem 0.75rem",
+                                paddingTop: "0.45rem",
+                                borderTop: "1px solid var(--border-subtle)",
+                                fontSize: 11,
+                              }}
+                            >
+                              {fb.details.map((d, dIdx) => (
+                                <div key={dIdx}>
+                                  <span style={{ color: "var(--text-secondary)" }}>{d.label}: </span>
+                                  <strong>{d.value}</strong>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {(fb.cta_page || fb.cta_drawer) && (
+                            <div style={{ marginTop: "0.6rem" }}>
+                              <button
+                                type="button"
+                                className="btn-pill"
+                                style={{ padding: "0.35rem 0.85rem", fontSize: 11, minHeight: 32 }}
+                                onClick={() => {
+                                  if (fb.cta_drawer) {
+                                    setActiveDrawer(fb.cta_drawer);
+                                  } else if (fb.cta_page) {
+                                    setActiveDrawer(null);
+                                    navigateToPage(fb.cta_page);
+                                  }
+                                }}
+                              >
+                                <span>{fb.cta_label || "View Details"}</span>
+                                <SvgIcon name="arrow-right" size={12} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {chatProducts.length > 0 && (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "0.45rem",
+                            marginTop: "0.65rem",
+                          }}
+                        >
+                          {chatProducts.map((cp) => (
+                            <div
+                              key={cp.product_id}
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                gap: "0.6rem",
+                                padding: "0.55rem 0.75rem",
+                                borderRadius: 12,
+                                background: "var(--bg-page)",
+                                border: "1px solid var(--border-subtle)",
+                              }}
+                            >
+                              <div>
+                                <div style={{ fontWeight: 600, fontSize: 12 }}>{cp.name}</div>
+                                <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+                                  {formatInr(cp.mrp_inr)} · {cp.department} · Sizes:{" "}
+                                  {(cp.sizes_available || []).join(", ")}
+                                </div>
+                              </div>
+                              <div style={{ display: "flex", gap: "0.35rem", flexShrink: 0 }}>
+                                <button
+                                  type="button"
+                                  className="chip-pill"
+                                  style={{ padding: "0.28rem 0.65rem", fontSize: 11, minHeight: 28 }}
+                                  onClick={() => handleAddToCart(cp.product_id)}
+                                >
+                                  + Bag
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn-pill"
+                                  style={{ padding: "0.28rem 0.7rem", fontSize: 11, minHeight: 28 }}
+                                  onClick={() =>
+                                    handleSendAgentPrompt(
+                                      `Buy 1 ${cp.name} in size ${(cp.sizes_available || ["M"])[0]}`
+                                    )
+                                  }
+                                >
+                                  Buy Now
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {m.role === "agent" && (m.react_steps?.length > 0 || m.tool_traces?.length > 0) && (
+                        <details
+                          style={{
+                            marginTop: "0.55rem",
+                            paddingTop: "0.4rem",
+                            borderTop: "1px dashed var(--border-subtle)",
+                            fontSize: 10,
+                            color: "var(--text-secondary)",
+                          }}
+                        >
+                          <summary style={{ cursor: "pointer", userSelect: "none", fontFamily: "var(--font-mono)" }}>
+                            Technical Trace ({m.routed_agent} · Steps {m.steps_taken ?? 1}/{m.step_budget_max ?? 10})
+                          </summary>
+                          <div style={{ marginTop: 6, fontFamily: "var(--font-mono)" }}>
+                            {m.react_steps?.map((s) => (
+                              <div key={s.step_number} style={{ marginBottom: 2 }}>
+                                [{s.layer.toUpperCase()}] {s.thought}
+                              </div>
+                            ))}
+                            {m.tool_traces?.length > 0 && (
+                              <div style={{ marginTop: 4 }}>
+                                {m.tool_traces
+                                  .map(
+                                    (t) =>
+                                      `${t.http_method} ${t.endpoint} [${t.risk_level || "read_only"}] → ${t.status_code} (${t.latency_ms}ms)`
+                                  )
+                                  .join(" · ")}
+                              </div>
+                            )}
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                  );
+                })}
                 {agentBusy && <div className="shimmer" style={{ height: 44, borderRadius: 14 }} />}
               </div>
             </div>
