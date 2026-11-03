@@ -103,10 +103,26 @@ class TestFrontendAndDbDrivenArchitecture(unittest.TestCase):
         self.assertIn("average_rating", prod)
         self.assertIn("review_count", prod)
         self.assertGreaterEqual(prod["review_count"], 1)
+        self.assertTrue(len(prod.get("images", [])) >= 1)
+        self.assertTrue(prod["images"][0].startswith("https://"))
+        self.assertEqual(prod["accent_tag"], "100% European Flax Linen")
+        self.assertTrue(len(prod.get("reviews", [])) >= 1)
+
+        # Submit a new review via API and verify DB persistence
+        rev_res = self.client.post(
+            "/api/products/PRD-001/reviews",
+            headers={"Authorization": "Bearer demo_CUS-002"},
+            json={"rating": 5, "fit_feedback": "true_to_size", "comment": "Impeccable linen drape and stitching."},
+        )
+        self.assertIn(rev_res.status_code, (200, 201))
+        prod_after = self.client.get("/api/products/PRD-001").json()
+        self.assertEqual(prod_after["review_count"], prod["review_count"] + 1)
 
         recs = self.client.get("/api/products/PRD-001/recommendations").json()
         self.assertGreaterEqual(len(recs), 1)
         self.assertEqual(recs[0]["product_id"], "PRD-002")
+        self.assertEqual(recs[0]["relation_type"], "complete_the_look")
+        self.assertGreater(recs[0]["recommendation_score"], 0.8)
 
     def test_04_nextjs_app_router_storefront_structure(self) -> None:
         sf_dir = PROJECT_ROOT / "frontend" / "apps" / "storefront"
@@ -123,6 +139,24 @@ class TestFrontendAndDbDrivenArchitecture(unittest.TestCase):
         self.assertIn("@noir/ui/theme.js", comp_text)
         self.assertIn("@noir/ui/states.js", comp_text)
         self.assertIn("react_steps", comp_text)
+        self.assertNotIn("const ACTORS =", comp_text)
+
+        theme_text = (PROJECT_ROOT / "frontend" / "packages" / "ui" / "theme.js").read_text(encoding="utf-8")
+        self.assertNotIn("EDITORIAL_ARTWORK_BY_SKU", theme_text)
+
+        app_js_text = (sf_dir / "app.js").read_text(encoding="utf-8")
+        self.assertNotIn("const ACTORS =", app_js_text)
+
+    def test_05_config_policies_endpoint_serves_all_ui_entities_from_db(self) -> None:
+        cfg = self.client.get("/api/config/policies").json()
+        self.assertIn("business_config", cfg)
+        self.assertIn("storefront_ui", cfg["business_config"])
+        self.assertEqual(cfg["business_config"]["storefront_ui"]["hero_title"], "The New Edit")
+        self.assertGreaterEqual(len(cfg["business_config"]["storefront_ui"]["ai_quick_prompts"]), 3)
+        self.assertGreaterEqual(len(cfg.get("payment_methods", [])), 3)
+        self.assertGreaterEqual(len(cfg.get("coupons", [])), 2)
+        self.assertGreaterEqual(len(cfg.get("shipping_zones", [])), 2)
+        self.assertGreaterEqual(len(cfg.get("actors", [])), 4)
 
 
 if __name__ == "__main__":

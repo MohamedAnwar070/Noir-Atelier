@@ -29,13 +29,6 @@ import {
   validateReturnForm,
 } from "/packages/utils/formatters.js";
 
-const ACTORS = [
-  { token: "demo_CUS-001", id: "CUS-001", role: "customer", label: "Arjun · VIP Gold (CUS-001)" },
-  { token: "demo_CUS-002", id: "CUS-002", role: "customer", label: "Priya · Standard (CUS-002)" },
-  { token: "admin_manager", id: "MGR-001", role: "manager", label: "Store Manager (MGR-001)" },
-  { token: "admin_finance", id: "FIN-001", role: "finance_admin", label: "Finance Admin (FIN-001)" },
-];
-
 const state = {
   activePage: "shop",
   activeDrawer: null,
@@ -44,7 +37,8 @@ const state = {
   fontScale: "default",
   theme: getInitialTheme(),
   activeUiPrinciple: "normal",
-  actor: ACTORS[0],
+  actors: [],
+  actor: { token: "demo_CUS-001", id: "CUS-001", role: "customer", label: "Loading profile..." },
   inFlightAction: null,
   liveAnnouncement: "",
 
@@ -59,11 +53,15 @@ const state = {
 
   businessConfig: {},
   policies: [],
+  paymentMethods: [],
+  availableCoupons: [],
+  shippingZones: [],
   categories: [],
   products: [],
   cardSizeSelection: {},
   recommendations: [],
   wishlistIds: new Set(),
+  reviewForm: { rating: 5, fitFeedback: "true_to_size", comment: "" },
 
   searchQuery: "",
   selectedDepartment: "ALL",
@@ -168,6 +166,14 @@ async function bootstrapData() {
 
     state.businessConfig = cfgPayload.business_config || {};
     state.policies = cfgPayload.policies || [];
+    state.paymentMethods = cfgPayload.payment_methods || [];
+    state.availableCoupons = cfgPayload.coupons || [];
+    state.shippingZones = cfgPayload.shipping_zones || [];
+    if (Array.isArray(cfgPayload.actors) && cfgPayload.actors.length > 0) {
+      state.actors = cfgPayload.actors;
+      const matched = cfgPayload.actors.find((a) => a.token === state.actor.token) || cfgPayload.actors[0];
+      state.actor = matched;
+    }
     state.categories = Array.isArray(categories) ? categories : [];
     state.products = Array.isArray(products) ? products : [];
     state.cart = cart;
@@ -372,7 +378,7 @@ function renderHeader() {
           </form>
 
           <select class="header-pill-select" data-action="change-actor" aria-label="Account profile">
-            ${ACTORS.map(
+            ${(state.actors.length > 0 ? state.actors : [state.actor]).map(
               (a) => `<option value="${a.token}" ${state.actor.token === a.token ? "selected" : ""}>${a.label}</option>`
             ).join("")}
           </select>
@@ -477,6 +483,8 @@ function renderGlobalBanners() {
 function renderHeroSection() {
   const spotlight = state.products[0];
   const freeShipMin = state.businessConfig?.shipping?.free_shipping_threshold_inr ?? 1999;
+  const uiCfg = state.businessConfig?.storefront_ui || {};
+  const aiPrompts = uiCfg.ai_quick_prompts || [];
 
   return `
     <section class="hero-banner" aria-label="Editorial Spotlight">
@@ -484,11 +492,11 @@ function renderHeroSection() {
         <div>
           <div class="hero-eyebrow">
             ${renderIcon("sparkles", "xs")}
-            <span>Noir Atelier · HSN 61 & 62 Luxury Garments</span>
+            <span>${uiCfg.hero_eyebrow || "Noir Atelier · HSN 61 & 62 Luxury Garments"}</span>
           </div>
-          <h1 class="hero-title">The New Edit</h1>
+          <h1 class="hero-title">${uiCfg.hero_title || "The New Edit"}</h1>
           <p class="hero-subtitle">
-            Explore timeless tailored Belgian linen shirts, 22-momme mulberry silk dresses, and superfine merino knitwear across Men, Women, and Kids. Complimentary express delivery above ${formatInr(freeShipMin)}.
+            ${uiCfg.hero_subtitle || ""} Complimentary express delivery above ${formatInr(freeShipMin)}.
           </p>
           <div class="hero-cta-row">
             <button class="btn-pill" data-action="scroll-to-catalog">
@@ -509,35 +517,24 @@ function renderHeroSection() {
 
         <div class="hero-ai-prompts">
           <span style="font-size:11px;opacity:0.88;">Try asking AI:</span>
-          <button
-            class="hero-ai-chip"
-            data-action="trigger-ai-prompt"
-            data-prompt="Show me Men's garments under INR 3000"
-          >
-            "Men's linen under ₹3,000"
-          </button>
-          <button
-            class="hero-ai-chip"
-            data-action="trigger-ai-prompt"
-            data-prompt="Show me Women's garments"
-          >
-            "Women's mulberry silk & cotton"
-          </button>
-          <button
-            class="hero-ai-chip"
-            data-action="trigger-ai-prompt"
-            data-prompt="What are the return policy rules and GST slabs?"
-          >
-            "7-Day Return & GST Policy"
-          </button>
+          ${aiPrompts
+            .map(
+              (qp) => `
+              <button
+                class="hero-ai-chip"
+                data-action="trigger-ai-prompt"
+                data-prompt="${qp.prompt}"
+              >
+                "${qp.label}"
+              </button>
+            `
+            )
+            .join("")}
         </div>
       </div>
 
       <div class="hero-visual">
-        <img
-          src="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1200&q=85"
-          alt="Noir Atelier Editorial Collection"
-        />
+        ${uiCfg.hero_image_url ? `<img src="${uiCfg.hero_image_url}" alt="Noir Atelier Editorial Collection" />` : ""}
         ${
           spotlight
             ? `
@@ -886,6 +883,41 @@ function renderProductDetailModal() {
             `
                 : ""
             }
+
+            <div style="margin-bottom:1rem;padding:0.9rem;border-radius:16px;background:var(--bg-subtle);">
+              <div class="field-label" style="margin-bottom:0.45rem;">
+                Verified Customer Reviews (${(p.reviews || []).length})
+              </div>
+              <div style="display:flex;flex-direction:column;gap:0.45rem;margin-bottom:0.75rem;">
+                ${(p.reviews || [])
+                  .map(
+                    (rv) => `
+                    <div style="font-size:11px;padding:0.55rem 0.7rem;border-radius:10px;background:var(--bg-surface);border:1px solid var(--border-subtle);">
+                      <div style="display:flex;justify-content:space-between;font-weight:600;margin-bottom:2px;">
+                        <span>★ ${rv.rating}/5 · ${rv.customer_id}</span>
+                        <span class="meta-tag">${rv.fit_feedback}</span>
+                      </div>
+                      <div style="color:var(--text-secondary);">${rv.comment}</div>
+                    </div>
+                  `
+                  )
+                  .join("")}
+              </div>
+              <form data-form="review-form" data-product-id="${p.product_id}" style="display:flex;gap:0.45rem;flex-wrap:wrap;">
+                <select id="review-rating-input" class="field-input" style="width:92px;padding:0.35rem 0.5rem;font-size:11px;">
+                  <option value="5">★ 5/5</option>
+                  <option value="4">★ 4/5</option>
+                  <option value="3">★ 3/5</option>
+                </select>
+                <input
+                  id="review-comment-input"
+                  class="field-input"
+                  style="flex:1;padding:0.35rem 0.65rem;font-size:11px;"
+                  placeholder="Write a verified garment review..."
+                />
+                <button type="submit" class="chip-pill active" style="font-size:11px;">Post Review</button>
+              </form>
+            </div>
           </div>
 
           <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;padding-top:1rem;border-top:1px solid var(--border-subtle);flex-wrap:wrap;">
@@ -1512,12 +1544,39 @@ function renderShoppingBagDrawer() {
                         <button type="button" class="chip-pill" data-action="apply-coupon">Apply</button>
                       </div>
                       ${errors.couponCode ? `<span class="field-error">${errors.couponCode}</span>` : ""}
+                      ${
+                        state.availableCoupons.length > 0
+                          ? `<div style="display:flex;gap:0.3rem;flex-wrap:wrap;margin-top:0.2rem;">
+                              ${state.availableCoupons
+                                .map(
+                                  (c) => `
+                                  <button type="button" class="meta-tag" style="cursor:pointer;border:none;" data-action="select-coupon-chip" data-code="${c.code}">
+                                    ${c.code} (${c.discount_pct}% off)
+                                  </button>
+                                `
+                                )
+                                .join("")}
+                            </div>`
+                          : ""
+                      }
                     </div>
+                  </div>
+
+                  <div class="field-group">
+                    <label class="field-label" for="checkout-payment-method">Payment Method (Database Enabled)</label>
+                    <select id="checkout-payment-method" class="field-input" style="font-size:12px;">
+                      ${state.paymentMethods
+                        .map(
+                          (pm) =>
+                            `<option value="${pm.method_code}" ${state.checkoutForm.paymentMethod === pm.method_code ? "selected" : ""}>${pm.display_name}</option>`
+                        )
+                        .join("")}
+                    </select>
                   </div>
 
                   <button type="submit" class="btn-pill" style="width:100%;margin-top:0.4rem;">
                     ${renderIcon("check", "xs")}
-                    <span>Place Verified Order (UPI / Card)</span>
+                    <span>Place Verified Order</span>
                   </button>
                 </form>
               `
@@ -1539,12 +1598,7 @@ function renderAiConciergeDrawer() {
     ),
   ].join("");
 
-  const quickPrompts = [
-    "Show me Men's garments under INR 3000",
-    "Add PRD-001 size M to my shopping bag",
-    "What are the return policy rules and GST slabs?",
-    "Show GMV and order analytics report",
-  ];
+  const quickPrompts = (state.businessConfig?.storefront_ui?.ai_quick_prompts || []).map((p) => p.prompt);
 
   return `
     <div class="drawer-backdrop" data-action="close-drawer-backdrop">
@@ -1849,12 +1903,25 @@ document.addEventListener("click", async (e) => {
   }
 
   if (action === "switch-to-manager") {
-    state.actor = ACTORS[2];
+    const mgr = state.actors.find((a) => a.role === "manager") || {
+      token: "admin_manager",
+      id: "MGR-001",
+      role: "manager",
+      label: "Store Manager (MGR-001)",
+    };
+    state.actor = mgr;
     api.setToken(state.actor.token);
     state.permissionDeniedInfo = null;
     state.activeUiPrinciple = "normal";
     if (state.activePage === "admin") await loadAdminDataFromDb();
     else await bootstrapData();
+    return;
+  }
+
+  if (action === "select-coupon-chip") {
+    const code = target.getAttribute("data-code");
+    state.checkoutForm.couponCode = code;
+    renderApp();
     return;
   }
 
@@ -1983,7 +2050,7 @@ document.addEventListener("change", async (e) => {
     renderApp();
   } else if (action === "change-actor") {
     const tok = e.target.value;
-    const found = ACTORS.find((a) => a.token === tok) || ACTORS[0];
+    const found = state.actors.find((a) => a.token === tok) || state.actors[0] || state.actor;
     state.actor = found;
     api.setToken(found.token);
     state.permissionDeniedInfo = null;
@@ -2002,6 +2069,22 @@ document.addEventListener("submit", async (e) => {
   if (!formType) return;
   e.preventDefault();
 
+  if (formType === "review-form") {
+    const pid = e.target.getAttribute("data-product-id");
+    const rating = Number(document.getElementById("review-rating-input")?.value || 5);
+    const comment = (document.getElementById("review-comment-input")?.value || "").trim();
+    if (!comment || !pid) return;
+    await api.addProductReview(pid, { rating, fitFeedback: "true_to_size", comment });
+    state.detailModalProduct = await api.getProductDetails(pid);
+    await refreshProductsFromDb();
+    state.toastSuccess = {
+      title: "Verified Review Saved to Database",
+      message: `Your review for ${pid} was recorded in product_reviews.`,
+    };
+    renderApp();
+    return;
+  }
+
   if (formType === "catalog-search") {
     state.activePage = "shop";
     state.searchQuery = document.getElementById("catalog-search-input")?.value || "";
@@ -2014,6 +2097,7 @@ document.addEventListener("submit", async (e) => {
     state.checkoutForm.street = document.getElementById("checkout-street")?.value || "";
     state.checkoutForm.pinCode = document.getElementById("checkout-pin")?.value || "";
     state.checkoutForm.couponCode = document.getElementById("checkout-coupon")?.value || "";
+    state.checkoutForm.paymentMethod = document.getElementById("checkout-payment-method")?.value || "upi";
 
     const check = validateCheckoutForm(state.checkoutForm);
     state.checkoutValidationErrors = check.errors;
@@ -2026,7 +2110,7 @@ document.addEventListener("submit", async (e) => {
       const order = await api.createOrder({
         customerId: state.actor.role === "customer" ? state.actor.id : "CUS-001",
         couponCode: state.checkoutForm.couponCode || null,
-        paymentMethod: "upi",
+        paymentMethod: state.checkoutForm.paymentMethod,
       });
       state.cart = await api.getCart();
       state.orders = await api.listOrders();

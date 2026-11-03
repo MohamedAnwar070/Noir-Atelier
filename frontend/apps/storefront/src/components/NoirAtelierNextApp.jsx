@@ -20,13 +20,6 @@ import {
   validateReturnForm,
 } from "@noir/utils/formatters.js";
 
-const ACTORS = [
-  { token: "demo_CUS-001", id: "CUS-001", role: "customer", label: "Arjun · VIP Gold (CUS-001)" },
-  { token: "demo_CUS-002", id: "CUS-002", role: "customer", label: "Priya · Standard (CUS-002)" },
-  { token: "admin_manager", id: "MGR-001", role: "manager", label: "Store Manager (MGR-001)" },
-  { token: "admin_finance", id: "FIN-001", role: "finance_admin", label: "Finance Admin (FIN-001)" },
-];
-
 function SvgIcon({ name, size = 16 }) {
   const common = {
     width: size,
@@ -210,7 +203,8 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
   const [fontScale, setFontScale] = useState("default");
   const [theme, setTheme] = useState("light");
   const [activeUiPrinciple, setActiveUiPrinciple] = useState("normal");
-  const [actor, setActor] = useState(ACTORS[0]);
+  const [actors, setActors] = useState([]);
+  const [actor, setActor] = useState({ token: "demo_CUS-001", id: "CUS-001", role: "customer", label: "CUS-001" });
   const [inFlightAction, setInFlightAction] = useState(null);
   const [liveAnnouncement, setLiveAnnouncement] = useState("");
 
@@ -221,15 +215,18 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
   const [permissionDeniedInfo, setPermissionDeniedInfo] = useState(null);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [toastSuccess, setToastSuccess] = useState(null);
-  const [latestReturnEscalation, setLatestReturnEscalation] = useState(null);
 
   const [businessConfig, setBusinessConfig] = useState({});
   const [policies, setPolicies] = useState([]);
+  const [paymentMethods, setPaymentMethods] = useState([]);
+  const [availableCoupons, setAvailableCoupons] = useState([]);
+  const [shippingZones, setShippingZones] = useState([]);
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
   const [cardSizeSelection, setCardSizeSelection] = useState({});
   const [recommendations, setRecommendations] = useState([]);
   const [wishlistIds, setWishlistIds] = useState([]);
+  const [reviewForm, setReviewForm] = useState({ rating: 5, fitFeedback: "true_to_size", comment: "" });
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState("ALL");
@@ -247,6 +244,7 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
   const [couponResult, setCouponResult] = useState(null);
 
   const [orders, setOrders] = useState([]);
+  const [inspectedOrderMeta, setInspectedOrderMeta] = useState(null);
   const [returnForm, setReturnForm] = useState({
     orderId: "",
     reasonNotes: "",
@@ -333,6 +331,17 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
       const bCfg = cfgPayload.business_config || {};
       setBusinessConfig(bCfg);
       setPolicies(cfgPayload.policies || []);
+      setPaymentMethods(cfgPayload.payment_methods || []);
+      setAvailableCoupons(cfgPayload.coupons || []);
+      setShippingZones(cfgPayload.shipping_zones || []);
+
+      const dbActors = cfgPayload.actors || [];
+      if (dbActors.length > 0) {
+        setActors(dbActors);
+        const matchActor = dbActors.find((a) => a.token === currentActor.token) || dbActors[0];
+        setActor(matchActor);
+      }
+
       setCategories(Array.isArray(cats) ? cats : []);
       const safeProds = Array.isArray(prods) ? prods : [];
       setProducts(safeProds);
@@ -345,7 +354,7 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
         setPolicyConfigForm((prev) => ({
           ...prev,
           freeShippingThresholdInr: bCfg.shipping.free_shipping_threshold_inr ?? 1999,
-          standardShippingFeeInr: bCfg.shipping.standard_shipping_fee_inr ?? 149,
+          standardShippingFeeInr: bCfg.shipping.default_shipping_fee_inr ?? 99,
         }));
       }
 
@@ -405,6 +414,7 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
       setAdminRefunds(refunds);
       setAdminAuditLog(auditLog);
       if (cfgPayload?.business_config) setBusinessConfig(cfgPayload.business_config);
+      if (cfgPayload?.actors) setActors(cfgPayload.actors);
       setIsLoading(false);
     } catch (err) {
       setIsLoading(false);
@@ -550,7 +560,10 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
 
   const cartCount = (cart?.items || []).reduce((acc, i) => acc + Number(i.quantity || 0), 0);
   const storeName = businessConfig?.store?.name || "Noir Atelier";
+  const heroCfg = businessConfig?.storefront_ui || {};
   const freeShipMin = businessConfig?.shipping?.free_shipping_threshold_inr ?? 1999;
+  const gstThreshold = businessConfig?.tax?.garment_slab_threshold_inr ?? 2500;
+  const gstLowPct = Number(businessConfig?.tax?.rate_upto_threshold ?? 0.05) * 100;
   const spotlight = products[0];
   const contrastRatio =
     theme === "dark" ? getContrastRatio("#f5f3ef", "#131312") : getContrastRatio("#181817", "#f6f4ef");
@@ -638,7 +651,7 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
               aria-label="Account profile"
               value={actor.token}
               onChange={async (e) => {
-                const found = ACTORS.find((a) => a.token === e.target.value) || ACTORS[0];
+                const found = actors.find((a) => a.token === e.target.value) || actor;
                 setActor(found);
                 apiRef.current.setToken(found.token);
                 setPermissionDeniedInfo(null);
@@ -646,7 +659,7 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                 else await bootstrapData(found);
               }}
             >
-              {ACTORS.map((a) => (
+              {actors.map((a) => (
                 <option key={a.token} value={a.token}>
                   {a.label}
                 </option>
@@ -804,12 +817,12 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                 <div>
                   <div className="hero-eyebrow">
                     <SvgIcon name="sparkles" size={14} />
-                    <span>Noir Atelier · HSN 61 & 62 Luxury Garments</span>
+                    <span>{heroCfg.hero_eyebrow || `${storeName} · HSN 61 & 62 Luxury Garments`}</span>
                   </div>
-                  <h1 className="hero-title">The New Edit</h1>
+                  <h1 className="hero-title">{heroCfg.hero_title || "The New Edit"}</h1>
                   <p className="hero-subtitle">
-                    Explore timeless tailored Belgian linen shirts, 22-momme mulberry silk dresses, and superfine merino
-                    knitwear across Men, Women, and Kids. Complimentary express delivery above {formatInr(freeShipMin)}.
+                    {heroCfg.hero_subtitle || ""}{" "}
+                    Complimentary express delivery above {formatInr(freeShipMin)}.
                   </p>
                   <div className="hero-cta-row">
                     <button
@@ -834,29 +847,25 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
 
                 <div className="hero-ai-prompts">
                   <span style={{ fontSize: 11, opacity: 0.88 }}>Try asking AI:</span>
-                  <button
-                    className="hero-ai-chip"
-                    onClick={() => handleSendAgentPrompt("Show me Men's garments under INR 3000")}
-                  >
-                    "Men's linen under ₹3,000"
-                  </button>
-                  <button className="hero-ai-chip" onClick={() => handleSendAgentPrompt("Show me Women's garments")}>
-                    "Women's mulberry silk & cotton"
-                  </button>
-                  <button
-                    className="hero-ai-chip"
-                    onClick={() => handleSendAgentPrompt("What are the return policy rules and GST slabs?")}
-                  >
-                    "7-Day Return & GST Policy"
-                  </button>
+                  {(heroCfg.ai_quick_prompts || []).map((qp, idx) => (
+                    <button
+                      key={idx}
+                      className="hero-ai-chip"
+                      onClick={() => handleSendAgentPrompt(qp.prompt)}
+                    >
+                      "{qp.label}"
+                    </button>
+                  ))}
                 </div>
               </div>
 
               <div className="hero-visual">
-                <img
-                  src="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1200&q=85"
-                  alt="Noir Atelier Editorial Collection"
-                />
+                {heroCfg.hero_image_url && (
+                  <img
+                    src={heroCfg.hero_image_url}
+                    alt={heroCfg.hero_image_alt || storeName}
+                  />
+                )}
                 {spotlight && (
                   <div className="hero-floating-card">
                     <div>
@@ -929,18 +938,18 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                       className={`chip-pill ${selectedDepartment === c.department ? "active" : ""}`}
                       onClick={() => handleDepartmentSelect(c.department)}
                     >
-                      {c.name}
+                      {c.name} ({c.product_count})
                     </button>
                   ))}
                   <button
-                    className={`chip-pill ${Number(maxPrice) === 2500 ? "active" : ""}`}
+                    className={`chip-pill ${Number(maxPrice) === Number(gstThreshold) ? "active" : ""}`}
                     onClick={() => {
-                      const nextMp = Number(maxPrice) === 2500 ? "" : "2500";
+                      const nextMp = Number(maxPrice) === Number(gstThreshold) ? "" : String(gstThreshold);
                       setMaxPrice(nextMp);
                       bootstrapData(actor, searchQuery, selectedDepartment, nextMp);
                     }}
                   >
-                    Under ₹2,500 (5% GST Slab)
+                    Under {formatInr(gstThreshold)} ({gstLowPct}% GST Slab)
                   </button>
                 </div>
 
@@ -1013,10 +1022,11 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                   <button
                     className="btn-pill"
                     onClick={() => {
-                      setActor(ACTORS[2]);
-                      apiRef.current.setToken(ACTORS[2].token);
+                      const mgr = actors.find((a) => a.role === "manager") || actor;
+                      setActor(mgr);
+                      apiRef.current.setToken(mgr.token);
                       setActiveUiPrinciple("normal");
-                      bootstrapData(ACTORS[2]);
+                      bootstrapData(mgr);
                     }}
                   >
                     Switch to Store Manager Token
@@ -1113,7 +1123,7 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                               <SvgIcon name={isLiked ? "heart-filled" : "heart"} size={16} />
                             </button>
                           </div>
-                          <img src={visual.photoUrl} alt={p.name} loading="lazy" />
+                          {visual.photoUrl && <img src={visual.photoUrl} alt={p.name} loading="lazy" />}
                         </div>
 
                         <div className="product-card-body">
@@ -1226,6 +1236,30 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                 </button>
               </div>
 
+              {inspectedOrderMeta && (
+                <div
+                  style={{
+                    padding: "0.9rem",
+                    borderRadius: 16,
+                    background: "var(--state-info-bg)",
+                    color: "var(--state-info-text)",
+                    border: "1px solid var(--state-info-border)",
+                    marginBottom: "1rem",
+                    fontSize: 12,
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <strong>{inspectedOrderMeta.title}</strong>
+                    <button className="chip-pill" onClick={() => setInspectedOrderMeta(null)}>
+                      Close
+                    </button>
+                  </div>
+                  <pre style={{ marginTop: 6, fontFamily: "var(--font-mono)", fontSize: 11, whiteSpace: "pre-wrap" }}>
+                    {JSON.stringify(inspectedOrderMeta.data, null, 2)}
+                  </pre>
+                </div>
+              )}
+
               {orders.length === 0 ? (
                 <div className="state-card">
                   <h3 className="font-editorial" style={{ fontSize: "var(--text-xl)", marginBottom: "0.4rem" }}>
@@ -1287,7 +1321,18 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                         <div style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>
                           Grand Total: {formatInr(o.grand_total_inr)}
                         </div>
-                        <div style={{ display: "flex", gap: "0.45rem" }}>
+                        <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+                          {o.invoice_id && (
+                            <button
+                              className="chip-pill"
+                              onClick={async () => {
+                                const inv = await apiRef.current.getInvoice(o.order_id);
+                                setInspectedOrderMeta({ title: `GST Tax Invoice (${inv.invoice_id})`, data: inv });
+                              }}
+                            >
+                              GST Invoice
+                            </button>
+                          )}
                           <button
                             className="chip-pill"
                             onClick={() => setReturnForm((prev) => ({ ...prev, orderId: o.order_id }))}
@@ -1324,8 +1369,9 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                 4-Tier Garment Return & Physical QC
               </h3>
               <p style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)", marginBottom: "1.1rem" }}>
-                Tier 1 (≤ ₹5,000) auto-refunds upon QC pass; Tier 2 (₹5,001–₹25,000) routes to Store Manager; Tier 3
-                (&gt; ₹25,000) requires Manager + Finance dual approval.
+                Tier 1 (≤ {formatInr(businessConfig?.returns_and_refunds?.tiers?.tier_1_auto_refund_max_inr ?? 5000)})
+                auto-refunds upon QC pass; Tier 2 routes to Store Manager; Tier 3 requires Manager + Finance dual
+                approval.
               </p>
 
               <form
@@ -1414,7 +1460,8 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                 Noir Atelier Governance & Store Policies
               </h2>
               <p style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
-                Loaded dynamically from PostgreSQL/SQLite <code>business_config</code> and <code>policies</code> tables.
+                Loaded dynamically from PostgreSQL/SQLite <code>business_config</code>, <code>policies</code>,{" "}
+                <code>shipping_zones</code>, and <code>payment_methods</code> tables.
               </p>
               <div className="kpi-row" style={{ marginTop: "1.25rem", marginBottom: 0 }}>
                 <div className="kpi-tile">
@@ -1473,6 +1520,29 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                 </div>
               ))}
             </div>
+
+            {shippingZones.length > 0 && (
+              <div className="surface-card">
+                <h3 className="font-editorial" style={{ fontSize: "var(--text-2xl)", marginBottom: "0.75rem" }}>
+                  Active Courier Shipping Zones (Database <code>shipping_zones</code> Table)
+                </h3>
+                <div className="kpi-row" style={{ marginBottom: 0 }}>
+                  {shippingZones.map((z) => (
+                    <div key={z.zone_id} className="kpi-tile">
+                      <div className="kpi-tile-label">
+                        {z.zone_id} · {z.name}
+                      </div>
+                      <div style={{ fontWeight: 700, marginTop: 4 }}>
+                        {formatInr(z.base_fee_inr)} · {z.estimated_days} Days ETA
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 2 }}>
+                        PIN Prefixes: {(z.pin_prefixes || []).join(", ")}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1493,7 +1563,7 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                 <button
                   className="btn-pill"
                   onClick={() => {
-                    const mgr = ACTORS[2];
+                    const mgr = actors.find((a) => a.role === "manager") || actor;
                     setActor(mgr);
                     apiRef.current.setToken(mgr.token);
                     setPermissionDeniedInfo(null);
@@ -1531,6 +1601,117 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                   </div>
                 </div>
 
+                <div className="page-grid-2col">
+                  <div className="surface-card">
+                    <h3 className="font-editorial" style={{ fontSize: "var(--text-2xl)", marginBottom: "0.75rem" }}>
+                      4-Tier Refund Approval Queue
+                    </h3>
+                    {adminRefunds.length === 0 ? (
+                      <p style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)" }}>
+                        No refund requests in queue.
+                      </p>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "0.65rem" }}>
+                        {adminRefunds.map((r) => (
+                          <div
+                            key={r.refund_id}
+                            style={{
+                              padding: "0.9rem",
+                              borderRadius: 16,
+                              background: "var(--bg-page)",
+                              border: "1px solid var(--border-subtle)",
+                              fontSize: 12,
+                            }}
+                          >
+                            <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 600 }}>
+                              <span>
+                                {r.refund_id} · Order {r.order_id} · {formatInr(r.amount_inr)}
+                              </span>
+                              <span className="meta-tag">
+                                Tier {r.approval_tier} · {r.status}
+                              </span>
+                            </div>
+                            <div style={{ display: "flex", gap: "0.45rem", marginTop: "0.5rem" }}>
+                              {(r.status === "pending_approval" || r.status === "awaiting_secondary_approval") && (
+                                <button
+                                  className="btn-pill"
+                                  style={{ padding: "0.35rem 0.85rem", fontSize: 11, minHeight: 32 }}
+                                  onClick={async () => {
+                                    await apiRef.current.approveRefund(
+                                      r.refund_id,
+                                      `Approved by ${actor.id}`,
+                                      actor.token
+                                    );
+                                    await loadAdminData(actor);
+                                  }}
+                                >
+                                  Approve as {actor.role}
+                                </button>
+                              )}
+                              {r.status === "approved" && (
+                                <button
+                                  className="btn-pill btn-pill-outline"
+                                  style={{ padding: "0.35rem 0.85rem", fontSize: 11, minHeight: 32 }}
+                                  onClick={async () => {
+                                    await apiRef.current.processRefund(r.refund_id, actor.token);
+                                    await loadAdminData(actor);
+                                  }}
+                                >
+                                  Disburse Payout & Restock
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="surface-card">
+                    <h3 className="font-editorial" style={{ fontSize: "var(--text-2xl)", marginBottom: "0.75rem" }}>
+                      Warehouse Garment Inventory
+                    </h3>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                      {adminInventory.map((inv) => (
+                        <div
+                          key={inv.product_id}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            padding: "0.75rem 0.9rem",
+                            borderRadius: 14,
+                            background: "var(--bg-page)",
+                            border: "1px solid var(--border-subtle)",
+                            fontSize: 12,
+                          }}
+                        >
+                          <div>
+                            <strong>{inv.product_id}</strong> · {inv.name}
+                            <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+                              Available: {inv.quantity_available} · Reserved: {inv.quantity_reserved}
+                            </div>
+                          </div>
+                          <button
+                            className="chip-pill"
+                            onClick={async () => {
+                              await apiRef.current.updateInventory(
+                                inv.product_id,
+                                Number(inv.quantity_available) + 10,
+                                "admin_portal_restock",
+                                actor.token
+                              );
+                              await loadAdminData(actor);
+                            }}
+                          >
+                            +10 Units
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
                 <div className="surface-card">
                   <h3 className="font-editorial" style={{ fontSize: "var(--text-2xl)", marginBottom: "0.4rem" }}>
                     Live Business Config Policy Editor (<code>PUT /api/admin/config/policies</code>)
@@ -1551,8 +1732,8 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                         "shipping",
                         {
                           free_shipping_threshold_inr: Number(policyConfigForm.freeShippingThresholdInr),
-                          standard_shipping_fee_inr: Number(policyConfigForm.standardShippingFeeInr),
-                          express_shipping_fee_inr: 299,
+                          default_shipping_fee_inr: Number(policyConfigForm.standardShippingFeeInr),
+                          cod_allowed: false,
                         },
                         policyConfigForm.reason,
                         actor.token
@@ -1619,7 +1800,7 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
       <footer className="site-footer">
         <div className="site-footer-inner">
           <div>
-            <strong>Noir Atelier</strong> · Next.js 14+ App Router & FastAPI Unified Commerce Platform
+            <strong>{storeName}</strong> · Next.js 14+ App Router & FastAPI Unified Commerce Platform
           </div>
           <div style={{ display: "flex", gap: "1.25rem", flexWrap: "wrap", fontFamily: "var(--font-mono)", fontSize: 11 }}>
             <span>WCAG 2.2 AAA Contrast: {contrastRatio}:1</span>
@@ -1649,10 +1830,12 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                   <SvgIcon name="close" size={16} />
                 </button>
               </div>
-              <img
-                src={getProductEditorialVisual(detailModalProduct).photoUrl}
-                alt={detailModalProduct.name}
-              />
+              {getProductEditorialVisual(detailModalProduct).photoUrl && (
+                <img
+                  src={getProductEditorialVisual(detailModalProduct).photoUrl}
+                  alt={detailModalProduct.name}
+                />
+              )}
             </div>
 
             <div className="detail-modal-content">
@@ -1666,10 +1849,11 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                 <p style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)", marginBottom: "1.1rem" }}>
                   {detailModalProduct.description}
                 </p>
+
                 {recommendations.length > 0 && (
                   <div style={{ marginBottom: "1rem" }}>
                     <div className="field-label" style={{ marginBottom: "0.4rem" }}>
-                      Complete the Look (Database Recommendations)
+                      Complete the Look (Database <code>recommendations</code> Table)
                     </div>
                     <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                       {recommendations.map((rec) => (
@@ -1687,6 +1871,62 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                     </div>
                   </div>
                 )}
+
+                <div style={{ marginBottom: "1rem" }}>
+                  <div className="field-label" style={{ marginBottom: "0.4rem" }}>
+                    Verified Customer Reviews (Database <code>product_reviews</code> Table)
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", marginBottom: "0.6rem" }}>
+                    {(detailModalProduct.reviews || []).slice(0, 3).map((rev) => (
+                      <div
+                        key={rev.review_id}
+                        style={{
+                          padding: "0.55rem 0.75rem",
+                          borderRadius: 12,
+                          background: "var(--bg-subtle)",
+                          fontSize: 11,
+                        }}
+                      >
+                        <strong>★ {rev.rating}.0</strong> · {rev.customer_id} ({rev.fit_feedback}): "{rev.comment}"
+                      </div>
+                    ))}
+                  </div>
+                  <form
+                    style={{ display: "flex", gap: "0.4rem" }}
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      if (!reviewForm.comment.trim()) return;
+                      const updatedProd = await apiRef.current.addProductReview(detailModalProduct.product_id, {
+                        rating: reviewForm.rating,
+                        fitFeedback: reviewForm.fitFeedback,
+                        comment: reviewForm.comment,
+                      });
+                      setDetailModalProduct(updatedProd);
+                      setReviewForm({ rating: 5, fitFeedback: "true_to_size", comment: "" });
+                      await bootstrapData();
+                    }}
+                  >
+                    <select
+                      className="header-pill-select"
+                      value={reviewForm.rating}
+                      onChange={(e) => setReviewForm({ ...reviewForm, rating: Number(e.target.value) })}
+                    >
+                      <option value={5}>★ 5</option>
+                      <option value={4}>★ 4</option>
+                      <option value={3}>★ 3</option>
+                    </select>
+                    <input
+                      className="field-input"
+                      style={{ minHeight: 34, padding: "0.35rem 0.7rem", fontSize: 12 }}
+                      placeholder="Write a verified garment review..."
+                      value={reviewForm.comment}
+                      onChange={(e) => setReviewForm({ ...reviewForm, comment: e.target.value })}
+                    />
+                    <button type="submit" className="chip-pill active">
+                      Post
+                    </button>
+                  </form>
+                </div>
               </div>
 
               <div
@@ -1740,7 +1980,7 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                 </div>
               ) : (
                 <>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.65rem", marginBottom: "1.25rem" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.65rem", marginBottom: "1.1rem" }}>
                     {(cart?.items || []).map((item) => (
                       <div
                         key={item.cart_id}
@@ -1777,6 +2017,34 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                     ))}
                   </div>
 
+                  {availableCoupons.length > 0 && (
+                    <div style={{ marginBottom: "1rem" }}>
+                      <div className="field-label" style={{ marginBottom: 4 }}>
+                        Available Database Coupons (<code>coupons</code> Table)
+                      </div>
+                      <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+                        {availableCoupons.map((c) => (
+                          <button
+                            key={c.code}
+                            type="button"
+                            className={`chip-pill ${checkoutForm.couponCode === c.code ? "active" : ""}`}
+                            style={{ fontSize: 11 }}
+                            onClick={async () => {
+                              setCheckoutForm((prev) => ({ ...prev, couponCode: c.code }));
+                              const res = await apiRef.current.validateCoupon(
+                                c.code,
+                                Number(cart?.subtotal_mrp_inr || 0)
+                              );
+                              setCouponResult(res);
+                            }}
+                          >
+                            {c.code} ({c.discount_value}% off ≥ {formatInr(c.min_order_value_inr)})
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <form
                     style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}
                     onSubmit={async (e) => {
@@ -1787,7 +2055,7 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                       const order = await apiRef.current.createOrder({
                         customerId: actor.role === "customer" ? actor.id : "CUS-001",
                         couponCode: checkoutForm.couponCode || null,
-                        paymentMethod: "upi",
+                        paymentMethod: checkoutForm.paymentMethod || "upi",
                       });
                       const [nextCart, nextOrders] = await Promise.all([
                         apiRef.current.getCart(),
@@ -1818,24 +2086,44 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                       )}
                     </div>
 
-                    <div className="field-group">
-                      <label className="field-label" htmlFor="next-chk-pin">
-                        6-Digit PIN Code *
-                      </label>
-                      <input
-                        id="next-chk-pin"
-                        className={`field-input ${activeCheckoutErrors.pinCode ? "invalid" : ""}`}
-                        value={checkoutForm.pinCode}
-                        onChange={(e) => setCheckoutForm({ ...checkoutForm, pinCode: e.target.value })}
-                      />
-                      {activeCheckoutErrors.pinCode && (
-                        <span className="field-error">{activeCheckoutErrors.pinCode}</span>
-                      )}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
+                      <div className="field-group">
+                        <label className="field-label" htmlFor="next-chk-pin">
+                          6-Digit PIN Code *
+                        </label>
+                        <input
+                          id="next-chk-pin"
+                          className={`field-input ${activeCheckoutErrors.pinCode ? "invalid" : ""}`}
+                          value={checkoutForm.pinCode}
+                          onChange={(e) => setCheckoutForm({ ...checkoutForm, pinCode: e.target.value })}
+                        />
+                        {activeCheckoutErrors.pinCode && (
+                          <span className="field-error">{activeCheckoutErrors.pinCode}</span>
+                        )}
+                      </div>
+
+                      <div className="field-group">
+                        <label className="field-label" htmlFor="next-chk-pay">
+                          Payment Method (DB) *
+                        </label>
+                        <select
+                          id="next-chk-pay"
+                          className="field-input"
+                          value={checkoutForm.paymentMethod}
+                          onChange={(e) => setCheckoutForm({ ...checkoutForm, paymentMethod: e.target.value })}
+                        >
+                          {paymentMethods.map((pm) => (
+                            <option key={pm.method_id} value={pm.method_id}>
+                              {pm.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
 
                     <button type="submit" className="btn-pill">
                       <SvgIcon name="check" size={14} />
-                      <span>Place Verified Order (UPI / Card)</span>
+                      <span>Place Verified Order</span>
                     </button>
                   </form>
                 </>
@@ -1851,7 +2139,7 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
             <div className="drawer-header">
               <div>
                 <h3 className="font-editorial" style={{ fontSize: "var(--text-2xl)" }}>
-                  <SvgIcon name="sparkles" size={16} /> <span>Noir Atelier AI Stylist</span>
+                  <SvgIcon name="sparkles" size={16} /> <span>{storeName} AI Stylist</span>
                 </h3>
                 <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>
                   4-Layer ReAct Loop · 9 Agents · Step Budget (Max 10)
@@ -1876,6 +2164,19 @@ export default function NoirAtelierNextApp({ initialPage = "shop" }) {
                   </option>
                 ))}
               </select>
+
+              <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+                {(heroCfg.ai_quick_prompts || []).map((qp, idx) => (
+                  <button
+                    key={idx}
+                    className="chip-pill"
+                    style={{ fontSize: 11, padding: "0.3rem 0.7rem" }}
+                    onClick={() => handleSendAgentPrompt(qp.prompt)}
+                  >
+                    {qp.label}
+                  </button>
+                ))}
+              </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: "0.65rem", flex: 1 }}>
                 {agentMessages.map((m, idx) => (

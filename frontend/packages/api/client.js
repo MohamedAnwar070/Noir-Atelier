@@ -123,6 +123,50 @@ export class NoirApiClient {
     return data;
   }
 
+  async addProductReview(productId, { rating = 5, fitFeedback = "true_to_size", comment = "" }) {
+    const { data } = await this.request("POST", `/api/products/${productId}/reviews`, {
+      body: { rating: Number(rating), fit_feedback: fitFeedback, comment },
+    });
+    return data;
+  }
+
+  async createProduct(payload, tokenOverride = null) {
+    const { data } = await this.request("POST", "/api/products", {
+      body: payload,
+      tokenOverride: tokenOverride || this.token,
+    });
+    return data;
+  }
+
+  async listPaymentMethods() {
+    const { data } = await this.request("GET", "/api/config/payment-methods");
+    return data;
+  }
+
+  async getInvoice(identifier) {
+    const { data } = await this.request("GET", `/api/invoices/${identifier}`);
+    return data;
+  }
+
+  async getShipment(identifier) {
+    const { data } = await this.request("GET", `/api/shipments/${identifier}`);
+    return data;
+  }
+
+  async listSupportTickets(tokenOverride = null) {
+    const { data } = await this.request("GET", "/api/support/tickets", {
+      tokenOverride: tokenOverride || this.token,
+    });
+    return data;
+  }
+
+  async resolveSupportTicket(ticketId, tokenOverride = null) {
+    const { data } = await this.request("POST", `/api/support/tickets/${ticketId}/resolve`, {
+      tokenOverride: tokenOverride || this.token,
+    });
+    return data;
+  }
+
   async getCustomerProfile(customerId) {
     const { data } = await this.request("GET", `/api/customers/${customerId}`);
     return data;
