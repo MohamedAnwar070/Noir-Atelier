@@ -2,7 +2,11 @@ import { NoirApiClient } from "/packages/api/client.js";
 import {
   DESIGN_TOKENS,
   applyFontScale,
+  applyTheme,
+  getContrastRatio,
+  getInitialTheme,
   getProductEditorialVisual,
+  renderIcon,
 } from "/packages/ui/theme.js";
 import {
   UI_PRINCIPLE_STATES,
@@ -21,6 +25,7 @@ import {
   computeGstSlabFromConfig,
   formatInr,
   validateCheckoutForm,
+  validatePolicyConfigForm,
   validateReturnForm,
 } from "/packages/utils/formatters.js";
 
@@ -32,13 +37,16 @@ const ACTORS = [
 ];
 
 const state = {
-  activePage: "shop", // shop | orders | policies | admin
-  activeDrawer: null, // null | bag | ai
+  activePage: "shop",
+  activeDrawer: null,
   detailModalProduct: null,
   showDiagnosticsBar: false,
   fontScale: "default",
+  theme: getInitialTheme(),
   activeUiPrinciple: "normal",
   actor: ACTORS[0],
+  inFlightAction: null,
+  liveAnnouncement: "",
 
   isOffline: typeof navigator !== "undefined" ? !navigator.onLine : false,
   slowLatencyMs: null,
@@ -80,7 +88,15 @@ const state = {
   adminInventory: [],
   adminRefunds: [],
   adminAuditLog: [],
+  policyConfigForm: {
+    freeShippingThresholdInr: 1999,
+    standardShippingFeeInr: 149,
+    reason: "Seasonal luxury shipping threshold review",
+  },
+  policyConfigErrors: {},
 };
+
+applyTheme(state.theme);
 
 const api = new NoirApiClient({
   onNetworkEvent: (evt) => {
@@ -117,6 +133,19 @@ window.addEventListener("offline", () => {
   renderApp();
 });
 
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    if (state.detailModalProduct) {
+      state.detailModalProduct = null;
+      renderApp();
+    } else if (state.activeDrawer) {
+      state.activeDrawer = null;
+      if (state.activeUiPrinciple === "form_validation") state.activeUiPrinciple = "normal";
+      renderApp();
+    }
+  }
+});
+
 async function bootstrapData() {
   state.isLoading = true;
   state.apiError = null;
@@ -144,6 +173,13 @@ async function bootstrapData() {
     state.cart = cart;
     state.orders = Array.isArray(orders) ? orders : [];
     state.agentRegistry = Array.isArray(registry) ? registry : [];
+
+    if (state.businessConfig?.shipping) {
+      state.policyConfigForm.freeShippingThresholdInr =
+        state.businessConfig.shipping.free_shipping_threshold_inr ?? 1999;
+      state.policyConfigForm.standardShippingFeeInr =
+        state.businessConfig.shipping.standard_shipping_fee_inr ?? 149;
+    }
 
     state.products.forEach((p) => {
       if (!state.cardSizeSelection[p.product_id]) {
@@ -191,6 +227,7 @@ async function refreshProductsFromDb() {
       }
     });
     state.isLoading = false;
+    state.liveAnnouncement = `${state.products.length} garments loaded from database.`;
     renderApp();
   } catch (err) {
     state.isLoading = false;
@@ -225,16 +262,18 @@ async function loadAdminDataFromDb() {
   renderApp();
 
   try {
-    const [dashboard, inventory, refunds, auditLog] = await Promise.all([
+    const [dashboard, inventory, refunds, auditLog, cfgPayload] = await Promise.all([
       api.getAdminDashboard(state.actor.token),
       api.listInventory(false, state.actor.token),
       api.listRefunds(state.actor.token),
       api.getAuditLog(20, state.actor.token),
+      api.getPoliciesAndConfig(),
     ]);
     state.adminDashboard = dashboard;
     state.adminInventory = inventory;
     state.adminRefunds = refunds;
     state.adminAuditLog = auditLog;
+    state.businessConfig = cfgPayload.business_config || state.businessConfig;
     state.isLoading = false;
     renderApp();
   } catch (err) {
@@ -269,6 +308,8 @@ function renderHeader() {
   const cartCount = (state.cart?.items || []).reduce((acc, i) => acc + Number(i.quantity || 0), 0);
 
   return `
+    <a href="#main-content" class="skip-link">Skip to main garment collection</a>
+    <div id="a11y-live-announcer" class="sr-only" aria-live="polite" aria-atomic="true">${state.liveAnnouncement}</div>
     <header class="site-header">
       <div class="site-header-inner">
         <div class="brand-group">
@@ -319,11 +360,12 @@ function renderHeader() {
         </div>
 
         <div class="header-actions">
-          <form class="header-search" data-form="catalog-search">
-            <span class="header-search-icon">🔍</span>
+          <form class="header-search" data-form="catalog-search" role="search">
+            <span class="header-search-icon">${renderIcon("search", "xs")}</span>
             <input
               id="catalog-search-input"
               type="search"
+              aria-label="Search garments"
               placeholder="Search linen, silk, merino..."
               value="${state.searchQuery}"
             />
@@ -342,11 +384,23 @@ function renderHeader() {
           </select>
 
           <button
+            class="chip-pill"
+            data-action="toggle-theme"
+            aria-label="Toggle color theme"
+            title="Switch Light / Noir Dark Theme"
+          >
+            ${state.theme === "dark" ? renderIcon("sun", "xs") : renderIcon("moon", "xs")}
+            <span>${state.theme === "dark" ? "Light" : "Noir"}</span>
+          </button>
+
+          <button
             class="chip-pill ${state.showDiagnosticsBar ? "active" : ""}"
             data-action="toggle-diagnostics"
-            title="Inspect 10 UI/UX Design States"
+            aria-expanded="${state.showDiagnosticsBar}"
+            title="Inspect 10+ UI/UX Design States"
           >
-            ⚙️ UI States
+            ${renderIcon("sliders", "xs")}
+            <span>UI States</span>
           </button>
 
           <button
@@ -355,7 +409,8 @@ function renderHeader() {
             data-action="open-drawer"
             data-drawer="ai"
           >
-            ✨ AI Stylist
+            ${renderIcon("sparkles", "xs")}
+            <span>AI Stylist</span>
           </button>
 
           <button
@@ -364,7 +419,8 @@ function renderHeader() {
             data-action="open-drawer"
             data-drawer="bag"
           >
-            🛍️ Bag (${cartCount})
+            ${renderIcon("bag", "xs")}
+            <span>Bag (${cartCount})</span>
           </button>
         </div>
       </div>
@@ -372,7 +428,7 @@ function renderHeader() {
       ${
         state.showDiagnosticsBar
           ? `
-        <div class="diagnostics-bar">
+        <div class="diagnostics-bar" role="region" aria-label="UI Design Principles Inspector">
           <div class="diagnostics-bar-inner">
             <span style="font-size:11px;font-weight:600;color:var(--text-secondary);">
               UI Design Principles Inspector (Click any state to preview):
@@ -382,7 +438,7 @@ function renderHeader() {
                 (st) => `
                   <button
                     class="chip-pill ${state.activeUiPrinciple === st.id ? "active" : ""}"
-                    style="padding:0.25rem 0.7rem;font-size:11px;"
+                    style="padding:0.25rem 0.7rem;font-size:11px;min-height:28px;"
                     data-action="set-ui-principle"
                     data-principle="${st.id}"
                   >
@@ -423,10 +479,11 @@ function renderHeroSection() {
   const freeShipMin = state.businessConfig?.shipping?.free_shipping_threshold_inr ?? 1999;
 
   return `
-    <section class="hero-banner">
+    <section class="hero-banner" aria-label="Editorial Spotlight">
       <div class="hero-content">
         <div>
           <div class="hero-eyebrow">
+            ${renderIcon("sparkles", "xs")}
             <span>Noir Atelier · HSN 61 & 62 Luxury Garments</span>
           </div>
           <h1 class="hero-title">The New Edit</h1>
@@ -435,21 +492,23 @@ function renderHeroSection() {
           </p>
           <div class="hero-cta-row">
             <button class="btn-pill" data-action="scroll-to-catalog">
-              Explore Collection
+              <span>Explore Collection</span>
+              ${renderIcon("arrow-right", "xs")}
             </button>
             <button
               class="btn-pill btn-pill-outline"
-              style="background:rgba(255,255,255,0.92);border-color:transparent;"
+              style="background:rgba(255,255,255,0.92);color:#181817;border-color:transparent;"
               data-action="open-drawer"
               data-drawer="ai"
             >
-              ✨ Shop with AI Stylist
+              ${renderIcon("sparkles", "xs")}
+              <span>Shop with AI Stylist</span>
             </button>
           </div>
         </div>
 
         <div class="hero-ai-prompts">
-          <span style="font-size:11px;opacity:0.85;">Try asking AI:</span>
+          <span style="font-size:11px;opacity:0.88;">Try asking AI:</span>
           <button
             class="hero-ai-chip"
             data-action="trigger-ai-prompt"
@@ -571,7 +630,7 @@ function renderShopPage() {
   return `
     ${renderHeroSection()}
 
-    <section aria-label="Garment Catalog">
+    <section class="catalog-section" aria-label="Garment Catalog">
       <div class="catalog-toolbar">
         <div class="catalog-heading-group">
           <h2>Trending Now</h2>
@@ -581,18 +640,23 @@ function renderShopPage() {
         </div>
         ${
           state.searchQuery || state.selectedDepartment !== "ALL" || state.maxPrice
-            ? `<button class="section-link" data-action="clear-filters">Reset all filters ✕</button>`
+            ? `<button class="section-link" data-action="clear-filters">
+                <span>Reset all filters</span>
+                ${renderIcon("close", "xs")}
+              </button>`
             : ""
         }
       </div>
 
       <div class="catalog-filters-row">
-        <div class="category-pills" role="tablist">
+        <div class="category-pills" role="tablist" aria-label="Department Filter">
           ${deptPills
             .map(
               (d) => `
               <button
                 class="chip-pill ${state.selectedDepartment === d.code ? "active" : ""}"
+                role="tab"
+                aria-selected="${state.selectedDepartment === d.code}"
                 data-action="filter-department"
                 data-department="${d.code}"
               >
@@ -631,6 +695,7 @@ function renderProductCard(p) {
   const isLiked = state.wishlistIds.has(p.product_id);
   const activeSize = state.cardSizeSelection[p.product_id] || (p.sizes_available || [])[0] || "M";
   const sizeBreakdown = p.size_breakdown || {};
+  const isAddingThis = state.inFlightAction === `add:${p.product_id}`;
 
   return `
     <article class="product-card">
@@ -641,14 +706,18 @@ function renderProductCard(p) {
         data-product-id="${p.product_id}"
       >
         <div class="card-top-badges">
-          <span class="rating-badge">★ ${p.average_rating ?? "5.0"}</span>
+          <span class="rating-badge">
+            ${renderIcon("star", "xs")}
+            <span>${p.average_rating ?? "5.0"}</span>
+          </span>
           <button
-            class="heart-btn"
+            class="heart-btn ${isLiked ? "liked" : ""}"
             data-action="toggle-wishlist"
             data-product-id="${p.product_id}"
-            aria-label="Save ${p.name}"
+            aria-label="Save ${p.name} to wishlist"
+            aria-pressed="${isLiked}"
           >
-            ${isLiked ? "❤️" : "🤍"}
+            ${renderIcon(isLiked ? "heart-filled" : "heart", "sm")}
           </button>
         </div>
         <img src="${visual.photoUrl}" alt="${p.name}" loading="lazy" />
@@ -682,10 +751,11 @@ function renderProductCard(p) {
                 return `
                   <button
                     class="size-pill ${activeSize === sz ? "active" : ""}"
-                    style="min-width:38px;height:30px;padding:0 0.55rem;font-size:11px;"
+                    style="min-width:38px;height:32px;padding:0 0.55rem;font-size:11px;"
                     data-action="select-card-size"
                     data-product-id="${p.product_id}"
                     data-size="${sz}"
+                    aria-pressed="${activeSize === sz}"
                     ${qty <= 0 ? "disabled" : ""}
                   >
                     ${sz}
@@ -705,9 +775,9 @@ function renderProductCard(p) {
               style="padding:0.62rem 1.25rem;font-size:var(--text-xs);"
               data-action="add-to-cart"
               data-product-id="${p.product_id}"
-              ${p.stock <= 0 ? "disabled" : ""}
+              ${p.stock <= 0 || isAddingThis ? "disabled" : ""}
             >
-              Add to Cart
+              ${isAddingThis ? `<span class="btn-spinner"></span><span>Adding...</span>` : `<span>Add to Cart</span>`}
             </button>
           </div>
         </div>
@@ -730,8 +800,13 @@ function renderProductDetailModal() {
       <div class="detail-modal-sheet" role="dialog" aria-modal="true" aria-label="${p.name}">
         <div class="detail-modal-media">
           <div class="card-top-badges">
-            <span class="rating-badge">★ ${p.average_rating ?? "5.0"} (${p.review_count || 1} verified review)</span>
-            <button class="heart-btn" data-action="close-product-modal" title="Close">✕</button>
+            <span class="rating-badge">
+              ${renderIcon("star", "xs")}
+              <span>${p.average_rating ?? "5.0"} (${p.review_count || 1} verified review)</span>
+            </span>
+            <button class="heart-btn" data-action="close-product-modal" aria-label="Close product modal" title="Close (Esc)">
+              ${renderIcon("close", "sm")}
+            </button>
           </div>
           <img src="${visual.photoUrl}" alt="${p.name}" />
         </div>
@@ -800,7 +875,8 @@ function renderProductDetailModal() {
                         data-action="open-product-modal"
                         data-product-id="${rec.product_id}"
                       >
-                        ${rec.name} · ${formatInr(rec.mrp_inr)} →
+                        <span>${rec.name} · ${formatInr(rec.mrp_inr)}</span>
+                        ${renderIcon("arrow-right", "xs")}
                       </button>
                     `
                     )
@@ -812,18 +888,19 @@ function renderProductDetailModal() {
             }
           </div>
 
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;padding-top:1rem;border-top:1px solid var(--border-subtle);">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;padding-top:1rem;border-top:1px solid var(--border-subtle);flex-wrap:wrap;">
             <div>
-              <div class="price-block-label">PRICE (MRP INCLUSIVE OF ALL TAXES)</div>
+              <div class="field-label">PRICE (MRP INCLUSIVE OF ALL TAXES)</div>
               <div style="font-size:var(--text-2xl);font-weight:700;">${formatInr(p.mrp_inr)}</div>
             </div>
-            <div style="display:flex;gap:0.6rem;">
+            <div style="display:flex;gap:0.6rem;flex-wrap:wrap;">
               <button
                 class="btn-pill btn-pill-outline"
                 data-action="trigger-ai-prompt"
                 data-prompt="Tell me how to style ${p.product_id} (${p.name}) and its care instructions"
               >
-                ✨ Ask AI Stylist
+                ${renderIcon("sparkles", "xs")}
+                <span>Ask AI Stylist</span>
               </button>
               <button
                 class="btn-pill"
@@ -831,7 +908,8 @@ function renderProductDetailModal() {
                 data-action="add-to-cart"
                 data-product-id="${p.product_id}"
               >
-                Add to Cart
+                ${renderIcon("bag", "xs")}
+                <span>Add to Cart</span>
               </button>
             </div>
           </div>
@@ -908,7 +986,7 @@ function renderOrdersAndReturnsPage() {
                             o.status === "confirmed" || o.status === "processing"
                               ? `<button
                                   class="chip-pill"
-                                  style="color:#b91c1c;border-color:#fecaca;"
+                                  style="color:var(--state-error-text);border-color:var(--state-error-border);"
                                   data-action="cancel-order"
                                   data-order-id="${o.order_id}"
                                 >
@@ -937,17 +1015,19 @@ function renderOrdersAndReturnsPage() {
             Tier 1 (≤ ₹5,000) auto-refunds upon QC pass; Tier 2 (₹5,001–₹25,000) routes to Store Manager; Tier 3 (> ₹25,000) requires Manager + Finance dual approval.
           </p>
 
-          <form data-form="return-form" style="display:flex;flex-direction:column;gap:0.85rem;">
+          <form data-form="return-form" style="display:flex;flex-direction:column;gap:0.85rem;" novalidate>
             <div class="field-group">
               <label class="field-label" for="return-order-id">Order ID *</label>
               <input
                 id="return-order-id"
                 class="field-input ${retErrors.orderId ? "invalid" : ""}"
                 type="text"
+                aria-invalid="${Boolean(retErrors.orderId)}"
+                aria-describedby="${retErrors.orderId ? "err-return-order-id" : ""}"
                 value="${state.returnForm.orderId}"
                 placeholder="ORD-1001"
               />
-              ${retErrors.orderId ? `<span class="field-error">${retErrors.orderId}</span>` : ""}
+              ${retErrors.orderId ? `<span id="err-return-order-id" class="field-error">${retErrors.orderId}</span>` : ""}
             </div>
 
             <div class="field-group">
@@ -956,10 +1036,12 @@ function renderOrdersAndReturnsPage() {
                 id="return-notes"
                 class="field-input ${retErrors.reasonNotes ? "invalid" : ""}"
                 type="text"
+                aria-invalid="${Boolean(retErrors.reasonNotes)}"
+                aria-describedby="${retErrors.reasonNotes ? "err-return-notes" : ""}"
                 value="${state.returnForm.reasonNotes}"
                 placeholder="Slightly tight across shoulders"
               />
-              ${retErrors.reasonNotes ? `<span class="field-error">${retErrors.reasonNotes}</span>` : ""}
+              ${retErrors.reasonNotes ? `<span id="err-return-notes" class="field-error">${retErrors.reasonNotes}</span>` : ""}
             </div>
 
             <label style="display:flex;align-items:center;gap:0.5rem;font-size:var(--text-xs);cursor:pointer;">
@@ -969,7 +1051,8 @@ function renderOrdersAndReturnsPage() {
             ${retErrors.tagIntact ? `<span class="field-error">${retErrors.tagIntact}</span>` : ""}
 
             <button type="submit" class="btn-pill" style="width:100%;">
-              Submit Return Request
+              ${renderIcon("shield", "xs")}
+              <span>Submit Return Request</span>
             </button>
           </form>
         </div>
@@ -986,7 +1069,7 @@ function renderPoliciesPage() {
 
   return `
     <div style="display:flex;flex-direction:column;gap:1.5rem;">
-      <div class="surface-card">
+      <div class="surface-card kpi-section">
         <h2 class="font-editorial" style="font-size:var(--text-3xl);margin-bottom:0.4rem;">
           Noir Atelier Governance & Store Policies
         </h2>
@@ -1031,7 +1114,7 @@ function renderPoliciesPage() {
           .join("")}
       </div>
 
-      <div class="surface-card">
+      <div class="surface-card kpi-section">
         <h3 class="font-editorial" style="font-size:var(--text-2xl);margin-bottom:0.75rem;">
           4-Tier Premium Garment Refund Approval Matrix
         </h3>
@@ -1077,18 +1160,22 @@ function renderAdminConsolePage() {
 
   const ordStats = state.adminDashboard?.orders || { total_orders: 0, total_revenue_inr: 0 };
   const cusStats = state.adminDashboard?.customers || { total_customers: 0, retention_rate_pct: 0 };
+  const pErr = state.policyConfigErrors;
 
   return `
     <div style="display:flex;flex-direction:column;gap:1.5rem;">
-      <div class="surface-card">
+      <div class="surface-card kpi-section">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;margin-bottom:1.25rem;">
           <div>
             <h2 class="font-editorial" style="font-size:var(--text-3xl);">Admin Governance Console</h2>
             <p style="font-size:var(--text-xs);color:var(--text-secondary);">
-              Real-time operations across shared database tables (<code>orders</code>, <code>refunds</code>, <code>inventory</code>, <code>audit_log</code>).
+              Real-time operations across shared database tables (<code>orders</code>, <code>refunds</code>, <code>inventory</code>, <code>business_config</code>, <code>audit_log</code>).
             </p>
           </div>
-          <span class="chip-pill active">Authenticated as: ${state.actor.label}</span>
+          <span class="chip-pill active">
+            ${renderIcon("shield", "xs")}
+            <span>Authenticated as: ${state.actor.label}</span>
+          </span>
         </div>
 
         <div class="kpi-row" style="margin-bottom:0;">
@@ -1138,7 +1225,7 @@ function renderAdminConsolePage() {
                             r.status === "pending_approval" || r.status === "awaiting_secondary_approval"
                               ? `<button
                                   class="btn-pill"
-                                  style="padding:0.38rem 0.9rem;font-size:11px;"
+                                  style="padding:0.38rem 0.9rem;font-size:11px;min-height:34px;"
                                   data-action="admin-approve-refund"
                                   data-refund-id="${r.refund_id}"
                                 >
@@ -1150,7 +1237,7 @@ function renderAdminConsolePage() {
                             r.status === "approved"
                               ? `<button
                                   class="btn-pill btn-pill-outline"
-                                  style="padding:0.38rem 0.9rem;font-size:11px;"
+                                  style="padding:0.38rem 0.9rem;font-size:11px;min-height:34px;"
                                   data-action="admin-process-refund"
                                   data-refund-id="${r.refund_id}"
                                 >
@@ -1196,6 +1283,54 @@ function renderAdminConsolePage() {
               .join("")}
           </div>
         </div>
+      </div>
+
+      <div class="surface-card">
+        <h3 class="font-editorial" style="font-size:var(--text-2xl);margin-bottom:0.35rem;">
+          Live Business Config Policy Editor (<code>PUT /api/admin/config/policies</code>)
+        </h3>
+        <p style="font-size:var(--text-xs);color:var(--text-secondary);margin-bottom:1rem;">
+          Updates the database <code>business_config</code> shipping rules in real time and appends a signed record to <code>audit_log</code>.
+        </p>
+        <form data-form="admin-policy-form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0.85rem;align-items:end;" novalidate>
+          <div class="field-group">
+            <label class="field-label" for="cfg-free-ship">Free Shipping Threshold (₹) *</label>
+            <input
+              id="cfg-free-ship"
+              class="field-input ${pErr.freeShippingThresholdInr ? "invalid" : ""}"
+              type="number"
+              aria-invalid="${Boolean(pErr.freeShippingThresholdInr)}"
+              value="${state.policyConfigForm.freeShippingThresholdInr}"
+            />
+            ${pErr.freeShippingThresholdInr ? `<span class="field-error">${pErr.freeShippingThresholdInr}</span>` : ""}
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="cfg-ship-fee">Standard Courier Fee (₹) *</label>
+            <input
+              id="cfg-ship-fee"
+              class="field-input ${pErr.standardShippingFeeInr ? "invalid" : ""}"
+              type="number"
+              aria-invalid="${Boolean(pErr.standardShippingFeeInr)}"
+              value="${state.policyConfigForm.standardShippingFeeInr}"
+            />
+            ${pErr.standardShippingFeeInr ? `<span class="field-error">${pErr.standardShippingFeeInr}</span>` : ""}
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="cfg-reason">Governance Audit Reason *</label>
+            <input
+              id="cfg-reason"
+              class="field-input ${pErr.reason ? "invalid" : ""}"
+              type="text"
+              aria-invalid="${Boolean(pErr.reason)}"
+              value="${state.policyConfigForm.reason}"
+            />
+            ${pErr.reason ? `<span class="field-error">${pErr.reason}</span>` : ""}
+          </div>
+          <button type="submit" class="btn-pill">
+            ${renderIcon("check", "xs")}
+            <span>Save to Database</span>
+          </button>
+        </form>
       </div>
 
       <div class="surface-card">
@@ -1246,7 +1381,7 @@ function renderShoppingBagDrawer() {
 
   return `
     <div class="drawer-backdrop" data-action="close-drawer-backdrop">
-      <aside class="slide-drawer" aria-label="Shopping Bag & Checkout">
+      <aside class="slide-drawer" role="dialog" aria-modal="true" aria-label="Shopping Bag & Checkout">
         <div class="drawer-header">
           <div>
             <h3 class="font-editorial" style="font-size:var(--text-2xl);">Atelier Shopping Bag</h3>
@@ -1254,7 +1389,9 @@ function renderShoppingBagDrawer() {
               ${items.reduce((s, i) => s + i.quantity, 0)} piece(s) · GST & Free Shipping calculated live
             </span>
           </div>
-          <button class="heart-btn" data-action="close-drawer" title="Close">✕</button>
+          <button class="heart-btn" data-action="close-drawer" aria-label="Close bag drawer" title="Close (Esc)">
+            ${renderIcon("close", "sm")}
+          </button>
         </div>
 
         <div class="drawer-body">
@@ -1282,7 +1419,7 @@ function renderShoppingBagDrawer() {
                           <div style="font-size:13px;font-weight:700;">${formatInr(item.line_mrp_inr)}</div>
                           <button
                             class="section-link"
-                            style="font-size:11px;color:#b91c1c;"
+                            style="font-size:11px;color:var(--state-error-text);"
                             data-action="remove-cart-item"
                             data-cart-id="${item.cart_id}"
                           >
@@ -1330,17 +1467,19 @@ function renderShoppingBagDrawer() {
                     : ""
                 }
 
-                <form id="bag-checkout-form" data-form="checkout-form" style="display:flex;flex-direction:column;gap:0.75rem;">
+                <form id="bag-checkout-form" data-form="checkout-form" style="display:flex;flex-direction:column;gap:0.75rem;" novalidate>
                   <div class="field-group">
                     <label class="field-label" for="checkout-street">Delivery Street Address *</label>
                     <input
                       id="checkout-street"
                       class="field-input ${errors.street ? "invalid" : ""}"
                       type="text"
+                      aria-invalid="${Boolean(errors.street)}"
+                      aria-describedby="${errors.street ? "err-checkout-street" : ""}"
                       value="${state.checkoutForm.street}"
                       placeholder="14 Cathedral Road, Gopalapuram"
                     />
-                    ${errors.street ? `<span class="field-error">${errors.street}</span>` : ""}
+                    ${errors.street ? `<span id="err-checkout-street" class="field-error">${errors.street}</span>` : ""}
                   </div>
 
                   <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;">
@@ -1351,10 +1490,12 @@ function renderShoppingBagDrawer() {
                         class="field-input ${errors.pinCode ? "invalid" : ""}"
                         type="text"
                         maxlength="6"
+                        aria-invalid="${Boolean(errors.pinCode)}"
+                        aria-describedby="${errors.pinCode ? "err-checkout-pin" : ""}"
                         value="${state.checkoutForm.pinCode}"
                         placeholder="600086"
                       />
-                      ${errors.pinCode ? `<span class="field-error">${errors.pinCode}</span>` : ""}
+                      ${errors.pinCode ? `<span id="err-checkout-pin" class="field-error">${errors.pinCode}</span>` : ""}
                     </div>
 
                     <div class="field-group">
@@ -1364,6 +1505,7 @@ function renderShoppingBagDrawer() {
                           id="checkout-coupon"
                           class="field-input ${errors.couponCode ? "invalid" : ""}"
                           type="text"
+                          aria-invalid="${Boolean(errors.couponCode)}"
                           value="${state.checkoutForm.couponCode}"
                           placeholder="ATELIER10"
                         />
@@ -1374,7 +1516,8 @@ function renderShoppingBagDrawer() {
                   </div>
 
                   <button type="submit" class="btn-pill" style="width:100%;margin-top:0.4rem;">
-                    Place Verified Order (UPI / Card)
+                    ${renderIcon("check", "xs")}
+                    <span>Place Verified Order (UPI / Card)</span>
                   </button>
                 </form>
               `
@@ -1405,18 +1548,24 @@ function renderAiConciergeDrawer() {
 
   return `
     <div class="drawer-backdrop" data-action="close-drawer-backdrop">
-      <aside class="slide-drawer" aria-label="AI Stylist & 9-Agent Copilot">
+      <aside class="slide-drawer" role="dialog" aria-modal="true" aria-label="AI Stylist & 9-Agent Copilot">
         <div class="drawer-header">
           <div>
-            <h3 class="font-editorial" style="font-size:var(--text-2xl);">✨ Noir Atelier AI Stylist</h3>
+            <h3 class="font-editorial" style="font-size:var(--text-2xl);">
+              ${renderIcon("sparkles", "sm")}
+              <span>Noir Atelier AI Stylist</span>
+            </h3>
             <span style="font-size:11px;color:var(--text-secondary);">
               Powered by 9 specialized agents calling shared <code>/api/*</code> endpoints
             </span>
           </div>
-          <button class="heart-btn" data-action="close-drawer" title="Close">✕</button>
+          <button class="heart-btn" data-action="close-drawer" aria-label="Close AI Stylist drawer" title="Close (Esc)">
+            ${renderIcon("close", "sm")}
+          </button>
         </div>
 
         <div class="drawer-body" style="display:flex;flex-direction:column;gap:0.85rem;">
+          <label class="sr-only" for="agent-preferred-select">Select Agent</label>
           <select id="agent-preferred-select" class="field-input" style="font-size:12px;">
             ${agentOptions}
           </select>
@@ -1449,7 +1598,7 @@ function renderAiConciergeDrawer() {
                       (m) => `
                       <div style="padding:0.85rem 1rem;border-radius:16px;font-size:12px;background:${
                         m.role === "user" ? "var(--accent-noir)" : "var(--bg-surface)"
-                      };color:${m.role === "user" ? "#ffffff" : "var(--text-primary)"};border:1px solid var(--border-subtle);">
+                      };color:${m.role === "user" ? "var(--text-on-dark)" : "var(--text-primary)"};border:1px solid var(--border-subtle);">
                         ${
                           m.role === "agent"
                             ? `<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:0.3rem;font-family:var(--font-mono);">
@@ -1479,6 +1628,7 @@ function renderAiConciergeDrawer() {
 
         <div class="drawer-footer">
           <form data-form="agent-chat-form" style="display:flex;gap:0.5rem;">
+            <label class="sr-only" for="agent-chat-input">Message AI Stylist</label>
             <input
               id="agent-chat-input"
               class="field-input"
@@ -1490,6 +1640,28 @@ function renderAiConciergeDrawer() {
         </div>
       </aside>
     </div>
+  `;
+}
+
+function renderFooter() {
+  const contrastRatio =
+    state.theme === "dark"
+      ? getContrastRatio("#f5f3ef", "#131312")
+      : getContrastRatio("#181817", "#f6f4ef");
+
+  return `
+    <footer class="site-footer">
+      <div class="site-footer-inner">
+        <div>
+          <strong>Noir Atelier</strong> · AI-Native Luxury Garment Commerce (HSN 61 & 62)
+        </div>
+        <div style="display:flex;gap:1.25rem;flex-wrap:wrap;font-family:var(--font-mono);font-size:11px;">
+          <span>WCAG 2.2 AAA Contrast: ${contrastRatio}:1</span>
+          <span>9 Specialized Agents · Shared /api/*</span>
+          <span>3-Tier Design Tokens (${state.theme.toUpperCase()})</span>
+        </div>
+      </div>
+    </footer>
   `;
 }
 
@@ -1511,10 +1683,11 @@ export function renderApp() {
   root.className = "web-app";
   root.innerHTML = `
     ${renderHeader()}
-    <main class="main-container">
+    <main id="main-content" class="main-container" tabindex="-1">
       ${renderGlobalBanners()}
       ${pageHtml}
     </main>
+    ${renderFooter()}
     ${renderProductDetailModal()}
     ${renderShoppingBagDrawer()}
     ${renderAiConciergeDrawer()}
@@ -1525,6 +1698,14 @@ document.addEventListener("click", async (e) => {
   const target = e.target.closest("[data-action]");
   if (!target) return;
   const action = target.getAttribute("data-action");
+
+  if (action === "toggle-theme") {
+    state.theme = state.theme === "dark" ? "light" : "dark";
+    applyTheme(state.theme);
+    state.liveAnnouncement = `Switched to ${state.theme} theme.`;
+    renderApp();
+    return;
+  }
 
   if (action === "toggle-diagnostics") {
     state.showDiagnosticsBar = !state.showDiagnosticsBar;
@@ -1679,20 +1860,25 @@ document.addEventListener("click", async (e) => {
   if (action === "add-to-cart") {
     const pid = target.getAttribute("data-product-id");
     const chosenSize = state.cardSizeSelection[pid] || "M";
+    state.inFlightAction = `add:${pid}`;
+    renderApp();
     try {
       state.cart = await api.addToCart({
         productId: pid,
         size: chosenSize,
         quantity: 1,
       });
+      state.inFlightAction = null;
       state.detailModalProduct = null;
       state.activeDrawer = "bag";
       state.toastSuccess = {
         title: "Added to Atelier Bag",
         message: `${pid} (Size ${chosenSize}) added to your shopping bag.`,
       };
+      state.liveAnnouncement = `${pid} size ${chosenSize} added to bag.`;
       renderApp();
     } catch (err) {
+      state.inFlightAction = null;
       state.apiError = err;
       renderApp();
     }
@@ -1892,6 +2078,41 @@ document.addEventListener("submit", async (e) => {
         };
       }
       renderApp();
+    } catch (err) {
+      state.apiError = err;
+      renderApp();
+    }
+    return;
+  }
+
+  if (formType === "admin-policy-form") {
+    state.policyConfigForm.freeShippingThresholdInr = Number(document.getElementById("cfg-free-ship")?.value ?? 1999);
+    state.policyConfigForm.standardShippingFeeInr = Number(document.getElementById("cfg-ship-fee")?.value ?? 149);
+    state.policyConfigForm.reason = document.getElementById("cfg-reason")?.value || "";
+
+    const check = validatePolicyConfigForm(state.policyConfigForm);
+    state.policyConfigErrors = check.errors;
+    if (!check.valid) {
+      renderApp();
+      return;
+    }
+
+    try {
+      await api.updateBusinessConfig(
+        "shipping",
+        {
+          free_shipping_threshold_inr: state.policyConfigForm.freeShippingThresholdInr,
+          standard_shipping_fee_inr: state.policyConfigForm.standardShippingFeeInr,
+          express_shipping_fee_inr: 299,
+        },
+        state.policyConfigForm.reason,
+        state.actor.token
+      );
+      state.toastSuccess = {
+        title: "Database Policy Config Updated",
+        message: `Complimentary shipping threshold updated to ₹${state.policyConfigForm.freeShippingThresholdInr} and recorded in audit_log.`,
+      };
+      await loadAdminDataFromDb();
     } catch (err) {
       state.apiError = err;
       renderApp();

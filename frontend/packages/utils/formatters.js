@@ -64,3 +64,25 @@ export function validateReturnForm(fields = {}) {
     errors,
   };
 }
+
+export function validatePolicyConfigForm(fields = {}) {
+  const errors = {};
+  const threshold = Number(fields.freeShippingThresholdInr);
+  const fee = Number(fields.standardShippingFeeInr);
+  const reason = String(fields.reason || "").trim();
+
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 50000) {
+    errors.freeShippingThresholdInr = "Free shipping threshold must be between ₹0 and ₹50,000.";
+  }
+  if (!Number.isFinite(fee) || fee < 0 || fee > 2500) {
+    errors.standardShippingFeeInr = "Standard shipping fee must be between ₹0 and ₹2,500.";
+  }
+  if (!reason || reason.length < 5) {
+    errors.reason = "Provide an audit governance reason (minimum 5 characters).";
+  }
+
+  return {
+    valid: Object.keys(errors).length === 0,
+    errors,
+  };
+}

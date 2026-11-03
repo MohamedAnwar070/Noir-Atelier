@@ -1,7 +1,6 @@
 import os
 import tempfile
 import unittest
-from pathlib import Path
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -49,9 +48,31 @@ class TestFrontendAndDbDrivenArchitecture(unittest.TestCase):
 
         res_tokens = self.client.get("/packages/ui/tokens.css")
         self.assertEqual(res_tokens.status_code, 200)
+        self.assertIn("--primitive-stone-100", res_tokens.text)
+        self.assertIn('[data-theme="dark"]', res_tokens.text)
+        self.assertIn("--card-radius", res_tokens.text)
         self.assertIn("--font-scale", res_tokens.text)
         self.assertIn("--bp-xs", res_tokens.text)
         self.assertIn("--bp-2xl", res_tokens.text)
+        self.assertIn("prefers-reduced-motion: reduce", res_tokens.text)
+        self.assertIn(":focus-visible", res_tokens.text)
+
+        res_theme = self.client.get("/packages/ui/theme.js")
+        self.assertEqual(res_theme.status_code, 200)
+        self.assertIn("renderIcon", res_theme.text)
+        self.assertIn("applyTheme", res_theme.text)
+        self.assertIn("getContrastRatio", res_theme.text)
+
+        res_styles = self.client.get("/storefront/styles.css")
+        self.assertEqual(res_styles.status_code, 200)
+        self.assertIn("@container", res_styles.text)
+        self.assertNotIn("phone-device", res_styles.text)
+
+        res_app = self.client.get("/storefront/app.js")
+        self.assertEqual(res_app.status_code, 200)
+        self.assertIn("skip-link", res_app.text)
+        self.assertIn('aria-live="polite"', res_app.text)
+        self.assertIn("aria-invalid", res_app.text)
 
         res_states = self.client.get("/packages/ui/states.js")
         self.assertEqual(res_states.status_code, 200)
