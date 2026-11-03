@@ -1,0 +1,54 @@
+/*
+ * Storefront stylesheet entry.
+ *
+ * Design tokens are imported separately from @noir/ui/tokens.css (see
+ * app/layout.jsx). Import order below *is* the cascade order:
+ *
+ *   base/        element defaults, keyframes, semantic tone mapping
+ *   components/  reusable primitives — mirror src/components/ui
+ *   layout/      app chrome          — mirror src/components/layout
+ *   features/    page/feature styles — mirror src/components/<feature>
+ *
+ * Rules of the road:
+ *   - Colours, spacing, radii, z-index and motion come from tokens; no raw
+ *     theme colours in feature files (dark mode is handled by the tokens).
+ *   - A selector is declared in exactly one file. Features compose
+ *     primitives in markup (e.g. class="badge order-status-pill") rather
+ *     than re-declaring them.
+ *   - Tone modifiers are mapped to colour only in base/tones.css.
+ */
+
+/* Base */
+@import "./base/reset.css";
+@import "./base/animations.css";
+@import "./base/tones.css";
+
+/* Components (primitives) */
+@import "./components/icon.css";
+@import "./components/button.css";
+@import "./components/badge.css";
+@import "./components/form.css";
+@import "./components/stepper.css";
+@import "./components/rating.css";
+@import "./components/skeleton.css";
+@import "./components/state-panel.css";
+@import "./components/toast.css";
+@import "./components/overlay.css";
+
+/* Layout (app chrome) */
+@import "./layout/page.css";
+@import "./layout/network-status.css";
+@import "./layout/announcement.css";
+@import "./layout/header.css";
+@import "./layout/mobile-tabbar.css";
+@import "./layout/footer.css";
+
+/* Features */
+@import "./features/catalog.css";
+@import "./features/product-card.css";
+@import "./features/product-detail.css";
+@import "./features/bag.css";
+@import "./features/orders.css";
+@import "./features/admin.css";
+@import "./features/policies.css";
+@import "./features/assistant.css";

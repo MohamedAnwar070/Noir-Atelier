@@ -80,10 +80,10 @@ export function ProductCard({ product, onSelect }) {
             <span className="card-accent-pill">{product.accent_tag}</span>
           )}
           {lowStock && (
-            <span className="card-stock-pill warning">Only {stock} left</span>
+            <span className="badge card-stock-pill warning">Only {stock} left</span>
           )}
           {outOfStock && (
-            <span className="card-stock-pill danger">Sold Out</span>
+            <span className="badge card-stock-pill danger">Sold Out</span>
           )}
         </div>
 

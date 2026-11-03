@@ -1,0 +1,144 @@
+/*
+ * Admin governance portal — <AdminView>: KPIs, returns queue, inventory.
+ * Page shell: layout/page.css · Pills compose .badge · Tones: base/tones.css
+ */
+
+.admin-page-container {
+  --page-max: 1280px;
+}
+
+.admin-nav-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.admin-permission-gate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  padding: var(--space-fluid-lg) var(--space-fluid-md);
+}
+
+.admin-returns-queue,
+.admin-inventory-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* ==== KPI cards (responsive to their own width) ==== */
+.admin-kpis-section {
+  container: kpis / inline-size;
+}
+
+.kpi-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+
+.kpi-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1.35rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.kpi-label {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.kpi-value {
+  font-family: var(--font-serif);
+  font-size: var(--text-3xl);
+  font-weight: 600;
+}
+
+.kpi-trend {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.kpi-trend.positive {
+  color: var(--state-success-text);
+}
+
+@container kpis (max-width: 820px) {
+  .kpi-cards-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container kpis (max-width: 400px) {
+  .kpi-cards-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==== Data tables ==== */
+.admin-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-xs);
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.admin-table th {
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.admin-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-table tbody tr:hover {
+  background: var(--bg-subtle);
+}
+
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+/* ==== Status cells (compose .badge) ==== */
+.status-pill {
+  white-space: nowrap;
+}
+
+/* Live indicator for items awaiting action */
+.status-pill.status-pending::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulseDot 1.6s ease-in-out infinite;
+}
+
+.stock-count-badge {
+  font-variant-numeric: tabular-nums;
+}

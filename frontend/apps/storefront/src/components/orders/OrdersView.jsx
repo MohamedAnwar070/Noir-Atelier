@@ -114,9 +114,9 @@ export function OrdersView() {
   };
 
   return (
-    <div className="orders-page-container">
+    <div className="page-container orders-page-container">
       {/* Editorial Header */}
-      <div className="orders-header-bar">
+      <div className="page-header">
         <div>
           <span className="hero-eyebrow">Client Order History</span>
           <h1 className="page-heading">Your Atelier Dispatches</h1>
@@ -175,7 +175,7 @@ export function OrdersView() {
                   <div className="order-id-group">
                     <span className="order-ref-label">Order Ref:</span>
                     <strong className="order-id-value">#{order.order_id}</strong>
-                    <span className={`order-status-pill status-${(order.status || "").toLowerCase()}`}>
+                    <span className={`badge order-status-pill status-${(order.status || "").toLowerCase()}`}>
                       {order.status || "CONFIRMED"}
                     </span>
                   </div>
@@ -219,12 +219,12 @@ export function OrdersView() {
                 <footer className="order-card-footer">
                   <div className="order-meta-info">
                     {order.gst_total ? (
-                      <span className="gst-badge">
+                      <span className="badge gst-badge">
                         GST: {formatInr(order.gst_total)} (HSN compliant)
                       </span>
                     ) : null}
                     {order.payment_status && (
-                      <span className="payment-status-badge">
+                      <span className="badge payment-status-badge">
                         Payment: {order.payment_status}
                       </span>
                     )}
@@ -277,7 +277,7 @@ export function OrdersView() {
         title={`Initiate Return — Order #${returnOrder?.order_id}`}
         size="md"
       >
-        <form onSubmit={handleSubmitReturn} className="return-form-layout">
+        <form onSubmit={handleSubmitReturn} className="form-stack">
           <p className="return-policy-note">
             Noir Atelier honors a 7-day return window. Garments must have original security
             tags intact for Tier 1 instant full refund.

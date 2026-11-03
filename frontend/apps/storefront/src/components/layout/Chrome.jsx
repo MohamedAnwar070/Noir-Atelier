@@ -332,7 +332,7 @@ export function SiteFooter() {
           <p className="brand-logo" style={{ fontSize: "var(--text-lg)" }}>
             {name}
           </p>
-          <p style={{ margin: "0.25rem 0 0", color: "var(--text-tertiary)", fontSize: "11px" }}>
+          <p style={{ margin: "0.25rem 0 0", color: "var(--text-muted)", fontSize: "11px" }}>
             Tailored luxury garments for Men, Women and Kids — crafted with pure natural fibers in India.
           </p>
         </div>
@@ -364,7 +364,7 @@ export function SiteFooter() {
           </button>
         </div>
 
-        <div style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+        <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
           © {new Date().getFullYear()} {name}. All prices include statutory Goods &amp; Services Tax (CBIC HSN 61/62).
         </div>
       </div>

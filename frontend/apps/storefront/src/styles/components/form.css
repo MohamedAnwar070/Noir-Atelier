@@ -1,0 +1,200 @@
+/*
+ * Forms — <Field>/<TextField> (.field, .input) and hand-written native
+ * controls (.select-control, .textarea-control) share one control look.
+ */
+
+/* ---- Layout ---- */
+/* Vertical stack of fields inside a form (address, return, …) */
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.field,
+.form-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.38rem;
+  min-width: 0;
+}
+
+.form-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+/* ---- Labels ---- */
+.field__label,
+.field-label,
+.control-label {
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* Required marker rendered by <Field required> */
+.field__label span {
+  color: var(--state-error-text);
+}
+
+/* Stand-alone label above a control (outside a flex field group) */
+.field-label {
+  display: block;
+  margin-bottom: 0.38rem;
+}
+
+:is(.field, .form-field-group, .composer-comment-box) > .field-label {
+  margin-bottom: 0;
+}
+
+/* ---- Controls ---- */
+.input,
+.select-control,
+.textarea-control {
+  width: 100%;
+  min-height: var(--input-height);
+  padding: 0.62rem 0.95rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  outline: none;
+  transition:
+    border-color var(--duration-fast) ease,
+    box-shadow var(--duration-fast) ease,
+    background var(--duration-fast) ease;
+}
+
+:is(.input, .textarea-control)::placeholder {
+  color: var(--text-muted);
+}
+
+:is(.input, .select-control, .textarea-control):hover {
+  border-color: var(--text-muted);
+}
+
+:is(.input, .select-control, .textarea-control):focus {
+  border-color: var(--accent-gold);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+textarea.input,
+.textarea-control {
+  min-height: 96px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.select-control {
+  appearance: none;
+  padding-right: 2.4rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238c8881' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-position: right 0.9rem center;
+  background-repeat: no-repeat;
+  background-size: 14px;
+  cursor: pointer;
+}
+
+/* Compact pill select, e.g. catalog sort */
+.sort-select {
+  width: auto;
+  min-width: 190px;
+  min-height: 38px;
+  padding-block: 0.45rem;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+/* ---- Validation ---- */
+.input--invalid,
+.textarea-control.error,
+:is(.input, .textarea-control)[aria-invalid="true"] {
+  border-color: var(--state-error-text);
+  background: var(--state-error-bg);
+}
+
+:is(.input--invalid, .textarea-control.error):focus {
+  box-shadow: 0 0 0 3px var(--focus-ring-error);
+}
+
+.field__hint {
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+}
+
+.field__error,
+.field-error-msg {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  color: var(--state-error-text);
+  animation: fadeIn var(--duration-fast) ease;
+}
+
+.field-warning-msg {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--state-warning-border);
+  border-radius: var(--radius-xs);
+  background: var(--state-warning-bg);
+  color: var(--state-warning-text);
+  font-size: var(--text-2xs);
+  line-height: 1.45;
+}
+
+/* ---- Checkbox card ---- */
+.checkbox-control-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.checkbox-control-label input {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  accent-color: var(--accent-noir);
+  cursor: pointer;
+}
+
+/* ---- Form actions (modal footers) ---- */
+.modal-actions-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-1);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+
+@media (max-width: 520px) {
+  .form-two-col {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-actions-bar {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .modal-actions-bar .btn {
+    width: 100%;
+  }
+}

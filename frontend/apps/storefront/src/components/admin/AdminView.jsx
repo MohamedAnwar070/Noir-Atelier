@@ -133,9 +133,9 @@ export function AdminView() {
   }
 
   return (
-    <div className="admin-page-container">
+    <div className="page-container admin-page-container">
       {/* Header */}
-      <div className="admin-header-bar">
+      <div className="page-header">
         <div>
           <span className="hero-eyebrow">Governance &amp; Executive Telemetry</span>
           <h1 className="page-heading">Atelier Admin Portal</h1>
@@ -250,7 +250,7 @@ export function AdminView() {
                       <td>#{rma.order_id}</td>
                       <td>{rma.reason}</td>
                       <td>
-                        <span className="status-pill status-pending">
+                        <span className="badge status-pill status-pending">
                           Pending Studio Review
                         </span>
                       </td>
@@ -299,7 +299,7 @@ export function AdminView() {
                     <td>{prod.name}</td>
                     <td>{prod.department}</td>
                     <td>
-                      <span className={`stock-count-badge ${prod.stock_quantity <= 3 ? "low" : ""}`}>
+                      <span className={`badge stock-count-badge ${prod.stock_quantity <= 3 ? "low" : ""}`}>
                         {prod.stock_quantity} units
                       </span>
                     </td>

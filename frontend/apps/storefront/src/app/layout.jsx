@@ -1,5 +1,5 @@
 import "@noir/ui/tokens.css";
-import "../../styles.css";
+import "../styles/index.css";
 
 export const metadata = {
   title: "Noir Atelier — AI-Native Luxury Garment Platform",

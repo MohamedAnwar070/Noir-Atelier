@@ -1,0 +1,262 @@
+/* Product card — <ProductCard>. Container-query aware via `container-name: card`. */
+
+.product-card {
+  container: card / inline-size;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  cursor: pointer;
+  outline: none;
+  transition:
+    transform 220ms var(--ease-out),
+    box-shadow 220ms ease,
+    border-color 220ms ease;
+}
+
+.product-card:hover,
+.product-card:focus-visible {
+  transform: translateY(-4px);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-elevated);
+}
+
+/* ---- Media ---- */
+.product-media-wrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  background: var(--bg-subtle);
+}
+
+.product-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 400ms var(--ease-out);
+}
+
+.product-card:hover .product-image {
+  transform: scale(1.04);
+}
+
+/* Shown when a product has no photo (also used large in the detail modal) */
+.product-image-fallback {
+  background: var(--fill-placeholder);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 1.5rem;
+  color: var(--text-secondary);
+  font-family: var(--font-serif);
+  font-size: var(--text-lg);
+  text-align: center;
+}
+
+.product-image-fallback.large {
+  padding: var(--space-8);
+  font-size: var(--text-2xl);
+}
+
+/* ---- Overlays on the image ---- */
+.card-top-badges {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  left: 0.75rem;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+}
+
+.card-accent-pill {
+  padding: 0.25rem 0.65rem;
+  border-radius: var(--radius-pill);
+  background: var(--bg-glass-dark);
+  color: #fff; /* always over imagery */
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  backdrop-filter: blur(8px);
+}
+
+/* Composes .badge; .warning / .danger tones come from base/tones.css */
+.card-stock-pill {
+  font-size: 10px;
+}
+
+.card-wishlist-btn {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 50%;
+  background: var(--bg-glass);
+  color: var(--text-secondary);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  transition: transform 180ms ease, color 180ms ease;
+}
+
+.card-wishlist-btn:hover {
+  transform: scale(1.1);
+  color: var(--accent-noir);
+}
+
+.card-wishlist-btn.active {
+  color: #e11d48; /* brand "favourite" red, intentionally theme-independent */
+}
+
+/* Quick size picker revealed on hover / keyboard focus */
+.card-quick-sizes {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  left: 0.75rem;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.45rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-glass);
+  backdrop-filter: blur(12px);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+
+.product-card:hover .card-quick-sizes,
+.product-card:focus-within .card-quick-sizes {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.quick-size-chip {
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.quick-size-chip.active {
+  border-color: var(--accent-noir);
+  background: var(--accent-noir);
+  color: var(--text-on-dark);
+}
+
+/* ---- Body ---- */
+.product-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 1.15rem;
+}
+
+.product-card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.product-dept-tag {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.product-card-rating {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-secondary);
+  font-size: var(--text-2xs);
+}
+
+.product-card-title {
+  color: var(--text-primary);
+  font-family: var(--font-serif);
+  font-size: var(--text-lg);
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+/* ---- Footer: price + add to bag ---- */
+.product-card-footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: auto;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.product-price-stack {
+  display: flex;
+  flex-direction: column;
+}
+
+.product-price-main {
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  font-weight: 700;
+}
+
+.product-gst-caption {
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+
+.card-add-btn {
+  flex-shrink: 0;
+  min-width: 78px;
+}
+
+/* Brief confirmation state after quick-add */
+.card-add-btn.loading:disabled {
+  border-color: var(--accent-success);
+  background: var(--accent-success);
+  color: #fff;
+  opacity: 1;
+}
+
+/* ---- Narrow cards ---- */
+@container card (max-width: 245px) {
+  .product-card-body {
+    gap: 0.6rem;
+    padding: 0.85rem;
+  }
+
+  .product-card-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .product-card-footer .btn-pill {
+    width: 100%;
+  }
+}

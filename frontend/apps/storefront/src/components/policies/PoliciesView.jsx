@@ -16,7 +16,7 @@ export function PoliciesView() {
   const returnDays = businessConfig?.return_window_days || 7;
 
   return (
-    <div className="policies-page-container">
+    <div className="page-container policies-page-container">
       <div className="policies-header">
         <span className="hero-eyebrow">Legal &amp; Fiscal Governance</span>
         <h1 className="page-heading">Atelier Policies &amp; Compliance</h1>

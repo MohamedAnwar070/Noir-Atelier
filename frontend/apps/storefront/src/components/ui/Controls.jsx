@@ -87,17 +87,29 @@ export function Spinner() {
   return <span className="spinner" aria-hidden="true" />;
 }
 
-export function Button({ variant = "primary", loading = false, children, icon, className = "", ...props }) {
+export function Button({
+  variant = "primary",
+  size = "md",
+  loading = false,
+  isLoading = false,
+  disabled,
+  children,
+  icon,
+  className = "",
+  type = "button",
+  ...props
+}) {
+  const busy = loading || isLoading;
   return (
     <button
-      type="button"
-      className={`btn btn--${variant} ${className}`}
-      aria-busy={loading}
-      disabled={loading || props.disabled}
+      type={type}
+      className={`btn btn--${variant} btn--${size} ${busy ? "is-loading" : ""} ${className}`}
+      aria-busy={busy || undefined}
+      disabled={busy || disabled}
       {...props}
     >
-      {loading ? <Spinner /> : icon ? <Icon name={icon} size={16} /> : null}
-      <span>{children}</span>
+      {busy ? <Spinner /> : icon ? <Icon name={icon} size={16} /> : null}
+      <span className="btn__label">{children}</span>
     </button>
   );
 }

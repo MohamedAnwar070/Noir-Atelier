@@ -1,0 +1,377 @@
+/*
+ * Shopping bag drawer — <ShoppingBagDrawer>, rendered inside <Drawer>.
+ * Sections follow DOM order: empty state → shipping progress → line items →
+ * coupon → address → payment → summary → sticky place-order footer.
+ */
+
+.bag-content-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* Vertical rhythm inside each checkout block comes from `gap` only */
+.bag-coupon-section,
+.bag-checkout-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+/* ==== Empty bag ==== */
+.bag-empty-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60%;
+  padding: var(--space-4) 0;
+}
+
+.bag-empty-wrap .state-panel {
+  margin: 0;
+  box-shadow: none;
+}
+
+/* ==== Free-shipping progress ==== */
+.shipping-progress-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+
+.shipping-progress-text {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.unlocked-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--state-success-text);
+  font-weight: 600;
+}
+
+.shipping-progress-track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--border-subtle);
+}
+
+.shipping-progress-fill {
+  height: 100%;
+  background: var(--accent-success);
+  transition: width 300ms ease;
+}
+
+/* ==== Line items ==== */
+.bag-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.bag-line-item {
+  display: flex;
+  gap: 0.85rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.bag-item-thumb-wrap {
+  flex-shrink: 0;
+  width: 72px;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  background: var(--bg-subtle);
+}
+
+.bag-item-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.bag-item-details {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.bag-item-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.bag-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.bag-item-sub {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.bag-size-pill {
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+}
+
+.bag-unit-price {
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+}
+
+.bag-item-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.5rem;
+}
+
+.bag-item-total {
+  font-size: 13.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==== Coupon ==== */
+.coupon-form {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* Composes .input (components/form.css) — only the pill shape differs */
+.coupon-input {
+  flex: 1;
+  min-height: 36px;
+  padding: 0.45rem 0.95rem;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+}
+
+.applied-coupon-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0.55rem 0.95rem;
+  border: 1px solid var(--state-success-border);
+  border-radius: var(--radius-pill);
+  background: var(--state-success-bg);
+  color: var(--state-success-text);
+  font-size: var(--text-xs);
+}
+
+.coupon-lead {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.coupon-remove-btn {
+  border: none;
+  background: none;
+  color: var(--state-error-text);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.coupon-error-text {
+  color: var(--state-error-text);
+  font-size: 11px;
+}
+
+/* ==== Delivery address ==== */
+.checkout-subhead-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.addresses-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.address-option-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0.75rem 0.95rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.address-option-card:hover:not(.selected) {
+  border-color: var(--border-strong);
+}
+
+.address-option-card.selected {
+  border-color: var(--accent-noir);
+  background: var(--bg-subtle);
+}
+
+/* Keyboard focus lands on the visually hidden radio inside the card */
+.address-option-card:focus-within {
+  outline: 2px solid var(--accent-gold);
+  outline-offset: 2px;
+}
+
+.address-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.address-street {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.address-city-state {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.address-check {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent-noir);
+  color: var(--text-on-dark);
+  animation: toastIn 200ms var(--spring);
+}
+
+/* ==== Payment method ==== */
+.payment-options-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+
+.payment-method-chip {
+  padding: 0.65rem 0.45rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  background: var(--bg-surface);
+  font-size: 11px;
+  font-weight: 500;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.payment-method-chip:hover:not(.active) {
+  border-color: var(--border-strong);
+}
+
+.payment-method-chip.active {
+  border-color: var(--accent-noir);
+  background: var(--accent-noir);
+  color: var(--text-on-dark);
+}
+
+/* ==== Price summary ==== */
+.bag-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  font-size: var(--text-xs);
+}
+
+.summary-line {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-line.tax {
+  color: var(--text-secondary);
+}
+
+.summary-line.discount {
+  color: var(--state-success-text);
+}
+
+.summary-line.grand-total {
+  margin-top: 0.5rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border-strong);
+  font-size: var(--text-base);
+  font-weight: 700;
+}
+
+.grand-price {
+  font-size: var(--text-lg);
+}
+
+.checkout-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--state-error-border);
+  border-radius: var(--radius-xs);
+  background: var(--state-error-bg);
+  color: var(--state-error-text);
+  font-size: var(--text-xs);
+}
+
+/* ==== Sticky place-order footer ==== */
+/* Bleeds to the drawer edges by cancelling .overlay__body padding */
+.bag-actions-footer {
+  position: sticky;
+  bottom: calc(-1 * var(--space-fluid-md));
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 0 calc(-1 * var(--space-fluid-md)) calc(-1 * var(--space-fluid-md));
+  padding: var(--space-4) var(--space-fluid-md) calc(var(--space-4) + var(--safe-bottom));
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-page);
+}
+
+.checkout-guarantee-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+}

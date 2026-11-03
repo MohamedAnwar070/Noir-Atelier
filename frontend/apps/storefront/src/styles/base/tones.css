@@ -1,0 +1,62 @@
+/*
+ * Semantic tones — the single place where a tone modifier is mapped to colour.
+ *
+ * Modifiers below only set --tone-bg / --tone-fg / --tone-border; components
+ * consume them with a neutral fallback, e.g.
+ *   background: var(--tone-bg, var(--bg-subtle));
+ * To give a new component tones, add its modifier classes to these lists.
+ */
+
+/* Success */
+:is(
+  .badge--success,
+  .toast-success,
+  .state-panel--success,
+  .status-delivered,
+  .stock-count-badge:not(.low)
+) {
+  --tone-bg: var(--state-success-bg);
+  --tone-fg: var(--state-success-text);
+  --tone-border: var(--state-success-border);
+}
+
+/* Warning */
+:is(
+  .badge--warning,
+  .toast-warning,
+  .state-panel--warning,
+  .status-hold,
+  .status-pending,
+  .card-stock-pill.warning
+) {
+  --tone-bg: var(--state-warning-bg);
+  --tone-fg: var(--state-warning-text);
+  --tone-border: var(--state-warning-border);
+}
+
+/* Error */
+:is(
+  .badge--error,
+  .toast-error,
+  .state-panel--error,
+  .status-cancelled,
+  .stock-count-badge.low,
+  .card-stock-pill.danger
+) {
+  --tone-bg: var(--state-error-bg);
+  --tone-fg: var(--state-error-text);
+  --tone-border: var(--state-error-border);
+}
+
+/* Info */
+:is(
+  .badge--info,
+  .toast-info,
+  .state-panel--info,
+  .status-confirmed,
+  .payment-status-badge
+) {
+  --tone-bg: var(--state-info-bg);
+  --tone-fg: var(--state-info-text);
+  --tone-border: var(--state-info-border);
+}

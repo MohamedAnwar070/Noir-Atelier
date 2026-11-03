@@ -1,0 +1,37 @@
+/* Star rating — <StarRating> */
+
+.star-rating-display {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 11.5px;
+}
+
+.stars-gold-row {
+  display: inline-flex;
+  gap: 1px;
+}
+
+.star-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.star-icon.filled {
+  color: var(--accent-rating);
+}
+
+.star-icon.empty {
+  color: var(--border-strong);
+}
+
+.rating-score-num {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-size: 11px;
+}
+
+.rating-count-num {
+  color: var(--text-muted);
+  font-size: 11px;
+}

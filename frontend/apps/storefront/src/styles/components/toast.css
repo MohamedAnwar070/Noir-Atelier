@@ -1,0 +1,95 @@
+/*
+ * Toast notifications — <ToastContainer>.
+ * Tone comes from base/tones.css via .toast-{success|error|warning|info};
+ * an untoned toast falls back to info.
+ */
+
+.toast-container {
+  position: fixed;
+  top: calc(var(--header-h) + var(--safe-top) + 0.75rem);
+  right: var(--widget-offset);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: min(380px, calc(100vw - 2rem));
+  pointer-events: none; /* only the cards are interactive */
+}
+
+.toast-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.85rem 0.85rem 0.85rem 1rem;
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--tone-fg, var(--state-info-text));
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-elevated);
+  pointer-events: auto;
+  animation: toastIn 260ms var(--spring);
+}
+
+.toast-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--tone-bg, var(--state-info-bg));
+  color: var(--tone-fg, var(--state-info-text));
+}
+
+.toast-content {
+  flex: 1;
+  min-width: 0;
+  padding-top: 0.15rem;
+}
+
+.toast-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.toast-desc {
+  margin-top: 0.15rem;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.toast-close-btn {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background var(--duration-fast) ease, color var(--duration-fast) ease;
+}
+
+.toast-close-btn:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+/* Top-centre on phones, clear of the bottom tab bar and AI launcher */
+@media (max-width: 640px) {
+  .toast-container {
+    top: calc(var(--safe-top) + 0.75rem);
+    right: auto;
+    left: 50%;
+    width: calc(100vw - 1.5rem);
+    transform: translateX(-50%);
+  }
+}

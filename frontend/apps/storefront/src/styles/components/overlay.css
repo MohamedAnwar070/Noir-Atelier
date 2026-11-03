@@ -1,0 +1,179 @@
+/*
+ * Overlay — shared shell for <Modal size> and <Drawer>.
+ *   .overlay                      scrim + positioning
+ *   .overlay__panel--modal        centred dialog, width from .modal--{sm|md|lg}
+ *   .overlay__panel--drawer       right-hand panel
+ * Below 640px both become a bottom sheet with a grabber.
+ *
+ * All overlays share one z-index layer, so DOM order decides stacking
+ * (e.g. the address modal rendered after the bag drawer sits above it).
+ */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-drawer);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-fluid-md);
+  background: var(--overlay-scrim);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  overscroll-behavior: contain;
+  animation: fadeIn var(--duration-base) var(--ease-out);
+}
+
+.overlay__panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: calc(100dvh - 2.5rem);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-elevated);
+  outline: none;
+}
+
+/* ---- Modal ---- */
+.overlay__panel--modal {
+  max-width: 600px; /* md, also the default */
+  border-radius: var(--radius-sheet);
+  animation: modalScaleIn 220ms var(--ease-out);
+}
+
+.overlay__panel.modal--sm { max-width: 440px; }
+.overlay__panel.modal--lg { max-width: 1080px; }
+
+.overlay__panel.modal--lg .overlay__body {
+  padding: var(--space-fluid-lg);
+}
+
+/* ---- Drawer ---- */
+.overlay--drawer {
+  align-items: stretch;
+  justify-content: flex-end;
+  padding: 0;
+}
+
+.overlay__panel--drawer {
+  width: min(100%, var(--drawer-width));
+  height: 100vh;
+  height: 100dvh;
+  max-height: none;
+  border-right: none;
+  border-radius: var(--radius-sheet) 0 0 var(--radius-sheet);
+  background: var(--bg-page);
+  animation: drawerSlideIn 260ms var(--ease-out);
+}
+
+/* ---- Regions ---- */
+.overlay__header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: 1.15rem var(--space-fluid-md);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.overlay__heading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.overlay__title {
+  font-size: var(--text-xl);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.overlay__subtitle {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.overlay__header-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.overlay__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--space-fluid-md);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.overlay__footer {
+  flex-shrink: 0;
+  padding: 1rem var(--space-fluid-md) calc(1rem + var(--safe-bottom));
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+/* Drag affordance — only visible in bottom-sheet mode */
+.sheet-grabber {
+  display: none;
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 2;
+  width: 42px;
+  height: 5px;
+  border-radius: var(--radius-pill);
+  background: var(--border-strong);
+  transform: translateX(-50%);
+}
+
+/* ---- Bottom sheet (mobile) ---- */
+@media (max-width: 640px) {
+  .overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  /* (0,2,0) so it also overrides the .overlay__panel.modal--{size} widths */
+  .overlay .overlay__panel {
+    width: 100%;
+    max-width: 100%;
+    border: 1px solid var(--border-subtle);
+    border-bottom: none;
+    border-radius: 26px 26px 0 0;
+    animation: sheetSlideUp 280ms var(--ease-out);
+  }
+
+  .overlay__panel--modal {
+    max-height: 94dvh;
+  }
+
+  .overlay__panel--drawer {
+    height: 92vh;
+    height: 92dvh;
+  }
+
+  .overlay__header {
+    padding-top: 1.45rem;
+  }
+
+  .overlay__body {
+    padding-bottom: calc(var(--space-fluid-md) + var(--safe-bottom));
+  }
+
+  .sheet-grabber {
+    display: block;
+  }
+}

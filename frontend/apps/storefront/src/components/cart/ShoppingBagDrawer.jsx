@@ -272,7 +272,8 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
                 <form className="coupon-form" onSubmit={handleApplyCoupon}>
                   <input
                     type="text"
-                    className={`coupon-input ${couponError ? "error" : ""}`}
+                    className={`input coupon-input ${couponError ? "input--invalid" : ""}`}
+                    aria-invalid={Boolean(couponError)}
                     placeholder="Promo code (e.g. ATELIER10)"
                     value={couponInput}
                     onChange={(e) => {
@@ -431,7 +432,7 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
         title="Add Delivery Address"
         size="md"
       >
-        <form onSubmit={handleSaveAddress} className="address-form-modal">
+        <form onSubmit={handleSaveAddress} className="form-stack" noValidate>
           <TextField
             label="Street Address / Residence"
             value={addrForm.street}

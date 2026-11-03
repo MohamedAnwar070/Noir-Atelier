@@ -1,0 +1,42 @@
+/* Page shell — app frame, main region, and the shared page container/header */
+
+.web-app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.site-main {
+  flex: 1 0 auto;
+  width: 100%;
+  min-width: 0;
+}
+
+/* Centred content column; pages set only their width via --page-max */
+.page-container {
+  width: 100%;
+  max-width: var(--page-max, var(--container-max));
+  margin: 0 auto;
+  padding: 2rem var(--space-fluid-md) 4rem;
+}
+
+/* Title block on the left, actions on the right; wraps on narrow screens */
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.page-heading {
+  margin: 0.25rem 0 0.45rem;
+  font-size: var(--text-3xl);
+}
+
+.page-subheading {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}

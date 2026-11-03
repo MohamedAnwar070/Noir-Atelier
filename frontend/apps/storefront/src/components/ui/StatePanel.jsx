@@ -13,11 +13,11 @@ export function ProductGridSkeleton({ count = 6 }) {
     <div className="product-grid" role="status" aria-busy="true" aria-label="Loading collection">
       {Array.from({ length: count }).map((_, i) => (
         <div className="product-card product-card--skeleton" key={i}>
-          <Skeleton className="skeleton--media" style={{ aspectRatio: "3 / 4", width: "100%" }} />
-          <div className="product-card-body" style={{ padding: "1rem" }}>
-            <Skeleton className="skeleton--line skeleton--short" style={{ height: "14px", width: "40%", marginBottom: "8px" }} />
-            <Skeleton className="skeleton--line" style={{ height: "18px", width: "80%", marginBottom: "8px" }} />
-            <Skeleton className="skeleton--line skeleton--medium" style={{ height: "16px", width: "50%" }} />
+          <Skeleton className="skeleton--media" />
+          <div className="product-card-body">
+            <Skeleton className="skeleton--line skeleton--short" />
+            <Skeleton className="skeleton--line skeleton--title" />
+            <Skeleton className="skeleton--line skeleton--medium" />
           </div>
         </div>
       ))}
@@ -25,12 +25,11 @@ export function ProductGridSkeleton({ count = 6 }) {
   );
 }
 
-export function ListSkeleton({ count = 3, rows = 3 }) {
-  const actualCount = count || rows;
+export function ListSkeleton({ count = 3 }) {
   return (
-    <div className="stack" role="status" aria-busy="true" aria-label="Loading" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-      {Array.from({ length: actualCount }).map((_, i) => (
-        <div key={i} className="skeleton" style={{ height: "72px", borderRadius: "14px", width: "100%" }} />
+    <div className="stack" role="status" aria-busy="true" aria-label="Loading">
+      {Array.from({ length: count }).map((_, i) => (
+        <Skeleton key={i} className="skeleton--row" />
       ))}
     </div>
   );
@@ -66,7 +65,7 @@ export function StatePanel({
       {copy.description && <p className="state-panel__text">{copy.description}</p>}
       {detail && <p className="state-panel__detail">{detail}</p>}
       {(actionLabel || onAction || action || secondaryAction) && (
-        <div className="state-panel__actions" style={{ marginTop: "1rem" }}>
+        <div className="state-panel__actions">
           {(actionLabel || onAction || action) && (
             <button
               type="button"
@@ -96,10 +95,13 @@ export function ToastContainer({ toasts = [], onDismiss }) {
 
   return (
     <div className="toast-container" role="region" aria-label="Notifications" aria-live="polite">
-      {toasts.map((t) => (
-        <div key={t.id} className={`toast-card toast-${t.type || t.tone || "info"}`}>
+      {toasts.map((t) => {
+        const tone = t.type || t.tone || "info";
+        const icon = { error: "alert", warning: "alert", info: "info", success: "check" }[tone] || "check";
+        return (
+        <div key={t.id} className={`toast-card toast-${tone}`} role={tone === "error" ? "alert" : undefined}>
           <div className="toast-icon">
-            <Icon name={t.type === "error" ? "alert" : "check"} size={16} />
+            <Icon name={icon} size={16} />
           </div>
           <div className="toast-content">
             <div className="toast-title">{t.title}</div>
@@ -115,7 +117,8 @@ export function ToastContainer({ toasts = [], onDismiss }) {
             <Icon name="close" size={14} />
           </button>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

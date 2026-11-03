@@ -33,7 +33,15 @@ export function Overlay({
       first?.focus();
     });
 
+    // With stacked overlays (e.g. address modal over the bag drawer), only the
+    // top-most dialog should react to Escape / Tab.
+    const isTopMost = () => {
+      const dialogs = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
+      return dialogs[dialogs.length - 1] === panelRef.current;
+    };
+
     const onKeyDown = (event) => {
+      if (!isTopMost()) return;
       if (event.key === "Escape") {
         event.stopPropagation();
         onClose?.();
@@ -87,7 +95,7 @@ export function Overlay({
               {headerExtra}
               <button
                 type="button"
-                className="icon-btn"
+                className="icon-btn overlay__close"
                 onClick={onClose}
                 aria-label="Close"
               >
