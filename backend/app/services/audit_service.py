@@ -1,3 +1,4 @@
+import threading
 from typing import Any, Dict, Optional, Type
 
 from sqlalchemy import select
@@ -7,6 +8,9 @@ from ..auth import ActorContext
 from ..models import AuditLog, IdempotencyKey
 from ..utils.id_generator import PREFIX_MAP, format_short_id
 
+_ID_LOCK = threading.RLock()
+_HIGH_WATER: Dict[tuple, int] = {}
+
 
 def next_entity_id(
     db: Session,
@@ -15,16 +19,23 @@ def next_entity_id(
     entity_type: str,
     start_seq: int = 1001,
 ) -> str:
-    prefix, _ = PREFIX_MAP[entity_type]
-    existing_ids = db.scalars(select(id_attr)).all()
-    max_num = start_seq - 1
-    for raw in existing_ids:
-        if not raw or not str(raw).startswith(f"{prefix}-"):
-            continue
-        tail = str(raw).split("-", 1)[1]
-        if tail.isdigit():
-            max_num = max(max_num, int(tail))
-    return format_short_id(entity_type, max_num + 1)
+    with _ID_LOCK:
+        prefix, _ = PREFIX_MAP[entity_type]
+        existing_ids = db.scalars(select(id_attr)).all()
+        max_num = start_seq - 1
+        for raw in existing_ids:
+            if not raw or not str(raw).startswith(f"{prefix}-"):
+                continue
+            tail = str(raw).split("-", 1)[1]
+            if tail.isdigit():
+                max_num = max(max_num, int(tail))
+        bind_key = (id(db.get_bind()), entity_type)
+        prev_high = _HIGH_WATER.get(bind_key, start_seq - 1)
+        if not existing_ids:
+            prev_high = start_seq - 1
+        next_num = max(max_num, prev_high) + 1
+        _HIGH_WATER[bind_key] = next_num
+        return format_short_id(entity_type, next_num)
 
 
 def record_audit(

@@ -1,10 +1,12 @@
+import json
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Header, Query, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..auth import ActorContext, require_agent_or_admin, require_authenticated, resolve_actor
+from ..config import get_settings
 from ..database import get_db
 from ..models import Invoice, Shipment
 from ..schemas.order_schema import (
@@ -17,14 +19,19 @@ from ..schemas.order_schema import (
 from ..services.order_service import (
     calculate_order_preview,
     cancel_order,
+    claim_order_pickup,
     create_order,
     get_order_details,
     get_orders_analytics,
+    handle_demo_payment,
+    handle_payment_webhook,
     initiate_payment,
     list_customer_orders,
     schedule_shipment,
+    sweep_expired_orders,
 )
 from ..utils.exceptions import AppError
+from ..utils.hmac_auth import verify_signature
 
 router = APIRouter()
 
@@ -41,10 +48,34 @@ def api_calculate_order(
 @router.post("/api/orders", status_code=201)
 def api_create_order(
     req: OrderCreateRequest,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
     db: Session = Depends(get_db),
     actor: ActorContext = Depends(require_authenticated),
 ) -> Dict[str, Any]:
+    if idempotency_key and not req.request_key:
+        req.request_key = idempotency_key
     return create_order(db, actor, req)
+
+
+@router.post("/api/orders/hold", status_code=201)
+def api_create_order_hold(
+    req: OrderCreateRequest,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    db: Session = Depends(get_db),
+    actor: ActorContext = Depends(require_authenticated),
+) -> Dict[str, Any]:
+    if idempotency_key and not req.request_key:
+        req.request_key = idempotency_key
+    req.hold_only = True
+    return create_order(db, actor, req)
+
+
+@router.post("/api/orders/sweep-expired")
+def api_sweep_expired_orders(
+    db: Session = Depends(get_db),
+    _actor: ActorContext = Depends(resolve_actor),
+) -> Dict[str, Any]:
+    return sweep_expired_orders(db)
 
 
 @router.get("/api/orders")
@@ -76,11 +107,52 @@ def api_get_order(
 @router.post("/api/orders/{order_id}/cancel")
 def api_cancel_order(
     order_id: str,
-    req: OrderCancelRequest,
+    req: Optional[OrderCancelRequest] = None,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
     db: Session = Depends(get_db),
     actor: ActorContext = Depends(require_authenticated),
 ) -> Dict[str, Any]:
-    return cancel_order(db, actor, order_id, req)
+    cancel_req = req or OrderCancelRequest()
+    if idempotency_key and not cancel_req.request_key:
+        cancel_req.request_key = idempotency_key
+    return cancel_order(db, actor, order_id, cancel_req)
+
+
+@router.post("/api/orders/{order_id}/pickup-claim")
+def api_claim_order_pickup(
+    order_id: str,
+    db: Session = Depends(get_db),
+    actor: ActorContext = Depends(require_authenticated),
+) -> Dict[str, Any]:
+    return claim_order_pickup(db, actor, order_id)
+
+
+@router.post("/api/payments/webhook")
+async def api_payment_webhook(
+    request: Request,
+    x_signature: Optional[str] = Header(default=None, alias="X-Signature"),
+    db: Session = Depends(get_db),
+    actor: ActorContext = Depends(resolve_actor),
+) -> Dict[str, Any]:
+    raw_bytes = await request.body()
+    raw_str = raw_bytes.decode("utf-8", errors="replace")
+    secret = get_settings().webhook_secret
+    if not verify_signature(raw_bytes, x_signature, secret):
+        raise AppError("invalid_signature", "Webhook signature verification failed.", 401)
+    try:
+        payload = json.loads(raw_str) if raw_str else {}
+    except json.JSONDecodeError as exc:
+        raise AppError("validation_error", f"Malformed JSON body: {exc}", 400) from exc
+    return handle_payment_webhook(db, actor, payload, raw_str)
+
+
+@router.post("/api/payments/demo/{order_id}")
+def api_demo_payment(
+    order_id: str,
+    db: Session = Depends(get_db),
+    actor: ActorContext = Depends(resolve_actor),
+) -> Dict[str, Any]:
+    return handle_demo_payment(db, actor, order_id)
 
 
 @router.post("/api/payments/initiate")

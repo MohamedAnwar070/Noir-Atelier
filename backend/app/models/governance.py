@@ -135,7 +135,7 @@ class AgentSession(Base, TimestampMixin):
 class IdempotencyKey(Base, TimestampMixin):
     __tablename__ = "idempotency_keys"
 
-    request_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    request_key: Mapped[str] = mapped_column(String(128), primary_key=True)
     actor_id: Mapped[str] = mapped_column(String(64), nullable=False)
     resource_type: Mapped[str] = mapped_column(String(32), nullable=False)
     resource_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)

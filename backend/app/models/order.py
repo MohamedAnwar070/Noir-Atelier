@@ -76,9 +76,19 @@ class Order(Base, TimestampMixin):
     total_gst_inr: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     shipping_fee_inr: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"), nullable=False)
     grand_total_inr: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    total_paise: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     currency: Mapped[str] = mapped_column(String(8), default="INR", nullable=False)
     coupon_code: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     signature_required: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    hold_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    paid_amount_paise: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    cancelled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    picked_up_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    review_reason: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    refund_flag: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    locker_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    pickup_code: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
 
     items: Mapped[List["OrderItem"]] = relationship(
         back_populates="order", cascade="all, delete-orphan"

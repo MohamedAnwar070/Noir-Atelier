@@ -90,6 +90,8 @@ class Settings:
 
     payment_provider: str
     mock_payment_success_rate: float
+    webhook_secret: str
+    hold_seconds: int
     shipping_provider: str
     email_provider: str
     email_from: str
@@ -162,6 +164,8 @@ def get_settings() -> Settings:
         rate_limit_anon=int(os.environ.get("RATE_LIMIT_ANON", "30")),
         payment_provider=os.environ.get("PAYMENT_PROVIDER", "mock"),
         mock_payment_success_rate=float(os.environ.get("MOCK_PAYMENT_SUCCESS_RATE", "0.95")),
+        webhook_secret=os.environ.get("WEBHOOK_SECRET", "noir-webhook-secret-key"),
+        hold_seconds=int(os.environ.get("HOLD_SECONDS", "120")),
         shipping_provider=os.environ.get("SHIPPING_PROVIDER", "mock"),
         email_provider=os.environ.get("EMAIL_PROVIDER", "console"),
         email_from=os.environ.get("EMAIL_FROM", "care@noir.test"),

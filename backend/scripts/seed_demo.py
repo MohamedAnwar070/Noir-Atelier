@@ -512,7 +512,17 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 service_account="svc-order",
                 resource_type="orders",
                 action="write",
-                allowed_endpoints=["/api/orders", "/api/orders/{id}", "/api/orders/{id}/cancel", "/api/payments/initiate"],
+                allowed_endpoints=[
+                    "/api/orders",
+                    "/api/orders/hold",
+                    "/api/orders/sweep-expired",
+                    "/api/orders/{id}",
+                    "/api/orders/{id}/cancel",
+                    "/api/orders/{id}/pickup-claim",
+                    "/api/payments/initiate",
+                    "/api/payments/webhook",
+                    "/api/payments/demo/{id}",
+                ],
                 max_value_inr=50000,
             ),
             AgentPermission(

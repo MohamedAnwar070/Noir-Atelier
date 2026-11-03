@@ -1,7 +1,7 @@
 from decimal import Decimal
 from typing import Any, Dict, Optional
 
-from sqlalchemy import Boolean, ForeignKey, JSON, Numeric, String
+from sqlalchemy import Boolean, ForeignKey, Integer, JSON, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..database import Base
@@ -28,6 +28,10 @@ class Payment(Base, TimestampMixin):
     method: Mapped[str] = mapped_column(String(32), nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False, index=True)
     amount_inr: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    amount_paise: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    event_id: Mapped[Optional[str]] = mapped_column(String(120), unique=True, nullable=True, index=True)
+    outcome: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    raw_body: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     transaction_id: Mapped[Optional[str]] = mapped_column(String(80), unique=True, nullable=True)
     gateway_response: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
 

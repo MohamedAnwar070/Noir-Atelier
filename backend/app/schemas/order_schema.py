@@ -25,6 +25,8 @@ class OrderCreateRequest(BaseModel):
     payment_method: str = "upi"
     coupon_code: Optional[str] = None
     request_key: Optional[str] = None
+    hold_only: bool = False
+    hold_seconds: Optional[int] = None
 
 
 class OrderItemDTO(BaseModel):

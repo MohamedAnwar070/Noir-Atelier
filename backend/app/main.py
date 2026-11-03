@@ -51,6 +51,11 @@ async def handle_app_error(request: Request, exc: AppError) -> JSONResponse:
             "message": exc.message,
             "details": exc.details,
             "trace_id": trace_id,
+            "error": {
+                "code": exc.code,
+                "message": exc.message,
+                "details": exc.details,
+            },
         },
     )
 
