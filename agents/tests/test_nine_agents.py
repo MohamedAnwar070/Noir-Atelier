@@ -244,6 +244,14 @@ class TestNineAgentsArchitecture(unittest.TestCase):
         body = http_chat.json()
         self.assertEqual(body["routed_agent"], "catalog_agent")
         self.assertTrue(any(p["product_id"] == "PRD-005" for p in body["data"]["products"]))
+        self.assertIn("react_steps", body)
+        self.assertGreaterEqual(len(body["react_steps"]), 4)
+        self.assertIn("react", body["active_patterns"])
+        self.assertIn("reflection", body["active_patterns"])
+        self.assertIn("step_budget", body["active_patterns"])
+        self.assertTrue(body["reflection_verified"])
+        self.assertLessEqual(body["steps_taken"], body["step_budget_max"])
+        self.assertEqual(body["tool_traces"][0]["risk_level"], "read_only")
 
 
 if __name__ == "__main__":

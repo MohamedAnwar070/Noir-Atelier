@@ -15,6 +15,14 @@ class AgentRole(str, Enum):
     CONFIG = "config_agent"
 
 
+class ToolRiskLevel(str, Enum):
+    READ_ONLY = "read_only"
+    CREATE = "create"
+    MODIFY = "modify"
+    DELETE = "delete"
+    FINANCIAL = "financial"
+
+
 AGENT_SERVICE_ACCOUNT_MAP: Dict[str, str] = {
     AgentRole.CATALOG.value: "svc-catalog",
     AgentRole.CART.value: "svc-cart",
@@ -34,11 +42,28 @@ class ToolCallTrace(BaseModel):
     tool_name: str
     http_method: str
     endpoint: str
+    risk_level: str = ToolRiskLevel.READ_ONLY.value
     status_code: int
     latency_ms: float
     allowed_by_gate: bool = True
     error: Optional[str] = None
     summary: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ReActStep(BaseModel):
+    step_number: int
+    layer: str  # perception | reasoning | action | reflection
+    thought: str
+    planned_action: Optional[str] = None
+    observation: Optional[str] = None
+    reflection: Optional[str] = None
+
+
+class MemorySnapshot(BaseModel):
+    namespace: str = "CUS-001:SES-1001"
+    short_term_turns: int = 0
+    episodic_events: List[str] = Field(default_factory=list)
+    rag_sources: List[str] = Field(default_factory=list)
 
 
 class AgentRequest(BaseModel):
@@ -61,6 +86,12 @@ class AgentResponse(BaseModel):
     data: Dict[str, Any] = Field(default_factory=dict)
     tool_traces: List[ToolCallTrace] = Field(default_factory=list)
     policy_citations: List[str] = Field(default_factory=list)
+    active_patterns: List[str] = Field(default_factory=list)
+    react_steps: List[ReActStep] = Field(default_factory=list)
+    memory: MemorySnapshot = Field(default_factory=MemorySnapshot)
+    steps_taken: int = 0
+    step_budget_max: int = 10
+    reflection_verified: bool = True
 
 
 class AgentGraphState(BaseModel):
@@ -76,3 +107,9 @@ class AgentGraphState(BaseModel):
     data: Dict[str, Any] = Field(default_factory=dict)
     tool_traces: List[ToolCallTrace] = Field(default_factory=list)
     policy_citations: List[str] = Field(default_factory=list)
+    active_patterns: List[str] = Field(default_factory=list)
+    react_steps: List[ReActStep] = Field(default_factory=list)
+    memory: MemorySnapshot = Field(default_factory=MemorySnapshot)
+    steps_taken: int = 0
+    step_budget_max: int = 10
+    reflection_verified: bool = True

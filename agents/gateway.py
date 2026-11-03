@@ -1,7 +1,7 @@
 import re
 from typing import Dict, List, Optional, Tuple
 
-from .schemas.state import AGENT_SERVICE_ACCOUNT_MAP, AgentRole
+from .schemas.state import AGENT_SERVICE_ACCOUNT_MAP, AgentRole, ToolRiskLevel
 
 INJECTION_PATTERNS: List[Tuple[str, re.Pattern[str]]] = [
     (
@@ -115,6 +115,20 @@ AGENT_VALUE_CEILINGS_INR: Dict[str, int] = {
     AgentRole.ORDER.value: 50000,
     AgentRole.RETURNS.value: 5000,
 }
+
+
+def classify_endpoint_risk(method: str, endpoint: str) -> str:
+    m = method.upper()
+    path = endpoint.lower()
+    if m == "GET":
+        return ToolRiskLevel.READ_ONLY.value
+    if any(k in path for k in ("/orders", "/payments", "/refunds", "/returns")):
+        return ToolRiskLevel.FINANCIAL.value
+    if m == "DELETE" or "clear" in path or "discontinue" in path:
+        return ToolRiskLevel.DELETE.value
+    if m in ("PUT", "PATCH"):
+        return ToolRiskLevel.MODIFY.value
+    return ToolRiskLevel.CREATE.value
 
 
 def _match_path(pattern: str, actual_path: str) -> bool:

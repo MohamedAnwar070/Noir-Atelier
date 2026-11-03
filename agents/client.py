@@ -4,7 +4,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import httpx
 
-from .gateway import ToolPolicyGate, ToolPolicyGateError
+from .gateway import ToolPolicyGate, ToolPolicyGateError, classify_endpoint_risk
 from .schemas.state import ToolCallTrace
 
 
@@ -62,6 +62,7 @@ class PlatformApiClient:
                         tool_name=tool_name,
                         http_method=method.upper(),
                         endpoint=endpoint,
+                        risk_level=classify_endpoint_risk(method, endpoint),
                         status_code=403,
                         latency_ms=latency,
                         allowed_by_gate=False,
@@ -131,6 +132,7 @@ class PlatformApiClient:
                     tool_name=tool_name,
                     http_method=method.upper(),
                     endpoint=endpoint,
+                    risk_level=classify_endpoint_risk(method, endpoint),
                     status_code=status_code,
                     latency_ms=latency,
                     allowed_by_gate=True,
