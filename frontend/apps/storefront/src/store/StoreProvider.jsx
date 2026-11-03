@@ -6,6 +6,13 @@ import { applyFontScale, applyTheme, getInitialFontScale, getInitialTheme } from
 import { classifyApiError, friendlyErrorMessage } from "@noir/ui/states.js";
 import { LIMITS, STAFF_ROLES } from "@/config/ui.config";
 import { useAssistant } from "@/hooks/useAssistant";
+import {
+  buildTaxRules,
+  normalizeCart,
+  normalizeOrder,
+  normalizePaymentMethod,
+  normalizeProduct,
+} from "./normalizers";
 
 const StoreContext = createContext(null);
 
@@ -28,73 +35,6 @@ function writeJson(key, value) {
   } catch {
     /* storage unavailable */
   }
-}
-
-export function normalizeProduct(p) {
-  if (!p) return p;
-  const price = Number(p.price ?? p.mrp_inr ?? 0);
-  const stock = Number(p.stock_quantity ?? p.stock ?? 0);
-  const sizes =
-    Array.isArray(p.sizes) && p.sizes.length
-      ? p.sizes
-      : Array.isArray(p.sizes_available) && p.sizes_available.length
-      ? p.sizes_available
-      : ["S", "M", "L", "XL"];
-  const rating = Number(p.average_rating ?? p.rating ?? 5.0);
-  const reviewCount = Number(p.review_count ?? (p.reviews?.length ?? 1));
-  const accentTag = p.accent_tag || (p.department ? `100% Tailored ${p.department}` : "Atelier Edition");
-
-  return {
-    ...p,
-    price,
-    mrp_inr: p.mrp_inr ?? price.toFixed(2),
-    stock,
-    stock_quantity: stock,
-    sizes,
-    sizes_available: sizes,
-    average_rating: rating,
-    rating,
-    review_count: reviewCount,
-    accent_tag: accentTag,
-  };
-}
-
-/**
- * Cart API → view model. The API returns totals at the top level and lines as
- * { cart_id, product_id, product_name, unit_mrp_inr, line_mrp_inr, gst_rate_pct,
- * included_gst_inr }. Views read `name`, `price` and `lineTotal`, and the
- * applied coupon (the API does not echo it, so we attach the code we sent).
- */
-export function normalizeCart(raw, couponCode = null) {
-  if (!raw) return null;
-  const items = (raw.items || []).map((line) => {
-    const price = Number(line.unit_mrp_inr ?? line.price ?? 0);
-    const quantity = Number(line.quantity || 0);
-    return {
-      ...line,
-      name: line.product_name || line.name || line.product_id,
-      price,
-      quantity,
-      lineTotal: Number(line.line_mrp_inr ?? price * quantity),
-    };
-  });
-  const discount = Number(raw.discount_inr || 0);
-  return {
-    ...raw,
-    items,
-    coupon: couponCode ? { code: couponCode, discount, description: discount > 0 ? "Discount applied" : "Applied" } : null,
-  };
-}
-
-/** Payment method API → view model ({ method_id, name } → { id, label }). */
-function normalizePaymentMethod(m) {
-  return {
-    ...m,
-    id: m.method_id ?? m.id,
-    label: m.name ?? m.label ?? m.method_id,
-    minOrder: Number(m.min_order_inr ?? 0),
-    maxOrder: m.max_order_inr != null ? Number(m.max_order_inr) : Infinity,
-  };
 }
 
 function sortProducts(items, sort) {
@@ -236,7 +176,7 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     setOrders((prev) => ({ ...prev, status: prev.items.length ? "refreshing" : "loading", error: null }));
     try {
       const items = await api.listOrders();
-      setOrders({ status: "ready", items: Array.isArray(items) ? items : [], error: null });
+      setOrders({ status: "ready", items: (Array.isArray(items) ? items : []).map(normalizeOrder), error: null });
       return items;
     } catch (error) {
       setOrders((prev) => ({ ...prev, status: "error", error }));
@@ -611,30 +551,27 @@ export function StoreProvider({ children, initialPage = "shop" }) {
 
   const assistant = useAssistant({ api, actor, onAfterAction: refreshAfterAssistant });
 
+  // Business rules come from the backend config — never hard-coded in views.
   const business = config.business || {};
-  const freeShippingMin = Number(business.shipping?.free_shipping_threshold_inr ?? 2500);
+  const taxRules = useMemo(() => buildTaxRules(business.tax), [business.tax]);
+  const freeShippingMin = Number(business.shipping?.free_shipping_threshold_inr ?? 1999);
+  const defaultShippingFee = Number(business.shipping?.default_shipping_fee_inr ?? 99);
   const cartItems = cart?.items || [];
   const cartCount = cartItems.reduce((sum, i) => sum + Number(i.quantity || 0), 0);
 
   // Cart totals come from the API (prices are GST-inclusive, so GST is shown, not added).
   // Fallbacks only cover the brief window before the first cart response.
-  const gstAtRate = (rate) =>
-    cartItems
-      .filter((i) => Number(i.gst_rate_pct) === rate)
-      .reduce((sum, i) => sum + Number(i.included_gst_inr || 0), 0);
   const cartSubtotal = Number(cart?.subtotal_mrp_inr ?? cartItems.reduce((sum, i) => sum + i.lineTotal, 0));
   const cartDiscount = Number(cart?.discount_inr ?? 0);
-  const cartGst5 = gstAtRate(5);
-  const cartGst12 = gstAtRate(12);
   const cartShipping = Number(
-    cart?.shipping_fee_inr ?? (cartCount > 0 && cartSubtotal < freeShippingMin ? 250 : 0)
+    cart?.shipping_fee_inr ?? (cartCount > 0 && cartSubtotal < freeShippingMin ? defaultShippingFee : 0)
   );
   const cartGrandTotal = Number(cart?.grand_total_inr ?? Math.max(0, cartSubtotal - cartDiscount + cartShipping));
   const cartTotals = {
     subtotal: cartSubtotal,
     discount: cartDiscount,
-    gst5: cartGst5,
-    gst12: cartGst12,
+    gstLines: cart?.gstLines || [], // [{ rate, amount }] — whatever slabs the API actually applied
+    gstTotal: Number(cart?.total_gst_inr ?? 0),
     shipping: cartShipping,
     grandTotal: cartGrandTotal,
   };
@@ -715,6 +652,7 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     businessConfig: business,
     storefrontConfig: business?.storefront_ui || {},
     freeShippingMin,
+    taxRules,
     actors,
     actorsList: actors,
     actor,

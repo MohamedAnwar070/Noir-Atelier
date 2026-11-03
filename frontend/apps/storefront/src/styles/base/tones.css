@@ -12,7 +12,9 @@
   .badge--success,
   .toast-success,
   .state-panel--success,
+  .status-paid,
   .status-delivered,
+  .status-picked_up,
   .stock-count-badge:not(.low)
 ) {
   --tone-bg: var(--state-success-bg);
@@ -25,8 +27,9 @@
   .badge--warning,
   .toast-warning,
   .state-panel--warning,
-  .status-hold,
   .status-pending,
+  .status-needs_review,
+  .status-pending_return,
   .card-stock-pill.warning
 ) {
   --tone-bg: var(--state-warning-bg);
@@ -40,6 +43,7 @@
   .toast-error,
   .state-panel--error,
   .status-cancelled,
+  .status-expired,
   .stock-count-badge.low,
   .card-stock-pill.danger
 ) {
@@ -54,6 +58,7 @@
   .toast-info,
   .state-panel--info,
   .status-confirmed,
+  .status-shipped,
   .payment-status-badge
 ) {
   --tone-bg: var(--state-info-bg);

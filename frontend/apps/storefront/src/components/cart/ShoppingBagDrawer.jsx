@@ -33,6 +33,7 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
     paymentMethods,
     placeOrder,
     freeShippingMin,
+    taxRules,
     notify,
     navigateTo,
   } = useStore();
@@ -373,19 +374,15 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
                 </div>
               )}
 
-              {cartTotals.gst5 > 0 && (
-                <div className="summary-line tax">
-                  <span>GST 5% (HSN 61/62 under ₹2,500)</span>
-                  <span>{formatInr(cartTotals.gst5)}</span>
+              {/* Prices are GST-inclusive: these lines show the tax inside the subtotal */}
+              {cartTotals.gstLines.map(({ rate, amount }) => (
+                <div key={rate} className="summary-line tax">
+                  <span>
+                    Incl. GST {rate}% (garments {taxRules.describe(rate)})
+                  </span>
+                  <span>{formatInr(amount)}</span>
                 </div>
-              )}
-
-              {cartTotals.gst12 > 0 && (
-                <div className="summary-line tax">
-                  <span>GST 12% (HSN 61/62 above ₹2,500)</span>
-                  <span>{formatInr(cartTotals.gst12)}</span>
-                </div>
-              )}
+              ))}
 
               <div className="summary-line">
                 <span>Boutique Delivery</span>

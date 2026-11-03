@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useStore, normalizeProduct } from "@/store/StoreProvider";
+import { useStore } from "@/store/StoreProvider";
+import { normalizeProduct } from "@/store/normalizers";
 import { Modal } from "@/components/ui/Overlay";
 import { Icon } from "@/components/ui/Icon";
 import { StarRating, QuantityStepper, Button } from "@/components/ui/Controls";
@@ -14,6 +15,7 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
     addToBag,
     openDrawer,
     notify,
+    taxRules,
   } = useStore();
 
   const [selectedSize, setSelectedSize] = useState("M");
@@ -79,7 +81,7 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
   const img = getProductImage(product);
   const outOfStock = stock <= 0;
   const maxStock = Math.min(Math.max(stock, 1), 10);
-  const gstRate = price <= 2500 ? 5 : 12;
+  const gstRate = taxRules.rateFor(price); // slab rule from business config
 
   /** Resolves to true when the item reached the bag (the store toasts any error). */
   const handleAddToBag = async () => {

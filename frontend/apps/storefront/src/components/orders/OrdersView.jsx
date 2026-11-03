@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useStore } from "@/store/StoreProvider";
 import { Modal } from "@/components/ui/Overlay";
 import { Icon } from "@/components/ui/Icon";
@@ -18,6 +18,8 @@ const RETURN_REASONS = [
 /** Reasons that are the atelier's fault — sent as a defect claim (exempt from Final Sale rules). */
 const DEFECT_REASONS = new Set(["fabric_defect", "damaged_transit"]);
 
+const ORDER_DATE_FORMAT = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" });
+
 export function OrdersView() {
   const {
     orders,
@@ -29,6 +31,8 @@ export function OrdersView() {
     notify,
     navigateTo,
   } = useStore();
+
+  const [invoiceOrder, setInvoiceOrder] = useState(null);
 
   // Return modal state
   const [returnOrder, setReturnOrder] = useState(null);
@@ -164,53 +168,40 @@ export function OrdersView() {
       {!isLoadingOrders && !ordersError && orders && orders.length > 0 && (
         <div className="orders-list-stack">
           {orders.map((order) => {
-            const isCancellable = ["HOLD", "CONFIRMED", "PENDING"].includes(
-              (order.status || "").toUpperCase()
-            );
-            const isDelivered = (order.status || "").toUpperCase() === "DELIVERED";
-
+            // `order` is normalized in the store (store/normalizers.js → normalizeOrder)
             return (
               <article key={order.order_id} className="order-record-card">
                 <header className="order-card-header">
                   <div className="order-id-group">
                     <span className="order-ref-label">Order Ref:</span>
                     <strong className="order-id-value">#{order.order_id}</strong>
-                    <span className={`badge order-status-pill status-${(order.status || "").toLowerCase()}`}>
-                      {order.status || "CONFIRMED"}
+                    <span className={`badge order-status-pill status-${order.status}`}>
+                      {order.statusLabel}
                     </span>
                   </div>
 
                   <div className="order-header-meta">
-                    <span className="order-date">
-                      {order.created_at
-                        ? new Date(order.created_at).toLocaleDateString("en-IN", {
-                            day: "numeric",
-                            month: "short",
-                            year: "numeric",
-                          })
-                        : "Recent"}
-                    </span>
-                    <span className="order-grand-total">
-                      {formatInr(order.grand_total || order.total_amount || 0)}
-                    </span>
+                    {order.placedAt && (
+                      <time className="order-date" dateTime={order.placedAt.toISOString()}>
+                        {ORDER_DATE_FORMAT.format(order.placedAt)}
+                      </time>
+                    )}
+                    <span className="order-grand-total">{formatInr(order.grandTotal)}</span>
                   </div>
                 </header>
 
                 {/* Items in this order */}
                 <div className="order-items-grid">
-                  {(order.items || []).map((item, idx) => (
-                    <div key={idx} className="order-item-snippet">
+                  {order.items.map((item) => (
+                    <div key={`${item.product_id}-${item.size}`} className="order-item-snippet">
                       <div className="order-item-lead">
-                        <span className="order-item-name">
-                          {item.product_name || item.name || item.product_id}
-                        </span>
+                        <span className="order-item-name">{item.name}</span>
                         <span className="order-item-sub">
-                          Size: {item.size || "M"} · Qty: {item.quantity || 1}
+                          Size: {item.size} · Qty: {item.quantity}
+                          {item.quantity > 1 && ` · ${formatInr(item.unitPrice)} each`}
                         </span>
                       </div>
-                      <span className="order-item-price">
-                        {formatInr((item.unit_price || item.price || 0) * (item.quantity || 1))}
-                      </span>
+                      <span className="order-item-price">{formatInr(item.lineTotal)}</span>
                     </div>
                   ))}
                 </div>
@@ -218,20 +209,18 @@ export function OrdersView() {
                 {/* Footer Actions: Cancel, Return, Invoice */}
                 <footer className="order-card-footer">
                   <div className="order-meta-info">
-                    {order.gst_total ? (
-                      <span className="badge gst-badge">
-                        GST: {formatInr(order.gst_total)} (HSN compliant)
-                      </span>
-                    ) : null}
-                    {order.payment_status && (
+                    {order.gstTotal > 0 && (
+                      <span className="badge gst-badge">Incl. GST {formatInr(order.gstTotal)}</span>
+                    )}
+                    {order.paymentStatus && (
                       <span className="badge payment-status-badge">
-                        Payment: {order.payment_status}
+                        Payment: {order.paymentStatus.replace(/_/g, " ")}
                       </span>
                     )}
                   </div>
 
                   <div className="order-actions-group">
-                    {isCancellable && (
+                    {order.canCancel && (
                       <button
                         type="button"
                         className="btn-pill btn-pill-outline btn-sm btn-danger-tone"
@@ -242,26 +231,27 @@ export function OrdersView() {
                       </button>
                     )}
 
-                    {isDelivered && (
+                    {order.canReturn && (
                       <button
                         type="button"
                         className="btn-pill btn-pill-outline btn-sm"
                         onClick={() => handleOpenReturnModal(order)}
                       >
                         <Icon name="refresh" size={13} />
-                        <span>Initiate 7-Day Return</span>
+                        <span>Request return</span>
                       </button>
                     )}
 
-                    <a
-                      href={`/api/orders/${order.order_id}/invoice`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn-pill btn-pill-outline btn-sm"
-                    >
-                      <Icon name="file" size={13} />
-                      <span>Download Invoice</span>
-                    </a>
+                    {order.invoice_id && (
+                      <button
+                        type="button"
+                        className="btn-pill btn-pill-outline btn-sm"
+                        onClick={() => setInvoiceOrder(order)}
+                      >
+                        <Icon name="file" size={13} />
+                        <span>View invoice</span>
+                      </button>
+                    )}
                   </div>
                 </footer>
               </article>
@@ -311,8 +301,8 @@ export function OrdersView() {
               <span>Original luxury security ribbon &amp; care tag are attached and untampered</span>
             </label>
             {!tagIntact && (
-              <span className="field-warning-msg">
-                Note: Missing tags require physical studio verification and will route to Tier 2 review.
+              <span className="field-warning-msg" role="alert">
+                We can only accept returns with the security ribbon and care tag intact (policy POL-RET-01).
               </span>
             )}
           </div>
@@ -346,12 +336,112 @@ export function OrdersView() {
               type="submit"
               variant="primary"
               isLoading={isSubmittingReturn}
+              disabled={!tagIntact}
             >
               Submit Return Claim
             </Button>
           </div>
         </form>
       </Modal>
+
+      <InvoiceModal order={invoiceOrder} onClose={() => setInvoiceOrder(null)} />
     </div>
+  );
+}
+
+/**
+ * GST invoice for an order. Fetched through the authenticated API client
+ * (a plain link can't send the bearer token) and printable via the browser.
+ */
+function InvoiceModal({ order, onClose }) {
+  const { apiClient } = useStore();
+  const [state, setState] = useState({ status: "idle", invoice: null, error: null });
+
+  useEffect(() => {
+    if (!order) return undefined;
+    let cancelled = false;
+    setState({ status: "loading", invoice: null, error: null });
+    apiClient
+      .getInvoice(order.order_id)
+      .then((invoice) => !cancelled && setState({ status: "ready", invoice, error: null }))
+      .catch((error) => !cancelled && setState({ status: "error", invoice: null, error }));
+    return () => {
+      cancelled = true;
+    };
+  }, [order, apiClient]);
+
+  const { invoice } = state;
+  const taxLines = invoice
+    ? invoice.is_intra_state
+      ? [
+          ["CGST", invoice.cgst_inr],
+          ["SGST", invoice.sgst_inr],
+        ]
+      : [["IGST", invoice.igst_inr]]
+    : [];
+
+  return (
+    <Modal
+      isOpen={Boolean(order)}
+      onClose={onClose}
+      title={invoice ? `Tax invoice ${invoice.invoice_id}` : "Tax invoice"}
+      size="sm"
+    >
+      {state.status === "loading" && <ListSkeleton count={2} />}
+
+      {state.status === "error" && (
+        <StatePanel
+          type="error"
+          compact
+          title="Couldn't load this invoice"
+          description={state.error?.message}
+        />
+      )}
+
+      {invoice && (
+        <div className="form-stack">
+          <div className="bag-summary-card">
+            <div className="summary-line">
+              <span>Order</span>
+              <span>#{invoice.order_id}</span>
+            </div>
+            <div className="summary-line">
+              <span>Seller GSTIN</span>
+              <span>{invoice.seller_gstin}</span>
+            </div>
+            <div className="summary-line">
+              <span>Place of supply</span>
+              <span>{invoice.place_of_supply_state}</span>
+            </div>
+          </div>
+
+          <div className="bag-summary-card">
+            <div className="summary-line">
+              <span>Taxable value</span>
+              <span>{formatInr(invoice.taxable_value_inr)}</span>
+            </div>
+            {taxLines.map(([label, amount]) => (
+              <div key={label} className="summary-line tax">
+                <span>{label}</span>
+                <span>{formatInr(amount)}</span>
+              </div>
+            ))}
+            <div className="summary-line grand-total">
+              <span>Invoice total</span>
+              <span className="grand-price">{formatInr(invoice.total_inr)}</span>
+            </div>
+          </div>
+
+          <div className="modal-actions-bar">
+            <Button variant="ghost" onClick={onClose}>
+              Close
+            </Button>
+            <Button variant="primary" icon="file" onClick={() => window.print()}>
+              Print
+            </Button>
+          </div>
+        </div>
+      )}
+    </Modal>
   );
 }

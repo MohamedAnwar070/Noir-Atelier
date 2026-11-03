@@ -7,7 +7,7 @@ import { StarRating } from "@/components/ui/Controls";
 import { formatInr, getProductImage } from "@noir/utils/formatters.js";
 
 export function ProductCard({ product, onSelect }) {
-  const { addToBag, toggleWishlist, isWishlisted } = useStore();
+  const { addToBag, toggleWishlist, isWishlisted, taxRules } = useStore();
 
   const price = Number(product.price ?? product.mrp_inr ?? 0);
   const stock = Number(product.stock_quantity ?? product.stock ?? 0);
@@ -26,8 +26,7 @@ export function ProductCard({ product, onSelect }) {
   const outOfStock = stock <= 0;
   const lowStock = stock > 0 && stock <= 3;
 
-  // Determine GST slab based on actual price
-  const gstRate = price <= 2500 ? 5 : 12;
+  const gstRate = taxRules.rateFor(price); // slab rule from business config
 
   const handleQuickAdd = async (e) => {
     e.stopPropagation();

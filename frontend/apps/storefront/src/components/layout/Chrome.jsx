@@ -10,7 +10,7 @@ import { formatInr } from "@noir/utils/formatters.js";
 export function AnnouncementBar() {
   const { business, freeShippingMin } = useStore();
   const returnDays = business?.returns_and_refunds?.return_window_days || 7;
-  const freeThreshold = freeShippingMin || 2500;
+  const freeThreshold = freeShippingMin; // from business config
 
   return (
     <aside className="announcement-bar" role="note" aria-label="Store privileges">

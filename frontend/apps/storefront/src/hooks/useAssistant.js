@@ -86,7 +86,8 @@ export function useAssistant({ api, actor, onAfterAction, onActionCompleted } = 
             actionCard = {
               type: "order_placed",
               orderId: feedback.details?.order_id || res.data?.order?.order_id || "ORD-NEW",
-              grandTotal: feedback.details?.grand_total || res.data?.order?.grand_total,
+              // API money fields are suffixed _inr
+              grandTotal: feedback.details?.grand_total_inr ?? res.data?.order?.grand_total_inr ?? feedback.details?.grand_total,
             };
           } else if (feedback.action === "cart_updated" || res.routed_agent === "cart_agent") {
             actionCard = {

@@ -5,13 +5,23 @@ import { useStore } from "@/store/StoreProvider";
 import { ProductCard } from "@/components/catalog/ProductCard";
 import { ProductGridSkeleton, StatePanel } from "@/components/ui/StatePanel";
 import { Icon } from "@/components/ui/Icon";
+import { formatInr } from "@noir/utils/formatters.js";
 
-const PRICE_TIERS = [
-  { id: "all", label: "All Prices" },
-  { id: "tier_5pct", label: "Under ₹2,500 (5% GST)", max: 2500 },
-  { id: "tier_mid", label: "₹2,500 – ₹7,000", min: 2500, max: 7000 },
-  { id: "tier_luxury", label: "Above ₹7,000", min: 7000 },
-];
+const LUXURY_FROM_INR = 7000;
+
+/**
+ * Price filters. The first boundary is the GST slab threshold from business
+ * config, so "lower GST" really means the lower slab (backend rule: price ≤ threshold).
+ */
+function buildPriceTiers({ threshold, lowRate }) {
+  const inr = (n) => `₹${n.toLocaleString("en-IN")}`;
+  return [
+    { id: "all", label: "All Prices", match: () => true },
+    { id: "tier_low_gst", label: `Up to ${inr(threshold)} (${lowRate}% GST)`, match: (p) => p <= threshold },
+    { id: "tier_mid", label: `${inr(threshold)} – ${inr(LUXURY_FROM_INR)}`, match: (p) => p > threshold && p <= LUXURY_FROM_INR },
+    { id: "tier_luxury", label: `Above ${inr(LUXURY_FROM_INR)}`, match: (p) => p > LUXURY_FROM_INR },
+  ];
+}
 
 const SORT_OPTIONS = [
   { id: "featured", label: "Curated / Featured" },
@@ -31,9 +41,12 @@ export function CatalogSection({ onSelectProduct }) {
     setSearchQuery,
     refreshCatalog,
     storefrontConfig,
+    taxRules,
+    freeShippingMin,
   } = useStore();
 
   const [selectedPriceTier, setSelectedPriceTier] = useState("all");
+  const priceTiers = useMemo(() => buildPriceTiers(taxRules), [taxRules]);
   const [selectedSort, setSelectedSort] = useState("featured");
 
   // Filter products locally by price tier & sort
@@ -41,15 +54,8 @@ export function CatalogSection({ onSelectProduct }) {
     let list = [...catalog];
 
     // Price tier filter
-    const tier = PRICE_TIERS.find((t) => t.id === selectedPriceTier);
-    if (tier) {
-      list = list.filter((p) => {
-        const pr = Number(p.price ?? p.mrp_inr ?? 0);
-        if (tier.min !== undefined && pr < tier.min) return false;
-        if (tier.max !== undefined && pr > tier.max) return false;
-        return true;
-      });
-    }
+    const tier = priceTiers.find((t) => t.id === selectedPriceTier);
+    if (tier) list = list.filter((p) => tier.match(Number(p.price ?? 0)));
 
     // Sort
     if (selectedSort === "price_asc") {
@@ -61,7 +67,7 @@ export function CatalogSection({ onSelectProduct }) {
     }
 
     return list;
-  }, [catalog, selectedPriceTier, selectedSort]);
+  }, [catalog, priceTiers, selectedPriceTier, selectedSort]);
 
   const handleClearFilters = () => {
     setSearchQuery("");
@@ -93,7 +99,7 @@ export function CatalogSection({ onSelectProduct }) {
             </span>
             <span className="guarantee-pill">
               <Icon name="truck" size={13} />
-              <span>Complimentary Delivery &gt; ₹2,500</span>
+              <span>Free delivery from {formatInr(freeShippingMin)}</span>
             </span>
             <span className="guarantee-pill">
               <Icon name="refresh" size={13} />
@@ -125,7 +131,7 @@ export function CatalogSection({ onSelectProduct }) {
         <div className="catalog-sub-toolbar">
           {/* Price Tier Pills */}
           <div className="price-tier-pills" role="radiogroup" aria-label="Price filters">
-            {PRICE_TIERS.map((tier) => (
+            {priceTiers.map((tier) => (
               <button
                 key={tier.id}
                 type="button"

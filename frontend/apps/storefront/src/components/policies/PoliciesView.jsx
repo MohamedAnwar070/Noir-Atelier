@@ -3,17 +3,22 @@
 import React from "react";
 import { useStore } from "@/store/StoreProvider";
 import { Icon } from "@/components/ui/Icon";
+import { formatInr } from "@noir/utils/formatters.js";
 
+/**
+ * Policies page. Every number shown here comes from the backend business
+ * config (the same values checkout and the return service enforce), so the
+ * published policy can never drift from actual behaviour.
+ */
 export function PoliciesView() {
-  const { businessConfig } = useStore();
+  const { businessConfig, taxRules, freeShippingMin } = useStore();
 
-  const gstConfig = businessConfig?.gst_config || {
-    apparel_threshold: 2500,
-    rate_below: 5,
-    rate_above: 12,
-  };
-
-  const returnDays = businessConfig?.return_window_days || 7;
+  const returns = businessConfig?.returns_and_refunds || {};
+  const returnDays = returns.return_window_days ?? 7;
+  const tiers = returns.tiers || {};
+  const autoRefundMax = tiers.tier_1_auto_refund_max_inr ?? 5000;
+  const managerMax = tiers.tier_2_manager_approval_max_inr ?? 25000;
+  const hsn = taxRules.hsnChapters.join("/");
 
   return (
     <div className="page-container policies-page-container">
@@ -21,76 +26,75 @@ export function PoliciesView() {
         <span className="hero-eyebrow">Legal &amp; Fiscal Governance</span>
         <h1 className="page-heading">Atelier Policies &amp; Compliance</h1>
         <p className="page-subheading">
-          Full transparency on our dual-slab GST computation, 4-tier garment return matrix,
-          and luxury packaging standards.
+          How we price tax, handle returns and refunds, and deliver your pieces.
         </p>
       </div>
 
       <div className="policy-cards-grid">
-        {/* GST Slab Policy */}
+        {/* GST slabs */}
         <section className="policy-card">
           <div className="policy-card-icon">
             <Icon name="shield" size={24} />
           </div>
-          <h2 className="policy-card-title">Dual-Slab GST Taxation (HSN 61/62)</h2>
+          <h2 className="policy-card-title">Dual-Slab GST Taxation (HSN {hsn})</h2>
           <p className="policy-card-text">
-            Under Indian CBIC Notification 15/2021, garments classified under HSN 61 (knitted/crocheted)
-            and HSN 62 (woven tailored apparel) are subject to two distinct GST slabs based on sale price:
+            Garments under HSN {hsn} are taxed at one of two GST slabs, based on the sale price of each
+            piece. All prices shown include GST.
           </p>
           <ul className="policy-list">
             <li>
-              <strong>{gstConfig.rate_below}% GST:</strong> Applies to all garments with a final sale price
-              up to ₹{gstConfig.apparel_threshold.toLocaleString("en-IN")}.
+              <strong>{taxRules.lowRate}% GST:</strong> garments priced {taxRules.describe(taxRules.lowRate)}.
             </li>
             <li>
-              <strong>{gstConfig.rate_above}% GST:</strong> Applies to luxury and tailored garments with a
-              sale price exceeding ₹{gstConfig.apparel_threshold.toLocaleString("en-IN")}.
+              <strong>{taxRules.highRate}% GST:</strong> garments priced {taxRules.describe(taxRules.highRate)}.
             </li>
           </ul>
           <p className="policy-card-footnote">
-            Our checkout engine splits and itemizes both CGST, SGST, and IGST components automatically on
-            every verified GST invoice.
+            Every invoice itemises CGST and SGST (within the state) or IGST (between states).
           </p>
         </section>
 
-        {/* 4-Tier Return Matrix */}
+        {/* Returns & refunds */}
         <section className="policy-card">
           <div className="policy-card-icon">
             <Icon name="refresh" size={24} />
           </div>
-          <h2 className="policy-card-title">4-Tier Luxury Return Matrix</h2>
+          <h2 className="policy-card-title">Returns &amp; Refunds</h2>
           <p className="policy-card-text">
-            Noir Atelier provides a {returnDays}-day return privilege from the date of studio delivery:
+            You can return a piece within {returnDays} days of delivery (14 days for VIP Gold clients).
+            {returns.require_security_tag_intact !== false &&
+              " The atelier security ribbon must be intact and the garment must pass our quality check."}
           </p>
           <ul className="policy-list">
             <li>
-              <strong>Tier 0 (Pre-Shipment):</strong> Instant 1-click cancellation with 100% immediate
-              pre-authorization hold release.
+              <strong>Before dispatch:</strong> cancel any unshipped order in one click for a full refund.
             </li>
             <li>
-              <strong>Tier 1 (Tags Intact):</strong> Full refund to original payment method within 24 hours
-              of studio receipt.
+              <strong>Tier 1 — up to {formatInr(autoRefundMax)}:</strong> refunded automatically once the
+              return passes inspection.
             </li>
             <li>
-              <strong>Tier 2 (Studio Verification):</strong> If security tags are detached, garments undergo
-              physical textile inspection at our Colaba studio before store credit release.
+              <strong>Tier 2 — up to {formatInr(managerMax)}:</strong> approved by a store manager.
             </li>
             <li>
-              <strong>Tier 3 (Substantial Wear/Defects):</strong> Non-qualifying returns are returned to the
-              client with an inspection report.
+              <strong>Tier 3 — above {formatInr(managerMax)}:</strong> requires two approvals (manager and
+              finance).
             </li>
           </ul>
+          <p className="policy-card-footnote">
+            Final Sale pieces can only be returned if they are defective.
+          </p>
         </section>
 
-        {/* Delivery & Boutique Packaging */}
+        {/* Delivery */}
         <section className="policy-card">
           <div className="policy-card-icon">
             <Icon name="truck" size={24} />
           </div>
           <h2 className="policy-card-title">Complimentary Boutique Delivery</h2>
           <p className="policy-card-text">
-            Orders exceeding ₹2,500 qualify for complimentary climate-controlled delivery in our
-            signature reusable black garment pouches with cedar hanger.
+            Orders of {formatInr(freeShippingMin)} or more ship free in our signature reusable garment
+            pouch with a cedar hanger.
           </p>
           <ul className="policy-list">
             <li>
@@ -105,3 +109,5 @@ export function PoliciesView() {
     </div>
   );
 }
+
+export default PoliciesView;
