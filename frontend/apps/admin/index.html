@@ -11,12 +11,12 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/packages/ui/tokens.css" />
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <div id="noir-app"></div>
     <script type="module">
-      import "/app.js";
+      import "./app.js";
       window.addEventListener("DOMContentLoaded", () => {
         setTimeout(() => {
           const mgrSelect = document.querySelector('[data-action="change-actor"]');
@@ -24,7 +24,7 @@
             mgrSelect.value = "admin_manager";
             mgrSelect.dispatchEvent(new Event("change", { bubbles: true }));
           }
-          const adminBtn = document.querySelector('[data-surface="admin"]');
+          const adminBtn = document.querySelector('[data-page="admin"]');
           if (adminBtn) adminBtn.click();
         }, 120);
       });

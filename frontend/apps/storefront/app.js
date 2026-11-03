@@ -2,8 +2,7 @@ import { NoirApiClient } from "/packages/api/client.js";
 import {
   DESIGN_TOKENS,
   applyFontScale,
-  deriveGarmentStyleFromProduct,
-  renderGarmentArtwork,
+  getProductEditorialVisual,
 } from "/packages/ui/theme.js";
 import {
   UI_PRINCIPLE_STATES,
@@ -26,16 +25,17 @@ import {
 } from "/packages/utils/formatters.js";
 
 const ACTORS = [
-  { token: "demo_CUS-001", id: "CUS-001", role: "customer", label: "CUS-001 · Arjun (VIP_GOLD)" },
-  { token: "demo_CUS-002", id: "CUS-002", role: "customer", label: "CUS-002 · Priya (STANDARD)" },
-  { token: "admin_manager", id: "MGR-001", role: "manager", label: "MGR-001 · Store Manager" },
-  { token: "admin_finance", id: "FIN-001", role: "finance_admin", label: "FIN-001 · Finance Admin" },
+  { token: "demo_CUS-001", id: "CUS-001", role: "customer", label: "Arjun · VIP Gold (CUS-001)" },
+  { token: "demo_CUS-002", id: "CUS-002", role: "customer", label: "Priya · Standard (CUS-002)" },
+  { token: "admin_manager", id: "MGR-001", role: "manager", label: "Store Manager (MGR-001)" },
+  { token: "admin_finance", id: "FIN-001", role: "finance_admin", label: "Finance Admin (FIN-001)" },
 ];
 
 const state = {
-  viewMode: "showcase",
-  activeSurface: "storefront",
-  rightPaneTab: "detail",
+  activePage: "shop", // shop | orders | policies | admin
+  activeDrawer: null, // null | bag | ai
+  detailModalProduct: null,
+  showDiagnosticsBar: false,
   fontScale: "default",
   activeUiPrinciple: "normal",
   actor: ACTORS[0],
@@ -53,17 +53,16 @@ const state = {
   policies: [],
   categories: [],
   products: [],
-  selectedProduct: null,
-  selectedSize: null,
+  cardSizeSelection: {},
   recommendations: [],
   wishlistIds: new Set(),
 
   searchQuery: "",
   selectedDepartment: "ALL",
   maxPrice: "",
+  sortBy: "featured",
 
   cart: null,
-  customerAddress: { street: "", pinCode: "", city: "", state: "" },
   checkoutForm: { street: "", pinCode: "", couponCode: "", paymentMethod: "upi" },
   checkoutValidationErrors: {},
   couponResult: null,
@@ -75,7 +74,6 @@ const state = {
   agentRegistry: [],
   agentMessages: [],
   agentPreferred: "",
-  agentInput: "",
   agentBusy: false,
 
   adminDashboard: null,
@@ -96,12 +94,14 @@ const api = new NoirApiClient({
       state.sessionExpired = true;
       renderApp();
     } else if (evt.type === "permission_denied") {
-      state.permissionDeniedInfo = {
-        actorId: `${state.actor.id} (${state.actor.role})`,
-        endpoint: evt.endpoint,
-        message: evt.data?.message || "Insufficient permissions.",
-      };
-      renderApp();
+      if (state.activePage === "admin" || state.activeUiPrinciple === "permission_denied") {
+        state.permissionDeniedInfo = {
+          actorId: `${state.actor.id} (${state.actor.role})`,
+          endpoint: evt.endpoint,
+          message: evt.data?.message || "Insufficient permissions.",
+        };
+        renderApp();
+      }
     }
   },
 });
@@ -120,6 +120,7 @@ window.addEventListener("offline", () => {
 async function bootstrapData() {
   state.isLoading = true;
   state.apiError = null;
+  state.permissionDeniedInfo = null;
   renderApp();
 
   try {
@@ -144,16 +145,17 @@ async function bootstrapData() {
     state.orders = Array.isArray(orders) ? orders : [];
     state.agentRegistry = Array.isArray(registry) ? registry : [];
 
+    state.products.forEach((p) => {
+      if (!state.cardSizeSelection[p.product_id]) {
+        const sizes = p.sizes_available || [];
+        state.cardSizeSelection[p.product_id] = sizes.includes("M") ? "M" : sizes[0] || "M";
+      }
+    });
+
     if (state.actor.role === "customer") {
       const addresses = await api.listCustomerAddresses(state.actor.id).catch(() => []);
       if (addresses.length > 0) {
         const primary = addresses.find((a) => a.is_primary) || addresses[0];
-        state.customerAddress = {
-          street: primary.street,
-          pinCode: primary.pin_code,
-          city: primary.city,
-          state: primary.state,
-        };
         if (!state.checkoutForm.street) state.checkoutForm.street = primary.street;
         if (!state.checkoutForm.pinCode) state.checkoutForm.pinCode = primary.pin_code;
       }
@@ -163,34 +165,12 @@ async function bootstrapData() {
       state.returnForm.orderId = state.orders[0].order_id;
     }
 
-    if (state.products.length > 0) {
-      const currentId = state.selectedProduct?.product_id;
-      const matched = state.products.find((p) => p.product_id === currentId) || state.products[0];
-      await selectProductFromDb(matched.product_id, matched);
-    } else {
-      state.selectedProduct = null;
-    }
-
     state.isLoading = false;
     renderApp();
   } catch (err) {
     state.isLoading = false;
     state.apiError = err;
     renderApp();
-  }
-}
-
-async function selectProductFromDb(productId, initialProduct = null) {
-  try {
-    const detail = initialProduct || (await api.getProductDetails(productId));
-    state.selectedProduct = detail;
-    const availSizes = detail.sizes_available || [];
-    if (!state.selectedSize || !availSizes.includes(state.selectedSize)) {
-      state.selectedSize = availSizes.includes("M") ? "M" : availSizes[0] || "M";
-    }
-    state.recommendations = await api.getRecommendations(productId).catch(() => []);
-  } catch (err) {
-    state.apiError = err;
   }
 }
 
@@ -204,13 +184,35 @@ async function refreshProductsFromDb() {
       department: state.selectedDepartment,
       maxPrice: state.maxPrice || null,
     });
-    if (state.products.length > 0 && !state.selectedProduct) {
-      await selectProductFromDb(state.products[0].product_id, state.products[0]);
-    }
+    state.products.forEach((p) => {
+      if (!state.cardSizeSelection[p.product_id]) {
+        const sizes = p.sizes_available || [];
+        state.cardSizeSelection[p.product_id] = sizes.includes("M") ? "M" : sizes[0] || "M";
+      }
+    });
     state.isLoading = false;
     renderApp();
   } catch (err) {
     state.isLoading = false;
+    state.apiError = err;
+    renderApp();
+  }
+}
+
+async function openProductDetailModal(productId) {
+  try {
+    const [detail, recs] = await Promise.all([
+      api.getProductDetails(productId),
+      api.getRecommendations(productId).catch(() => []),
+    ]);
+    state.detailModalProduct = detail;
+    state.recommendations = recs;
+    if (!state.cardSizeSelection[productId]) {
+      const sizes = detail.sizes_available || [];
+      state.cardSizeSelection[productId] = sizes.includes("M") ? "M" : sizes[0] || "M";
+    }
+    renderApp();
+  } catch (err) {
     state.apiError = err;
     renderApp();
   }
@@ -237,238 +239,355 @@ async function loadAdminDataFromDb() {
     renderApp();
   } catch (err) {
     state.isLoading = false;
-    if (err.status !== 403 && err.status !== 401) {
+    if (err.status === 403) {
+      state.permissionDeniedInfo = {
+        actorId: `${state.actor.id} (${state.actor.role})`,
+        endpoint: "GET /api/admin/dashboard",
+        message: err.message,
+      };
+    } else if (err.status !== 401) {
       state.apiError = err;
     }
     renderApp();
   }
 }
 
-function renderToolbar() {
+function getSortedProducts() {
+  const list = [...state.products];
+  if (state.sortBy === "price_asc") {
+    list.sort((a, b) => Number(a.mrp_inr) - Number(b.mrp_inr));
+  } else if (state.sortBy === "price_desc") {
+    list.sort((a, b) => Number(b.mrp_inr) - Number(a.mrp_inr));
+  } else if (state.sortBy === "rating") {
+    list.sort((a, b) => Number(b.average_rating || 5) - Number(a.average_rating || 5));
+  }
+  return list;
+}
+
+function renderHeader() {
   const storeName = state.businessConfig?.store?.name || "Noir Atelier";
-  const fontOptions = DESIGN_TOKENS.fontScales
-    .map(
-      (f) => `<option value="${f.id}" ${state.fontScale === f.id ? "selected" : ""}>Font: ${f.label}</option>`
-    )
-    .join("");
-
-  const actorOptions = ACTORS.map(
-    (a) => `<option value="${a.token}" ${state.actor.token === a.token ? "selected" : ""}>Actor: ${a.label}</option>`
-  ).join("");
-
-  const statePills = UI_PRINCIPLE_STATES.map(
-    (st) => `
-      <button
-        class="state-pill-btn ${state.activeUiPrinciple === st.id ? "active" : ""}"
-        data-action="set-ui-principle"
-        data-principle="${st.id}"
-      >
-        ${st.label}
-      </button>
-    `
-  ).join("");
+  const cartCount = (state.cart?.items || []).reduce((acc, i) => acc + Number(i.quantity || 0), 0);
 
   return `
-    <header class="design-toolbar">
-      <div class="toolbar-row">
-        <div class="toolbar-brand">
-          <span class="toolbar-brand-title">${storeName}</span>
-          <span style="font-size:11px;opacity:0.72;">DB-Driven AI-Native Commerce · Men · Women · Kids</span>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <div class="brand-group">
+          <button class="brand-logo" data-action="nav-page" data-page="shop">${storeName}</button>
+          <nav class="primary-nav" aria-label="Main Navigation">
+            <button
+              class="nav-link ${state.activePage === "shop" && state.selectedDepartment === "ALL" ? "active" : ""}"
+              data-action="nav-dept"
+              data-department="ALL"
+            >
+              The Edit
+            </button>
+            ${state.categories
+              .map(
+                (cat) => `
+                <button
+                  class="nav-link ${state.activePage === "shop" && state.selectedDepartment === cat.department ? "active" : ""}"
+                  data-action="nav-dept"
+                  data-department="${cat.department}"
+                >
+                  ${cat.department.charAt(0) + cat.department.slice(1).toLowerCase()}
+                </button>
+              `
+              )
+              .join("")}
+            <button
+              class="nav-link ${state.activePage === "orders" ? "active" : ""}"
+              data-action="nav-page"
+              data-page="orders"
+            >
+              Orders & Returns (${state.orders.length})
+            </button>
+            <button
+              class="nav-link ${state.activePage === "policies" ? "active" : ""}"
+              data-action="nav-page"
+              data-page="policies"
+            >
+              Atelier Policies
+            </button>
+            <button
+              class="nav-link ${state.activePage === "admin" ? "active" : ""}"
+              data-action="nav-page"
+              data-page="admin"
+            >
+              Admin Console
+            </button>
+          </nav>
         </div>
-        <div class="toolbar-controls">
-          <button
-            class="state-pill-btn ${state.activeSurface === "storefront" ? "active" : ""}"
-            data-action="switch-surface"
-            data-surface="storefront"
-          >
-            Storefront & 9-Agents
-          </button>
-          <button
-            class="state-pill-btn ${state.activeSurface === "admin" ? "active" : ""}"
-            data-action="switch-surface"
-            data-surface="admin"
-          >
-            Admin Governance Portal
-          </button>
-          <button
-            class="state-pill-btn ${state.viewMode === "showcase" ? "active" : ""}"
-            data-action="toggle-view-mode"
-          >
-            ${state.viewMode === "showcase" ? "📱 Twin-Phone Reference View" : "🖥️ Full Responsive Desktop"}
-          </button>
-          <select class="toolbar-select" data-action="change-font-scale" aria-label="Font scale">
-            ${fontOptions}
+
+        <div class="header-actions">
+          <form class="header-search" data-form="catalog-search">
+            <span class="header-search-icon">🔍</span>
+            <input
+              id="catalog-search-input"
+              type="search"
+              placeholder="Search linen, silk, merino..."
+              value="${state.searchQuery}"
+            />
+          </form>
+
+          <select class="header-pill-select" data-action="change-actor" aria-label="Account profile">
+            ${ACTORS.map(
+              (a) => `<option value="${a.token}" ${state.actor.token === a.token ? "selected" : ""}>${a.label}</option>`
+            ).join("")}
           </select>
-          <select class="toolbar-select" data-action="change-actor" aria-label="Active database actor">
-            ${actorOptions}
+
+          <select class="header-pill-select" data-action="change-font-scale" aria-label="Typography scale">
+            ${DESIGN_TOKENS.fontScales
+              .map((f) => `<option value="${f.id}" ${state.fontScale === f.id ? "selected" : ""}>${f.label}</option>`)
+              .join("")}
           </select>
+
+          <button
+            class="chip-pill ${state.showDiagnosticsBar ? "active" : ""}"
+            data-action="toggle-diagnostics"
+            title="Inspect 10 UI/UX Design States"
+          >
+            ⚙️ UI States
+          </button>
+
+          <button
+            class="btn-pill btn-pill-outline"
+            style="padding:0.48rem 1rem;font-size:var(--text-xs);"
+            data-action="open-drawer"
+            data-drawer="ai"
+          >
+            ✨ AI Stylist
+          </button>
+
+          <button
+            class="btn-pill"
+            style="padding:0.48rem 1.05rem;font-size:var(--text-xs);"
+            data-action="open-drawer"
+            data-drawer="bag"
+          >
+            🛍️ Bag (${cartCount})
+          </button>
         </div>
       </div>
-      <div class="states-strip" role="navigation" aria-label="UI Design Principle States">
-        ${statePills}
-      </div>
+
+      ${
+        state.showDiagnosticsBar
+          ? `
+        <div class="diagnostics-bar">
+          <div class="diagnostics-bar-inner">
+            <span style="font-size:11px;font-weight:600;color:var(--text-secondary);">
+              UI Design Principles Inspector (Click any state to preview):
+            </span>
+            <div class="diagnostics-pills">
+              ${UI_PRINCIPLE_STATES.map(
+                (st) => `
+                  <button
+                    class="chip-pill ${state.activeUiPrinciple === st.id ? "active" : ""}"
+                    style="padding:0.25rem 0.7rem;font-size:11px;"
+                    data-action="set-ui-principle"
+                    data-principle="${st.id}"
+                  >
+                    ${st.label}
+                  </button>
+                `
+              ).join("")}
+            </div>
+          </div>
+        </div>
+      `
+          : ""
+      }
     </header>
   `;
 }
 
 function renderGlobalBanners() {
   const banners = [];
-
   if (state.isOffline || state.activeUiPrinciple === "offline") {
     banners.push(renderNoInternetBanner());
   }
   if (state.slowLatencyMs || state.activeUiPrinciple === "slow_network") {
-    banners.push(renderSlowNetworkBanner({ latencyMs: state.slowLatencyMs || 1680 }));
+    banners.push(renderSlowNetworkBanner({ latencyMs: state.slowLatencyMs || 1640 }));
   }
   if (state.toastSuccess || state.activeUiPrinciple === "success") {
     const t = state.toastSuccess || {
-      title: "Database Transaction Confirmed",
-      message: "Order persisted in PostgreSQL/SQLite with HSN 61/62 GST invoice and audit_log trace.",
+      title: "Confirmed in Database",
+      message: "Transaction committed to PostgreSQL/SQLite with HSN 61/62 GST invoice and audit_log record.",
     };
     banners.push(renderSuccessBanner(t));
   }
-
-  return banners.length ? `<div class="global-banners">${banners.join("")}</div>` : "";
+  return banners.length ? `<div style="margin-bottom:1.25rem;">${banners.join("")}</div>` : "";
 }
 
-function renderLeftStorefrontPhone() {
-  const cartCount = (state.cart?.items || []).reduce((acc, i) => acc + Number(i.quantity || 0), 0);
+function renderHeroSection() {
+  const spotlight = state.products[0];
+  const freeShipMin = state.businessConfig?.shipping?.free_shipping_threshold_inr ?? 1999;
+
+  return `
+    <section class="hero-banner">
+      <div class="hero-content">
+        <div>
+          <div class="hero-eyebrow">
+            <span>Noir Atelier · HSN 61 & 62 Luxury Garments</span>
+          </div>
+          <h1 class="hero-title">The New Edit</h1>
+          <p class="hero-subtitle">
+            Explore timeless tailored Belgian linen shirts, 22-momme mulberry silk dresses, and superfine merino knitwear across Men, Women, and Kids. Complimentary express delivery above ${formatInr(freeShipMin)}.
+          </p>
+          <div class="hero-cta-row">
+            <button class="btn-pill" data-action="scroll-to-catalog">
+              Explore Collection
+            </button>
+            <button
+              class="btn-pill btn-pill-outline"
+              style="background:rgba(255,255,255,0.92);border-color:transparent;"
+              data-action="open-drawer"
+              data-drawer="ai"
+            >
+              ✨ Shop with AI Stylist
+            </button>
+          </div>
+        </div>
+
+        <div class="hero-ai-prompts">
+          <span style="font-size:11px;opacity:0.85;">Try asking AI:</span>
+          <button
+            class="hero-ai-chip"
+            data-action="trigger-ai-prompt"
+            data-prompt="Show me Men's garments under INR 3000"
+          >
+            "Men's linen under ₹3,000"
+          </button>
+          <button
+            class="hero-ai-chip"
+            data-action="trigger-ai-prompt"
+            data-prompt="Show me Women's garments"
+          >
+            "Women's mulberry silk & cotton"
+          </button>
+          <button
+            class="hero-ai-chip"
+            data-action="trigger-ai-prompt"
+            data-prompt="What are the return policy rules and GST slabs?"
+          >
+            "7-Day Return & GST Policy"
+          </button>
+        </div>
+      </div>
+
+      <div class="hero-visual">
+        <img
+          src="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1200&q=85"
+          alt="Noir Atelier Editorial Collection"
+        />
+        ${
+          spotlight
+            ? `
+          <div class="hero-floating-card">
+            <div>
+              <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);font-weight:600;">
+                Featured Atelier Piece · ${spotlight.department}
+              </div>
+              <div class="font-editorial" style="font-size:var(--text-lg);font-weight:600;">
+                ${spotlight.name}
+              </div>
+              <div style="font-size:var(--text-xs);color:var(--text-secondary);">
+                ${formatInr(spotlight.mrp_inr)} · ★ ${spotlight.average_rating ?? "5.0"}
+              </div>
+            </div>
+            <button
+              class="btn-pill"
+              style="padding:0.5rem 1.1rem;font-size:var(--text-xs);"
+              data-action="open-product-modal"
+              data-product-id="${spotlight.product_id}"
+            >
+              View Piece
+            </button>
+          </div>
+        `
+            : ""
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderShopPage() {
   const deptPills = [
-    { code: "ALL", label: "All" },
+    { code: "ALL", label: "All Garments" },
     ...state.categories.map((c) => ({
       code: c.department,
-      label: c.department.charAt(0) + c.department.slice(1).toLowerCase(),
+      label: c.name,
     })),
   ];
 
   let catalogBody = "";
 
   if (state.isLoading || state.activeUiPrinciple === "loading") {
-    catalogBody = `<div style="padding:0 1.1rem 1.4rem;">${renderLoadingState({ count: 4 })}</div>`;
+    catalogBody = renderLoadingState({ count: 4, label: "Loading garments from PostgreSQL/SQLite catalog..." });
   } else if (state.sessionExpired || state.activeUiPrinciple === "session_expired") {
-    catalogBody = `<div style="padding:0 1.1rem 1.4rem;">${renderSessionExpiredState()}</div>`;
-  } else if (state.permissionDeniedInfo || state.activeUiPrinciple === "permission_denied") {
-    const info = state.permissionDeniedInfo || {
+    catalogBody = renderSessionExpiredState();
+  } else if (state.activeUiPrinciple === "permission_denied") {
+    catalogBody = renderPermissionDeniedState({
       actorId: `${state.actor.id} (${state.actor.role})`,
       endpoint: "PUT /api/admin/config/policies",
-    };
-    catalogBody = `<div style="padding:0 1.1rem 1.4rem;">${renderPermissionDeniedState(info)}</div>`;
+    });
   } else if (state.apiError || state.activeUiPrinciple === "error") {
     const err = state.apiError || {
-      code: "db_query_error",
-      message: "Database query returned an unexpected status.",
+      code: "catalog_fetch_error",
+      message: "Could not load catalog from /api/products/search.",
       trace_id: "TRC-502910",
     };
-    catalogBody = `<div style="padding:0 1.1rem 1.4rem;">${renderErrorState({
+    catalogBody = renderErrorState({
       code: err.code,
       message: err.message,
       traceId: err.trace_id,
-    })}</div>`;
+    });
   } else if (state.activeUiPrinciple === "empty") {
-    catalogBody = `<div style="padding:0 1.1rem 1.4rem;">${renderEmptyState({
-      title: "Catalog Collection Empty",
-      description: "No garments are active in this collection yet. Refresh from database to load Men, Women & Kids garments.",
-      actionLabel: "Reload From Database",
+    catalogBody = renderEmptyState({
+      title: "Collection Currently Empty",
+      description: "No active garments in this view. Click below to reload all Men, Women, and Kids garments from the database.",
+      actionLabel: "Reload Catalog",
       actionAttr: 'data-action="clear-filters"',
-    })}</div>`;
-  } else if (state.products.length === 0 || state.activeUiPrinciple === "no_results") {
-    catalogBody = `<div style="padding:0 1.1rem 1.4rem;">${renderNoSearchResultState({
-      query: state.searchQuery,
-      department: state.selectedDepartment,
-      maxPrice: state.maxPrice,
-    })}</div>`;
+    });
+  } else if (state.activeUiPrinciple === "pending_approval") {
+    catalogBody = renderPendingApprovalState(state.latestReturnEscalation || {});
   } else {
-    const cardsHtml = state.products
-      .map((p) => {
-        const isSelected = state.selectedProduct?.product_id === p.product_id;
-        const isLiked = state.wishlistIds.has(p.product_id);
-        const visual = deriveGarmentStyleFromProduct(p);
-        return `
-          <article
-            class="garment-card ${isSelected ? "selected" : ""}"
-            data-action="select-product"
-            data-product-id="${p.product_id}"
-          >
-            <div class="garment-thumb" style="background:${visual.cardBg};">
-              <button
-                class="wishlist-btn ${isLiked ? "liked" : ""}"
-                data-action="toggle-wishlist"
-                data-product-id="${p.product_id}"
-                aria-label="Save ${p.name}"
-              >
-                ♥
-              </button>
-              ${renderGarmentArtwork(p, "card")}
-            </div>
-            <div class="garment-title">${p.name}</div>
-            <div class="garment-price-row">
-              <span>${formatInr(p.mrp_inr)}</span>
-              <span style="font-size:10px;">${p.department} · ★ ${p.average_rating ?? "5.0"}</span>
-            </div>
-          </article>
-        `;
-      })
-      .join("");
-
-    catalogBody = `<div class="product-grid">${cardsHtml}</div>`;
+    const sorted = getSortedProducts();
+    if (sorted.length === 0 || state.activeUiPrinciple === "no_results") {
+      catalogBody = renderNoSearchResultState({
+        query: state.searchQuery,
+        department: state.selectedDepartment,
+        maxPrice: state.maxPrice,
+      });
+    } else {
+      catalogBody = `
+        <div class="catalog-grid" id="catalog-grid-anchor">
+          ${sorted.map((p) => renderProductCard(p)).join("")}
+        </div>
+      `;
+    }
   }
 
   return `
-    <section class="phone-device" aria-label="Storefront Discovery">
-      <div class="phone-statusbar" style="color:#ffffff;">
-        <span>9:41</span>
-        <div class="phone-notch"></div>
-        <span>5G · 100%</span>
-      </div>
-      <div class="phone-scroll">
-        <div class="hero-editorial">
-          <div class="hero-top-actions">
-            <button class="icon-circle" data-action="focus-search" title="Search Catalog">🔍</button>
-            <button class="icon-circle" data-action="open-right-tab" data-tab="bag" title="Shopping Bag">
-              🛍️
-              ${cartCount > 0 ? '<span class="badge-dot"></span>' : ""}
-            </button>
-            <button class="icon-circle" data-action="open-right-tab" data-tab="orders" title="Orders & Returns">📦</button>
-            <button class="icon-circle" data-action="open-right-tab" data-tab="concierge" title="9-Agent AI Concierge">✨</button>
-          </div>
-          <div class="hero-copy">
-            <h1>The New Edit</h1>
-            <p>Explore timeless tailored linen, mulberry silk dresses & superfine merino garments</p>
-            <button class="btn-pill" data-action="clear-filters" style="padding:0.58rem 1.35rem;font-size:12px;">
-              Explore
-            </button>
-          </div>
-          <div class="hero-editorial-figure">
-            ${state.selectedProduct ? renderGarmentArtwork(state.selectedProduct, "card") : ""}
-          </div>
-        </div>
+    ${renderHeroSection()}
 
-        <div class="section-header">
+    <section aria-label="Garment Catalog">
+      <div class="catalog-toolbar">
+        <div class="catalog-heading-group">
           <h2>Trending Now</h2>
-          <button class="section-link" data-action="clear-filters">View all (${state.products.length})</button>
+          <span style="font-size:var(--text-xs);color:var(--text-secondary);">
+            ${state.products.length} tailored pieces available
+          </span>
         </div>
+        ${
+          state.searchQuery || state.selectedDepartment !== "ALL" || state.maxPrice
+            ? `<button class="section-link" data-action="clear-filters">Reset all filters ✕</button>`
+            : ""
+        }
+      </div>
 
-        <form class="search-inline-bar" data-form="catalog-search">
-          <input
-            id="catalog-search-input"
-            class="field-input"
-            type="search"
-            placeholder="Search linen, silk, merino, PRD-001..."
-            value="${state.searchQuery}"
-            style="padding:0.45rem 0.75rem;font-size:12px;border-radius:999px;"
-          />
-          <input
-            id="catalog-max-price"
-            class="field-input"
-            type="number"
-            placeholder="Max ₹"
-            value="${state.maxPrice}"
-            style="width:92px;padding:0.45rem 0.65rem;font-size:12px;border-radius:999px;"
-          />
-          <button type="submit" class="chip-pill active">Filter</button>
-        </form>
-
-        <div class="pill-tabs" role="tablist">
+      <div class="catalog-filters-row">
+        <div class="category-pills" role="tablist">
           ${deptPills
             .map(
               (d) => `
@@ -482,336 +601,322 @@ function renderLeftStorefrontPhone() {
             `
             )
             .join("")}
+          <button
+            class="chip-pill ${Number(state.maxPrice) === 2500 ? "active" : ""}"
+            data-action="quick-price-slab"
+            data-max-price="2500"
+          >
+            Under ₹2,500 (5% GST Slab)
+          </button>
         </div>
 
-        ${catalogBody}
+        <div class="filter-controls">
+          <select class="header-pill-select" data-action="change-sort" aria-label="Sort garments">
+            <option value="featured" ${state.sortBy === "featured" ? "selected" : ""}>Sort: Featured</option>
+            <option value="price_asc" ${state.sortBy === "price_asc" ? "selected" : ""}>Price: Low to High</option>
+            <option value="price_desc" ${state.sortBy === "price_desc" ? "selected" : ""}>Price: High to Low</option>
+            <option value="rating" ${state.sortBy === "rating" ? "selected" : ""}>Highest Rated</option>
+          </select>
+        </div>
       </div>
+
+      ${catalogBody}
     </section>
   `;
 }
 
-function renderRightDetailOrWorkspacePhone() {
-  const navTabs = [
-    { id: "detail", label: "Garment Sheet" },
-    { id: "bag", label: `Bag (${(state.cart?.items || []).reduce((s, i) => s + i.quantity, 0)})` },
-    { id: "orders", label: `Orders (${state.orders.length})` },
-    { id: "concierge", label: "9-Agent AI" },
-  ];
-
-  const tabStrip = `
-    <div style="display:flex;gap:0.35rem;padding:0.55rem 1rem;background:var(--bg-subtle);border-bottom:1px solid var(--border-subtle);overflow-x:auto;">
-      ${navTabs
-        .map(
-          (t) => `
-          <button
-            class="chip-pill ${state.rightPaneTab === t.id ? "active" : ""}"
-            data-action="open-right-tab"
-            data-tab="${t.id}"
-            style="padding:0.32rem 0.8rem;font-size:11px;"
-          >
-            ${t.label}
-          </button>
-        `
-        )
-        .join("")}
-    </div>
-  `;
-
-  let paneContent = "";
-  if (state.activeUiPrinciple === "pending_approval") {
-    paneContent = `<div style="padding:1.25rem;">${renderPendingApprovalState(
-      state.latestReturnEscalation || {}
-    )}</div>`;
-  } else if (state.rightPaneTab === "bag" || state.activeUiPrinciple === "form_validation") {
-    paneContent = renderShoppingBagAndCheckoutTab();
-  } else if (state.rightPaneTab === "orders") {
-    paneContent = renderOrdersAndReturnsTab();
-  } else if (state.rightPaneTab === "concierge") {
-    paneContent = renderAgentConciergeTab();
-  } else {
-    paneContent = renderGarmentDetailSheet();
-  }
-
-  return `
-    <section class="phone-device" aria-label="Garment Detail & Client Workspace">
-      <div class="phone-statusbar" style="color:${state.rightPaneTab === "detail" ? "#ffffff" : "var(--text-primary)"};">
-        <span>9:41</span>
-        <div class="phone-notch"></div>
-        <span>5G · 100%</span>
-      </div>
-      ${state.rightPaneTab !== "detail" ? tabStrip : ""}
-      <div class="phone-scroll">
-        ${paneContent}
-      </div>
-      ${state.rightPaneTab === "detail" ? tabStrip : ""}
-    </section>
-  `;
-}
-
-function renderGarmentDetailSheet() {
-  const p = state.selectedProduct;
-  if (!p) {
-    return `<div style="padding:1.5rem;">${renderEmptyState({
-      title: "Select a Garment",
-      description: "Choose any garment from the database catalog to inspect its HSN tax slab, fabric care, and size availability.",
-    })}</div>`;
-  }
-
-  const visual = deriveGarmentStyleFromProduct(p);
+function renderProductCard(p) {
+  const visual = getProductEditorialVisual(p);
   const taxInfo = computeGstSlabFromConfig(p.mrp_inr, state.businessConfig?.tax || {});
-  const sizeBreakdown = p.size_breakdown || {};
-  const sizes = p.sizes_available || [];
   const isLiked = state.wishlistIds.has(p.product_id);
+  const activeSize = state.cardSizeSelection[p.product_id] || (p.sizes_available || [])[0] || "M";
+  const sizeBreakdown = p.size_breakdown || {};
 
   return `
-    <div class="detail-hero-canvas" style="background:${visual.gradient};">
-      <div class="detail-top-bar">
-        <button class="icon-circle" data-action="open-right-tab" data-tab="bag" title="View Bag">←</button>
-        <div style="display:flex;gap:0.45rem;">
-          <button class="icon-circle" data-action="ask-agent-about-product" data-product-id="${p.product_id}" title="Ask AI Stylist">✨</button>
+    <article class="product-card">
+      <div
+        class="product-card-media"
+        style="background:${visual.bgGradient};"
+        data-action="open-product-modal"
+        data-product-id="${p.product_id}"
+      >
+        <div class="card-top-badges">
+          <span class="rating-badge">★ ${p.average_rating ?? "5.0"}</span>
           <button
-            class="icon-circle"
+            class="heart-btn"
             data-action="toggle-wishlist"
             data-product-id="${p.product_id}"
-            title="Wishlist"
+            aria-label="Save ${p.name}"
           >
             ${isLiked ? "❤️" : "🤍"}
           </button>
         </div>
-      </div>
-      <div style="margin:auto 0;padding-top:0.5rem;">
-        ${renderGarmentArtwork(p, "hero")}
-      </div>
-    </div>
-
-    <div class="detail-sheet">
-      <div>
-        <div class="detail-title-row">
-          <h2>${p.name}</h2>
-          <span class="rating-pill">★ ${p.average_rating ?? "5.0"}</span>
-        </div>
-
-        <p class="detail-desc">${p.description} ${p.fit_guide}</p>
-
-        <div class="detail-meta-strip">
-          <span class="meta-tag">${p.product_id}</span>
-          <span class="meta-tag">${p.department}</span>
-          <span class="meta-tag">HSN ${p.hsn_code} · ${taxInfo.label}</span>
-          <span class="meta-tag">${p.stock} in stock</span>
-          ${p.security_tag_required ? '<span class="meta-tag">Ribbon QC Protected</span>' : ""}
-        </div>
-
-        <div class="field-label">SIZE (LIVE DB STOCK)</div>
-        <div class="size-row">
-          ${sizes
-            .map((sz) => {
-              const qty = sizeBreakdown[sz] ?? p.stock;
-              const active = state.selectedSize === sz;
-              return `
-                <button
-                  class="size-pill ${active ? "active" : ""}"
-                  data-action="select-size"
-                  data-size="${sz}"
-                  ${qty <= 0 ? "disabled" : ""}
-                  title="${qty} units available"
-                >
-                  ${sz}
-                </button>
-              `;
-            })
-            .join("")}
-        </div>
-
-        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:0.85rem;">
-          <strong>Fabric & Care:</strong> ${p.fabric_and_care}
-        </div>
+        <img src="${visual.photoUrl}" alt="${p.name}" loading="lazy" />
       </div>
 
-      <div class="detail-footer-cta">
+      <div class="product-card-body">
         <div>
-          <div class="price-block-label">PRICE (MRP INCL. GST)</div>
-          <div class="price-block-value">${formatInr(p.mrp_inr)}</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.25rem;">
+            <span class="product-card-dept">${p.department} · ${p.product_id}</span>
+            <span class="meta-tag">${visual.accentTag}</span>
+          </div>
+          <h3
+            class="product-card-title"
+            data-action="open-product-modal"
+            data-product-id="${p.product_id}"
+          >
+            ${p.name}
+          </h3>
+          <p class="product-card-desc" style="margin-top:0.35rem;">${p.description}</p>
         </div>
-        <button
-          class="btn-pill"
-          style="flex:1;max-width:210px;"
-          data-action="add-to-cart"
-          data-product-id="${p.product_id}"
-          ${p.stock <= 0 ? "disabled" : ""}
-        >
-          Add to Cart
-        </button>
+
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem;">
+            <span class="field-label" style="font-size:10px;">Select Size</span>
+            <span style="font-size:10px;color:var(--text-muted);">${p.stock} in stock</span>
+          </div>
+          <div class="product-card-sizes" style="margin-bottom:0.85rem;">
+            ${(p.sizes_available || [])
+              .map((sz) => {
+                const qty = sizeBreakdown[sz] ?? p.stock;
+                return `
+                  <button
+                    class="size-pill ${activeSize === sz ? "active" : ""}"
+                    style="min-width:38px;height:30px;padding:0 0.55rem;font-size:11px;"
+                    data-action="select-card-size"
+                    data-product-id="${p.product_id}"
+                    data-size="${sz}"
+                    ${qty <= 0 ? "disabled" : ""}
+                  >
+                    ${sz}
+                  </button>
+                `;
+              })
+              .join("")}
+          </div>
+
+          <div class="product-card-footer">
+            <div>
+              <div class="product-price">${formatInr(p.mrp_inr)}</div>
+              <div class="product-gst-sub">HSN ${p.hsn_code} · ${taxInfo.label}</div>
+            </div>
+            <button
+              class="btn-pill"
+              style="padding:0.62rem 1.25rem;font-size:var(--text-xs);"
+              data-action="add-to-cart"
+              data-product-id="${p.product_id}"
+              ${p.stock <= 0 ? "disabled" : ""}
+            >
+              Add to Cart
+            </button>
+          </div>
+        </div>
       </div>
-    </div>
+    </article>
   `;
 }
 
-function renderShoppingBagAndCheckoutTab() {
-  const items = state.cart?.items || [];
-  const forceValidationDemo = state.activeUiPrinciple === "form_validation";
-  const errors = forceValidationDemo
-    ? validateCheckoutForm({ street: "abc", pinCode: "000", couponCode: "!" }).errors
-    : state.checkoutValidationErrors;
+function renderProductDetailModal() {
+  const p = state.detailModalProduct;
+  if (!p) return "";
 
-  if (items.length === 0 && !forceValidationDemo) {
-    return `<div style="padding:1.25rem;">${renderEmptyState({
-      title: "Your Shopping Bag is Empty",
-      description: "Add a tailored garment from the catalog to compute real-time HSN 61/62 GST slabs and free shipping eligibility.",
-      actionLabel: "Browse Garments",
-      actionAttr: 'data-action="open-right-tab" data-tab="detail"',
-    })}</div>`;
-  }
+  const visual = getProductEditorialVisual(p);
+  const taxInfo = computeGstSlabFromConfig(p.mrp_inr, state.businessConfig?.tax || {});
+  const activeSize = state.cardSizeSelection[p.product_id] || (p.sizes_available || [])[0] || "M";
+  const sizeBreakdown = p.size_breakdown || {};
 
   return `
-    <div style="padding:1.1rem;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
-        <h3 class="font-editorial" style="font-size:var(--text-xl);">Atelier Shopping Bag</h3>
-        ${items.length > 0 ? '<button class="section-link" data-action="clear-cart">Clear Bag</button>' : ""}
-      </div>
+    <div class="detail-modal-backdrop" data-action="close-modal-backdrop">
+      <div class="detail-modal-sheet" role="dialog" aria-modal="true" aria-label="${p.name}">
+        <div class="detail-modal-media">
+          <div class="card-top-badges">
+            <span class="rating-badge">★ ${p.average_rating ?? "5.0"} (${p.review_count || 1} verified review)</span>
+            <button class="heart-btn" data-action="close-product-modal" title="Close">✕</button>
+          </div>
+          <img src="${visual.photoUrl}" alt="${p.name}" />
+        </div>
 
-      <div style="display:flex;flex-direction:column;gap:0.55rem;margin-bottom:1rem;">
-        ${items
-          .map(
-            (item) => `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:0.65rem 0.8rem;background:var(--bg-surface);border-radius:14px;border:1px solid var(--border-subtle);">
+        <div class="detail-modal-content">
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;">
+              <span class="product-card-dept">${p.department} COLLECTION · ${p.sku}</span>
+              <span class="meta-tag">HSN ${p.hsn_code} · ${taxInfo.label}</span>
+            </div>
+
+            <h2 class="font-editorial" style="font-size:var(--text-3xl);margin-bottom:0.6rem;">${p.name}</h2>
+            <p style="font-size:var(--text-sm);color:var(--text-secondary);line-height:1.6;margin-bottom:1.1rem;">
+              ${p.description}
+            </p>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;padding:0.9rem;border-radius:16px;background:var(--bg-subtle);margin-bottom:1.25rem;font-size:12px;">
               <div>
-                <div style="font-size:12px;font-weight:600;">${item.product_name}</div>
-                <div style="font-size:11px;color:var(--text-secondary);">
-                  ${item.product_id} · Size ${item.size} · Qty ${item.quantity} · GST ${item.gst_rate_pct}%
+                <div class="field-label" style="margin-bottom:0.2rem;">Fit & Silhouette</div>
+                <div style="color:var(--text-secondary);">${p.fit_guide}</div>
+              </div>
+              <div>
+                <div class="field-label" style="margin-bottom:0.2rem;">Fabric & Atelier Care</div>
+                <div style="color:var(--text-secondary);">${p.fabric_and_care}</div>
+              </div>
+            </div>
+
+            <div style="margin-bottom:1.25rem;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:0.45rem;">
+                <span class="field-label">SIZE</span>
+                <span style="font-size:11px;color:var(--text-secondary);">
+                  Size ${activeSize}: ${sizeBreakdown[activeSize] ?? p.stock} units available in warehouse
+                </span>
+              </div>
+              <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+                ${(p.sizes_available || [])
+                  .map((sz) => {
+                    const qty = sizeBreakdown[sz] ?? p.stock;
+                    return `
+                      <button
+                        class="size-pill ${activeSize === sz ? "active" : ""}"
+                        data-action="select-card-size"
+                        data-product-id="${p.product_id}"
+                        data-size="${sz}"
+                        ${qty <= 0 ? "disabled" : ""}
+                      >
+                        ${sz}
+                      </button>
+                    `;
+                  })
+                  .join("")}
+              </div>
+            </div>
+
+            ${
+              state.recommendations.length > 0
+                ? `
+              <div style="margin-bottom:1rem;">
+                <div class="field-label" style="margin-bottom:0.45rem;">Complete the Look (Database Recommendations)</div>
+                <div style="display:flex;gap:0.6rem;flex-wrap:wrap;">
+                  ${state.recommendations
+                    .map(
+                      (rec) => `
+                      <button
+                        class="chip-pill"
+                        data-action="open-product-modal"
+                        data-product-id="${rec.product_id}"
+                      >
+                        ${rec.name} · ${formatInr(rec.mrp_inr)} →
+                      </button>
+                    `
+                    )
+                    .join("")}
                 </div>
               </div>
-              <div style="text-align:right;">
-                <div style="font-size:12px;font-weight:600;">${formatInr(item.line_mrp_inr)}</div>
-                <button class="section-link" style="font-size:10px;color:#b91c1c;" data-action="remove-cart-item" data-cart-id="${item.cart_id}">Remove</button>
-              </div>
+            `
+                : ""
+            }
+          </div>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;padding-top:1rem;border-top:1px solid var(--border-subtle);">
+            <div>
+              <div class="price-block-label">PRICE (MRP INCLUSIVE OF ALL TAXES)</div>
+              <div style="font-size:var(--text-2xl);font-weight:700;">${formatInr(p.mrp_inr)}</div>
             </div>
-          `
-          )
-          .join("")}
+            <div style="display:flex;gap:0.6rem;">
+              <button
+                class="btn-pill btn-pill-outline"
+                data-action="trigger-ai-prompt"
+                data-prompt="Tell me how to style ${p.product_id} (${p.name}) and its care instructions"
+              >
+                ✨ Ask AI Stylist
+              </button>
+              <button
+                class="btn-pill"
+                style="min-width:170px;"
+                data-action="add-to-cart"
+                data-product-id="${p.product_id}"
+              >
+                Add to Cart
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
-
-      ${
-        state.cart
-          ? `
-        <div style="background:var(--bg-surface);border-radius:16px;padding:0.85rem;border:1px solid var(--border-subtle);margin-bottom:1rem;font-size:12px;">
-          <div style="display:flex;justify-content:space-between;margin-bottom:0.25rem;">
-            <span style="color:var(--text-secondary);">Subtotal (MRP incl. GST)</span>
-            <span>${formatInr(state.cart.subtotal_mrp_inr)}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;margin-bottom:0.25rem;">
-            <span style="color:var(--text-secondary);">Taxable Value + CGST/SGST</span>
-            <span>${formatInr(state.cart.taxable_value_inr)} + ${formatInr(state.cart.total_gst_inr)}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;margin-bottom:0.25rem;">
-            <span style="color:var(--text-secondary);">Shipping (${state.cart.free_shipping_applied ? "Free >= ₹" + (state.businessConfig?.shipping?.free_shipping_threshold_inr ?? 1999) : "Standard"})</span>
-            <span>${formatInr(state.cart.shipping_fee_inr)}</span>
-          </div>
-          ${
-            state.couponResult?.valid
-              ? `<div style="display:flex;justify-content:space-between;color:var(--state-success-text);font-weight:600;">
-                  <span>Coupon (${state.couponResult.code})</span>
-                  <span>-${formatInr(state.couponResult.discount_inr)}</span>
-                </div>`
-              : ""
-          }
-          <div style="display:flex;justify-content:space-between;font-weight:700;font-size:14px;padding-top:0.45rem;margin-top:0.45rem;border-top:1px solid var(--border-subtle);">
-            <span>Grand Total</span>
-            <span>${formatInr(state.couponResult?.valid ? state.couponResult.new_total_inr : state.cart.grand_total_inr)}</span>
-          </div>
-        </div>
-      `
-          : ""
-      }
-
-      <form data-form="checkout-form" style="display:flex;flex-direction:column;gap:0.65rem;">
-        <div class="field-group">
-          <label class="field-label" for="checkout-street">Delivery Street Address *</label>
-          <input
-            id="checkout-street"
-            class="field-input ${errors.street ? "invalid" : ""}"
-            type="text"
-            value="${state.checkoutForm.street}"
-            placeholder="14 Cathedral Road, Gopalapuram"
-          />
-          ${errors.street ? `<span class="field-error">${errors.street}</span>` : ""}
-        </div>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
-          <div class="field-group">
-            <label class="field-label" for="checkout-pin">6-Digit PIN Code *</label>
-            <input
-              id="checkout-pin"
-              class="field-input ${errors.pinCode ? "invalid" : ""}"
-              type="text"
-              maxlength="6"
-              value="${state.checkoutForm.pinCode}"
-              placeholder="600086"
-            />
-            ${errors.pinCode ? `<span class="field-error">${errors.pinCode}</span>` : ""}
-          </div>
-
-          <div class="field-group">
-            <label class="field-label" for="checkout-coupon">Promo Code</label>
-            <div style="display:flex;gap:0.35rem;">
-              <input
-                id="checkout-coupon"
-                class="field-input ${errors.couponCode ? "invalid" : ""}"
-                type="text"
-                value="${state.checkoutForm.couponCode}"
-                placeholder="ATELIER10"
-              />
-              <button type="button" class="chip-pill" data-action="apply-coupon">Apply</button>
-            </div>
-            ${errors.couponCode ? `<span class="field-error">${errors.couponCode}</span>` : ""}
-          </div>
-        </div>
-
-        <button type="submit" class="btn-pill" style="width:100%;margin-top:0.3rem;">
-          Complete Verified Order (UPI / Card)
-        </button>
-      </form>
     </div>
   `;
 }
 
-function renderOrdersAndReturnsTab() {
+function renderOrdersAndReturnsPage() {
   const retErrors = state.returnValidationErrors;
 
   return `
-    <div style="padding:1.1rem;display:flex;flex-direction:column;gap:1rem;">
-      <div>
-        <h3 class="font-editorial" style="font-size:var(--text-xl);margin-bottom:0.5rem;">Your Database Orders</h3>
+    <div class="page-grid-2col">
+      <div class="surface-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.1rem;">
+          <div>
+            <h2 class="font-editorial" style="font-size:var(--text-2xl);">Your Orders & Shipments</h2>
+            <p style="font-size:var(--text-xs);color:var(--text-secondary);">
+              Showing live database orders for <strong>${state.actor.label}</strong>
+            </p>
+          </div>
+          <button class="chip-pill" data-action="nav-page" data-page="shop">+ New Order</button>
+        </div>
+
         ${
           state.orders.length === 0
             ? renderEmptyState({
-                title: "No Orders Yet",
-                description: "Orders placed via Storefront or the Order Agent appear here with live status & GST invoices.",
-                actionLabel: "Shop Collection",
-                actionAttr: 'data-action="open-right-tab" data-tab="detail"',
+                title: "No Orders Found",
+                description: "Place an order from the Storefront or via the Order Agent to view GST invoices, shipment tracking, and return options.",
+                actionLabel: "Explore Garments",
+                actionAttr: 'data-action="nav-page" data-page="shop"',
               })
-            : `<div style="display:flex;flex-direction:column;gap:0.55rem;">
+            : `<div style="display:flex;flex-direction:column;gap:0.85rem;">
                 ${state.orders
                   .map(
                     (o) => `
-                    <div style="background:var(--bg-surface);border-radius:14px;padding:0.75rem;border:1px solid var(--border-subtle);font-size:12px;">
-                      <div style="display:flex;justify-content:space-between;font-weight:600;margin-bottom:0.25rem;">
-                        <span>${o.order_id} · ${formatInr(o.grand_total_inr)}</span>
-                        <span class="meta-tag">${o.status}</span>
+                    <div style="padding:1.1rem;border-radius:18px;background:var(--bg-page);border:1px solid var(--border-subtle);">
+                      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.45rem;flex-wrap:wrap;gap:0.5rem;">
+                        <div>
+                          <strong style="font-size:var(--text-base);">${o.order_id}</strong>
+                          <span style="font-size:var(--text-xs);color:var(--text-secondary);margin-left:0.5rem;">
+                            Invoice: ${o.invoice_id || "—"}
+                          </span>
+                        </div>
+                        <div style="display:flex;gap:0.4rem;align-items:center;">
+                          <span class="meta-tag">Status: ${o.status}</span>
+                          <span class="meta-tag">Payment: ${o.payment_status}</span>
+                        </div>
                       </div>
-                      <div style="font-size:11px;color:var(--text-secondary);margin-bottom:0.45rem;">
-                        Invoice: ${o.invoice_id || "—"} · GST: ${formatInr(o.total_gst_inr)}
+
+                      <div style="font-size:var(--text-xs);color:var(--text-secondary);margin-bottom:0.75rem;">
+                        ${(o.items || [])
+                          .map((i) => `${i.quantity}x ${i.product_name} (Size ${i.size}, GST ${i.gst_rate_pct}%)`)
+                          .join(" · ")}
                       </div>
-                      <div style="display:flex;gap:0.4rem;">
-                        <button class="chip-pill" style="font-size:10px;padding:0.22rem 0.6rem;" data-action="prefill-return-order" data-order-id="${o.order_id}">
-                          Initiate Return
-                        </button>
-                        ${
-                          o.status === "confirmed" || o.status === "processing"
-                            ? `<button class="chip-pill" style="font-size:10px;padding:0.22rem 0.6rem;color:#b91c1c;" data-action="cancel-order" data-order-id="${o.order_id}">
-                                Cancel (Tier 0)
-                              </button>`
-                            : ""
-                        }
+
+                      <div style="display:flex;justify-content:space-between;align-items:center;padding-top:0.65rem;border-top:1px solid var(--border-subtle);flex-wrap:wrap;gap:0.5rem;">
+                        <div style="font-size:var(--text-sm);font-weight:600;">
+                          Grand Total: ${formatInr(o.grand_total_inr)}
+                          <span style="font-size:11px;font-weight:400;color:var(--text-secondary);">
+                            (Taxable ${formatInr(o.taxable_value_inr)} + GST ${formatInr(o.total_gst_inr)})
+                          </span>
+                        </div>
+                        <div style="display:flex;gap:0.45rem;">
+                          <button
+                            class="chip-pill"
+                            data-action="prefill-return-order"
+                            data-order-id="${o.order_id}"
+                          >
+                            Initiate Return
+                          </button>
+                          ${
+                            o.status === "confirmed" || o.status === "processing"
+                              ? `<button
+                                  class="chip-pill"
+                                  style="color:#b91c1c;border-color:#fecaca;"
+                                  data-action="cancel-order"
+                                  data-order-id="${o.order_id}"
+                                >
+                                  Cancel Order (Tier 0 Auto-Refund)
+                                </button>`
+                              : ""
+                          }
+                        </div>
                       </div>
                     </div>
                   `
@@ -821,140 +926,143 @@ function renderOrdersAndReturnsTab() {
         }
       </div>
 
-      ${state.latestReturnEscalation ? renderPendingApprovalState(state.latestReturnEscalation) : ""}
+      <div style="display:flex;flex-direction:column;gap:1.25rem;">
+        ${state.latestReturnEscalation ? renderPendingApprovalState(state.latestReturnEscalation) : ""}
 
-      <form data-form="return-form" style="background:var(--bg-surface);border-radius:18px;padding:0.95rem;border:1px solid var(--border-subtle);display:flex;flex-direction:column;gap:0.6rem;">
-        <h4 class="font-editorial" style="font-size:var(--text-lg);">4-Tier Garment Return & QC</h4>
-        <div class="field-group">
-          <label class="field-label" for="return-order-id">Order ID *</label>
-          <input
-            id="return-order-id"
-            class="field-input ${retErrors.orderId ? "invalid" : ""}"
-            type="text"
-            value="${state.returnForm.orderId}"
-            placeholder="ORD-1001"
-          />
-          ${retErrors.orderId ? `<span class="field-error">${retErrors.orderId}</span>` : ""}
+        <div class="surface-card">
+          <h3 class="font-editorial" style="font-size:var(--text-2xl);margin-bottom:0.35rem;">
+            4-Tier Garment Return & Physical QC
+          </h3>
+          <p style="font-size:var(--text-xs);color:var(--text-secondary);margin-bottom:1.1rem;">
+            Tier 1 (≤ ₹5,000) auto-refunds upon QC pass; Tier 2 (₹5,001–₹25,000) routes to Store Manager; Tier 3 (> ₹25,000) requires Manager + Finance dual approval.
+          </p>
+
+          <form data-form="return-form" style="display:flex;flex-direction:column;gap:0.85rem;">
+            <div class="field-group">
+              <label class="field-label" for="return-order-id">Order ID *</label>
+              <input
+                id="return-order-id"
+                class="field-input ${retErrors.orderId ? "invalid" : ""}"
+                type="text"
+                value="${state.returnForm.orderId}"
+                placeholder="ORD-1001"
+              />
+              ${retErrors.orderId ? `<span class="field-error">${retErrors.orderId}</span>` : ""}
+            </div>
+
+            <div class="field-group">
+              <label class="field-label" for="return-notes">Reason & Fit Feedback *</label>
+              <input
+                id="return-notes"
+                class="field-input ${retErrors.reasonNotes ? "invalid" : ""}"
+                type="text"
+                value="${state.returnForm.reasonNotes}"
+                placeholder="Slightly tight across shoulders"
+              />
+              ${retErrors.reasonNotes ? `<span class="field-error">${retErrors.reasonNotes}</span>` : ""}
+            </div>
+
+            <label style="display:flex;align-items:center;gap:0.5rem;font-size:var(--text-xs);cursor:pointer;">
+              <input id="return-tag-intact" type="checkbox" ${state.returnForm.tagIntact ? "checked" : ""} />
+              <span>Noir Atelier security ribbon & garment tags intact (POL-RET-01)</span>
+            </label>
+            ${retErrors.tagIntact ? `<span class="field-error">${retErrors.tagIntact}</span>` : ""}
+
+            <button type="submit" class="btn-pill" style="width:100%;">
+              Submit Return Request
+            </button>
+          </form>
         </div>
-
-        <div class="field-group">
-          <label class="field-label" for="return-notes">Return Reason & Fit Notes *</label>
-          <input
-            id="return-notes"
-            class="field-input ${retErrors.reasonNotes ? "invalid" : ""}"
-            type="text"
-            value="${state.returnForm.reasonNotes}"
-            placeholder="Slightly tight across shoulders"
-          />
-          ${retErrors.reasonNotes ? `<span class="field-error">${retErrors.reasonNotes}</span>` : ""}
-        </div>
-
-        <label style="display:flex;align-items:center;gap:0.45rem;font-size:11px;cursor:pointer;">
-          <input id="return-tag-intact" type="checkbox" ${state.returnForm.tagIntact ? "checked" : ""} />
-          <span>Noir Atelier security ribbon & tags intact (POL-RET-01)</span>
-        </label>
-        ${retErrors.tagIntact ? `<span class="field-error">${retErrors.tagIntact}</span>` : ""}
-
-        <button type="submit" class="btn-pill" style="width:100%;">Submit Return to /api/returns</button>
-      </form>
+      </div>
     </div>
   `;
 }
 
-function renderAgentConciergeTab() {
-  const agentOptions = [
-    `<option value="">Auto-Route (Supervisor Intent Router)</option>`,
-    ...state.agentRegistry.map(
-      (a) =>
-        `<option value="${a.agent_name}" ${state.agentPreferred === a.agent_name ? "selected" : ""}>${a.agent_name} (${a.service_account})</option>`
-    ),
-  ].join("");
-
-  const quickPrompts = [
-    "Show me Women's garments",
-    "What are the return policy rules and GST slabs?",
-    "Add PRD-001 size M to my shopping bag",
-    "Show GMV and order analytics report",
-  ];
+function renderPoliciesPage() {
+  const taxCfg = state.businessConfig?.tax || {};
+  const shipCfg = state.businessConfig?.shipping || {};
+  const retCfg = state.businessConfig?.returns_and_refunds || {};
+  const tiers = retCfg.tiers || {};
 
   return `
-    <div style="padding:1rem;display:flex;flex-direction:column;height:100%;justify-content:space-between;gap:0.75rem;">
-      <div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
-          <h3 class="font-editorial" style="font-size:var(--text-xl);">9-Agent AI Concierge</h3>
-          <span class="meta-tag">HTTP /api/agents/chat</span>
-        </div>
+    <div style="display:flex;flex-direction:column;gap:1.5rem;">
+      <div class="surface-card">
+        <h2 class="font-editorial" style="font-size:var(--text-3xl);margin-bottom:0.4rem;">
+          Noir Atelier Governance & Store Policies
+        </h2>
+        <p style="font-size:var(--text-sm);color:var(--text-secondary);">
+          Loaded dynamically from PostgreSQL/SQLite <code>business_config</code> and <code>policies</code> tables via <code>GET /api/config/policies</code>.
+        </p>
 
-        <select id="agent-preferred-select" class="field-input" style="font-size:11px;padding:0.4rem 0.65rem;margin-bottom:0.55rem;">
-          ${agentOptions}
-        </select>
-
-        <div style="display:flex;gap:0.35rem;flex-wrap:wrap;margin-bottom:0.65rem;">
-          ${quickPrompts
-            .map(
-              (qp) => `
-              <button class="chip-pill" style="font-size:10px;padding:0.25rem 0.6rem;" data-action="send-quick-prompt" data-prompt="${qp}">
-                ${qp}
-              </button>
-            `
-            )
-            .join("")}
-        </div>
-
-        <div style="display:flex;flex-direction:column;gap:0.55rem;max-height:380px;overflow-y:auto;">
-          ${
-            state.agentMessages.length === 0
-              ? `<div style="padding:0.85rem;background:var(--bg-surface);border-radius:14px;border:1px solid var(--border-subtle);font-size:12px;color:var(--text-secondary);">
-                  Ask anything about Men, Women, or Kids garments, cart coupons, order status, 4-tier returns, warehouse stock, or store policies. Every tool call executes live against <code>/api/*</code>.
-                </div>`
-              : state.agentMessages
-                  .map(
-                    (m) => `
-                    <div style="padding:0.7rem 0.85rem;border-radius:14px;font-size:12px;background:${
-                      m.role === "user" ? "var(--accent-noir)" : "var(--bg-surface)"
-                    };color:${m.role === "user" ? "#ffffff" : "var(--text-primary)"};border:1px solid var(--border-subtle);">
-                      ${
-                        m.role === "agent"
-                          ? `<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:0.25rem;font-family:var(--font-mono);">
-                              <span>${m.routed_agent} (${m.service_account})</span>
-                              <span>${m.status} · ${m.trace_id}</span>
-                            </div>`
-                          : ""
-                      }
-                      <div style="white-space:pre-line;">${m.text}</div>
-                      ${
-                        m.tool_traces?.length
-                          ? `<div style="margin-top:0.4rem;padding-top:0.35rem;border-top:1px dashed var(--border-subtle);font-family:var(--font-mono);font-size:10px;color:var(--text-secondary);">
-                              ${m.tool_traces
-                                .map((t) => `${t.http_method} ${t.endpoint} → ${t.status_code} (${t.latency_ms}ms)`)
-                                .join(" · ")}
-                            </div>`
-                          : ""
-                      }
-                    </div>
-                  `
-                  )
-                  .join("")
-          }
-          ${state.agentBusy ? `<div class="shimmer" style="height:38px;border-radius:12px;"></div>` : ""}
+        <div class="kpi-row" style="margin-top:1.25rem;margin-bottom:0;">
+          <div class="kpi-tile">
+            <div class="kpi-tile-label">HSN 61/62 Slab ≤ ₹${taxCfg.garment_slab_threshold_inr ?? 2500}</div>
+            <div class="kpi-tile-value">${Number(taxCfg.rate_upto_threshold ?? 0.05) * 100}% GST</div>
+          </div>
+          <div class="kpi-tile">
+            <div class="kpi-tile-label">HSN 61/62 Slab > ₹${taxCfg.garment_slab_threshold_inr ?? 2500}</div>
+            <div class="kpi-tile-value">${Number(taxCfg.rate_above_threshold ?? 0.18) * 100}% GST</div>
+          </div>
+          <div class="kpi-tile">
+            <div class="kpi-tile-label">Complimentary Shipping</div>
+            <div class="kpi-tile-value">≥ ${formatInr(shipCfg.free_shipping_threshold_inr ?? 1999)}</div>
+          </div>
+          <div class="kpi-tile">
+            <div class="kpi-tile-label">Return Window</div>
+            <div class="kpi-tile-value">${retCfg.return_window_days ?? 7} Days</div>
+          </div>
         </div>
       </div>
 
-      <form data-form="agent-chat-form" style="display:flex;gap:0.45rem;">
-        <input
-          id="agent-chat-input"
-          class="field-input"
-          type="text"
-          placeholder="Message the 9-agent orchestrator..."
-          value="${state.agentInput}"
-        />
-        <button type="submit" class="btn-pill" style="padding:0.55rem 1rem;">Send</button>
-      </form>
+      <div class="catalog-grid">
+        ${state.policies
+          .map(
+            (pol) => `
+            <div class="surface-card">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+                <span class="chip-pill active" style="font-size:10px;">${pol.policy_id}</span>
+                <span class="meta-tag">${pol.topic} · v${pol.version}</span>
+              </div>
+              <h3 class="font-editorial" style="font-size:var(--text-xl);margin-bottom:0.45rem;">${pol.title}</h3>
+              <p style="font-size:var(--text-xs);color:var(--text-secondary);line-height:1.6;">${pol.rule_text}</p>
+            </div>
+          `
+          )
+          .join("")}
+      </div>
+
+      <div class="surface-card">
+        <h3 class="font-editorial" style="font-size:var(--text-2xl);margin-bottom:0.75rem;">
+          4-Tier Premium Garment Refund Approval Matrix
+        </h3>
+        <div class="kpi-row" style="margin-bottom:0;">
+          <div class="kpi-tile">
+            <div class="kpi-tile-label">Tier 0 · Pre-Shipment Cancel</div>
+            <div style="font-weight:700;margin-top:0.35rem;">Up to ${formatInr(tiers.tier_0_pre_ship_cancel_max_inr ?? 50000)}</div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:0.2rem;">Auto-approved by svc-order</div>
+          </div>
+          <div class="kpi-tile">
+            <div class="kpi-tile-label">Tier 1 · Standard Garment</div>
+            <div style="font-weight:700;margin-top:0.35rem;">Up to ${formatInr(tiers.tier_1_auto_refund_max_inr ?? 5000)}</div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:0.2rem;">Auto-approved by svc-returns (QC + Ribbon intact)</div>
+          </div>
+          <div class="kpi-tile">
+            <div class="kpi-tile-label">Tier 2 · Luxury / Archive</div>
+            <div style="font-weight:700;margin-top:0.35rem;">Up to ${formatInr(tiers.tier_2_manager_approval_max_inr ?? 25000)}</div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:0.2rem;">Requires Store Manager (MGR-001)</div>
+          </div>
+          <div class="kpi-tile">
+            <div class="kpi-tile-label">Tier 3 · Couture / Multi-Item</div>
+            <div style="font-weight:700;margin-top:0.35rem;">Up to ${formatInr(tiers.tier_3_dual_approval_max_inr ?? 50000)}</div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:0.2rem;">Dual Manager + Finance Admin sign-off</div>
+          </div>
+        </div>
+      </div>
     </div>
   `;
 }
 
-function renderAdminGovernanceSurface() {
+function renderAdminConsolePage() {
   if (state.permissionDeniedInfo || state.actor.role === "customer") {
     return renderPermissionDeniedState({
       actorId: `${state.actor.id} (${state.actor.role})`,
@@ -964,74 +1072,88 @@ function renderAdminGovernanceSurface() {
   }
 
   if (state.isLoading) {
-    return renderLoadingState({ count: 4, label: "Loading Admin Governance & Audit Log from database..." });
+    return renderLoadingState({ count: 4, label: "Loading Admin Governance & Audit Log..." });
   }
 
   const ordStats = state.adminDashboard?.orders || { total_orders: 0, total_revenue_inr: 0 };
   const cusStats = state.adminDashboard?.customers || { total_customers: 0, retention_rate_pct: 0 };
 
   return `
-    <div>
-      <div class="panel-card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.85rem;flex-wrap:wrap;gap:0.5rem;">
+    <div style="display:flex;flex-direction:column;gap:1.5rem;">
+      <div class="surface-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;margin-bottom:1.25rem;">
           <div>
-            <h2 class="font-editorial" style="font-size:var(--text-2xl);">Noir Atelier Governance & Admin Console</h2>
+            <h2 class="font-editorial" style="font-size:var(--text-3xl);">Admin Governance Console</h2>
             <p style="font-size:var(--text-xs);color:var(--text-secondary);">
-              Connected to shared PostgreSQL/SQLite tables (<code>orders</code>, <code>returns</code>, <code>refunds</code>, <code>inventory</code>, <code>business_config</code>, <code>audit_log</code>).
+              Real-time operations across shared database tables (<code>orders</code>, <code>refunds</code>, <code>inventory</code>, <code>audit_log</code>).
             </p>
           </div>
-          <span class="chip-pill active">Active Admin: ${state.actor.label}</span>
+          <span class="chip-pill active">Authenticated as: ${state.actor.label}</span>
         </div>
 
-        <div class="kpi-grid">
-          <div class="kpi-box">
-            <div class="kpi-box-label">Total Orders</div>
-            <div class="kpi-box-value">${ordStats.total_orders}</div>
+        <div class="kpi-row" style="margin-bottom:0;">
+          <div class="kpi-tile">
+            <div class="kpi-tile-label">Total Orders</div>
+            <div class="kpi-tile-value">${ordStats.total_orders}</div>
           </div>
-          <div class="kpi-box">
-            <div class="kpi-box-label">Total Revenue (INR)</div>
-            <div class="kpi-box-value">${formatInr(ordStats.total_revenue_inr)}</div>
+          <div class="kpi-tile">
+            <div class="kpi-tile-label">Cumulative Revenue</div>
+            <div class="kpi-tile-value">${formatInr(ordStats.total_revenue_inr)}</div>
           </div>
-          <div class="kpi-box">
-            <div class="kpi-box-label">Registered Clients</div>
-            <div class="kpi-box-value">${cusStats.total_customers}</div>
+          <div class="kpi-tile">
+            <div class="kpi-tile-label">Registered Customers</div>
+            <div class="kpi-tile-value">${cusStats.total_customers}</div>
           </div>
-          <div class="kpi-box">
-            <div class="kpi-box-label">Repeat Retention</div>
-            <div class="kpi-box-value">${cusStats.retention_rate_pct}%</div>
+          <div class="kpi-tile">
+            <div class="kpi-tile-label">Repeat Buyer Retention</div>
+            <div class="kpi-tile-value">${cusStats.retention_rate_pct}%</div>
           </div>
         </div>
       </div>
 
-      <div class="admin-grid">
-        <div class="panel-card">
-          <h3 class="font-editorial" style="font-size:var(--text-xl);margin-bottom:0.65rem;">4-Tier Refund Approval Queue</h3>
+      <div class="page-grid-2col">
+        <div class="surface-card">
+          <h3 class="font-editorial" style="font-size:var(--text-2xl);margin-bottom:0.75rem;">
+            4-Tier Refund Approval Queue
+          </h3>
           ${
             state.adminRefunds.length === 0
-              ? `<p style="font-size:var(--text-xs);color:var(--text-secondary);">No refunds in queue.</p>`
-              : `<div style="display:flex;flex-direction:column;gap:0.55rem;">
+              ? `<p style="font-size:var(--text-xs);color:var(--text-secondary);">No refund requests in queue.</p>`
+              : `<div style="display:flex;flex-direction:column;gap:0.65rem;">
                   ${state.adminRefunds
                     .map(
                       (r) => `
-                      <div style="padding:0.7rem;border-radius:12px;background:var(--bg-subtle);font-size:12px;">
-                        <div style="display:flex;justify-content:space-between;font-weight:600;">
-                          <span>${r.refund_id} · Order ${r.order_id} (${formatInr(r.amount_inr)})</span>
+                      <div style="padding:0.9rem;border-radius:16px;background:var(--bg-page);border:1px solid var(--border-subtle);font-size:12px;">
+                        <div style="display:flex;justify-content:space-between;font-weight:600;margin-bottom:0.25rem;">
+                          <span>${r.refund_id} · Order ${r.order_id} · ${formatInr(r.amount_inr)}</span>
                           <span class="meta-tag">Tier ${r.approval_tier} · ${r.status}</span>
                         </div>
-                        <div style="font-size:11px;color:var(--text-secondary);margin:0.25rem 0 0.45rem;">
-                          Approved by: ${r.approved_by || "—"} ${r.secondary_approved_by ? "· Secondary: " + r.secondary_approved_by : ""}
+                        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:0.55rem;">
+                          Primary Approver: ${r.approved_by || "Pending"} ${
+                            r.secondary_approved_by ? "· Secondary Approver: " + r.secondary_approved_by : ""
+                          }
                         </div>
-                        <div style="display:flex;gap:0.4rem;">
+                        <div style="display:flex;gap:0.45rem;">
                           ${
                             r.status === "pending_approval" || r.status === "awaiting_secondary_approval"
-                              ? `<button class="btn-pill" style="padding:0.3rem 0.75rem;font-size:11px;" data-action="admin-approve-refund" data-refund-id="${r.refund_id}">
-                                  Approve (${state.actor.role})
+                              ? `<button
+                                  class="btn-pill"
+                                  style="padding:0.38rem 0.9rem;font-size:11px;"
+                                  data-action="admin-approve-refund"
+                                  data-refund-id="${r.refund_id}"
+                                >
+                                  Approve as ${state.actor.role}
                                 </button>`
                               : ""
                           }
                           ${
                             r.status === "approved"
-                              ? `<button class="btn-pill btn-pill-outline" style="padding:0.3rem 0.75rem;font-size:11px;" data-action="admin-process-refund" data-refund-id="${r.refund_id}">
+                              ? `<button
+                                  class="btn-pill btn-pill-outline"
+                                  style="padding:0.38rem 0.9rem;font-size:11px;"
+                                  data-action="admin-process-refund"
+                                  data-refund-id="${r.refund_id}"
+                                >
                                   Disburse Payout & Restock
                                 </button>`
                               : ""
@@ -1045,16 +1167,20 @@ function renderAdminGovernanceSurface() {
           }
         </div>
 
-        <div class="panel-card">
-          <h3 class="font-editorial" style="font-size:var(--text-xl);margin-bottom:0.65rem;">Warehouse Garment Inventory</h3>
-          <div style="display:flex;flex-direction:column;gap:0.5rem;">
+        <div class="surface-card">
+          <h3 class="font-editorial" style="font-size:var(--text-2xl);margin-bottom:0.75rem;">
+            Warehouse Garment Inventory
+          </h3>
+          <div style="display:flex;flex-direction:column;gap:0.6rem;">
             ${state.adminInventory
               .map(
                 (inv) => `
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:0.6rem 0.75rem;border-radius:12px;background:var(--bg-subtle);font-size:12px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:0.75rem 0.9rem;border-radius:14px;background:var(--bg-page);border:1px solid var(--border-subtle);font-size:12px;">
                   <div>
                     <strong>${inv.product_id}</strong> · ${inv.name}
-                    <div style="font-size:11px;color:var(--text-secondary);">Available: ${inv.quantity_available} · Reserved: ${inv.quantity_reserved}</div>
+                    <div style="font-size:11px;color:var(--text-secondary);">
+                      Available: ${inv.quantity_available} · Reserved: ${inv.quantity_reserved}
+                    </div>
                   </div>
                   <button
                     class="chip-pill"
@@ -1062,7 +1188,7 @@ function renderAdminGovernanceSurface() {
                     data-product-id="${inv.product_id}"
                     data-current-stock="${inv.quantity_available}"
                   >
-                    +10 Stock
+                    +10 Units
                   </button>
                 </div>
               `
@@ -1072,17 +1198,19 @@ function renderAdminGovernanceSurface() {
         </div>
       </div>
 
-      <div class="panel-card">
-        <h3 class="font-editorial" style="font-size:var(--text-xl);margin-bottom:0.65rem;">Immutable Audit Log (/api/audit/log)</h3>
+      <div class="surface-card">
+        <h3 class="font-editorial" style="font-size:var(--text-2xl);margin-bottom:0.75rem;">
+          Immutable Audit Log (<code>GET /api/audit/log</code>)
+        </h3>
         <div style="overflow-x:auto;">
-          <table style="width:100%;border-collapse:collapse;font-size:11px;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
             <thead>
               <tr style="text-align:left;border-bottom:1px solid var(--border-strong);color:var(--text-secondary);">
-                <th style="padding:0.45rem;">Trace ID</th>
-                <th style="padding:0.45rem;">Actor</th>
-                <th style="padding:0.45rem;">Resource</th>
-                <th style="padding:0.45rem;">Action</th>
-                <th style="padding:0.45rem;">Reason</th>
+                <th style="padding:0.55rem;">Trace ID</th>
+                <th style="padding:0.55rem;">Actor</th>
+                <th style="padding:0.55rem;">Resource</th>
+                <th style="padding:0.55rem;">Action</th>
+                <th style="padding:0.55rem;">Reason</th>
               </tr>
             </thead>
             <tbody>
@@ -1090,11 +1218,11 @@ function renderAdminGovernanceSurface() {
                 .map(
                   (log) => `
                   <tr style="border-bottom:1px solid var(--border-subtle);">
-                    <td style="padding:0.45rem;font-family:var(--font-mono);">${log.trace_id}</td>
-                    <td style="padding:0.45rem;">${log.actor_type}:${log.actor_id}</td>
-                    <td style="padding:0.45rem;">${log.resource_type}/${log.resource_id}</td>
-                    <td style="padding:0.45rem;font-weight:600;">${log.action}</td>
-                    <td style="padding:0.45rem;color:var(--text-secondary);">${log.reason || "—"}</td>
+                    <td style="padding:0.55rem;font-family:var(--font-mono);">${log.trace_id}</td>
+                    <td style="padding:0.55rem;">${log.actor_type}:${log.actor_id}</td>
+                    <td style="padding:0.55rem;">${log.resource_type}/${log.resource_id}</td>
+                    <td style="padding:0.55rem;font-weight:600;">${log.action}</td>
+                    <td style="padding:0.55rem;color:var(--text-secondary);">${log.reason || "—"}</td>
                   </tr>
                 `
                 )
@@ -1107,26 +1235,289 @@ function renderAdminGovernanceSurface() {
   `;
 }
 
+function renderShoppingBagDrawer() {
+  if (state.activeDrawer !== "bag" && state.activeUiPrinciple !== "form_validation") return "";
+
+  const items = state.cart?.items || [];
+  const forceValidationDemo = state.activeUiPrinciple === "form_validation";
+  const errors = forceValidationDemo
+    ? validateCheckoutForm({ street: "abc", pinCode: "000", couponCode: "!" }).errors
+    : state.checkoutValidationErrors;
+
+  return `
+    <div class="drawer-backdrop" data-action="close-drawer-backdrop">
+      <aside class="slide-drawer" aria-label="Shopping Bag & Checkout">
+        <div class="drawer-header">
+          <div>
+            <h3 class="font-editorial" style="font-size:var(--text-2xl);">Atelier Shopping Bag</h3>
+            <span style="font-size:11px;color:var(--text-secondary);">
+              ${items.reduce((s, i) => s + i.quantity, 0)} piece(s) · GST & Free Shipping calculated live
+            </span>
+          </div>
+          <button class="heart-btn" data-action="close-drawer" title="Close">✕</button>
+        </div>
+
+        <div class="drawer-body">
+          ${
+            items.length === 0 && !forceValidationDemo
+              ? renderEmptyState({
+                  title: "Your Atelier Bag is Empty",
+                  description: "Select a tailored garment from the collection to add it to your bag.",
+                  actionLabel: "Continue Shopping",
+                  actionAttr: 'data-action="close-drawer"',
+                })
+              : `
+                <div style="display:flex;flex-direction:column;gap:0.65rem;margin-bottom:1.25rem;">
+                  ${items
+                    .map(
+                      (item) => `
+                      <div style="display:flex;justify-content:space-between;align-items:center;padding:0.85rem;background:var(--bg-surface);border-radius:16px;border:1px solid var(--border-subtle);">
+                        <div>
+                          <div style="font-size:13px;font-weight:600;">${item.product_name}</div>
+                          <div style="font-size:11px;color:var(--text-secondary);">
+                            ${item.product_id} · Size ${item.size} · Qty ${item.quantity} · ${item.gst_rate_pct}% GST
+                          </div>
+                        </div>
+                        <div style="text-align:right;">
+                          <div style="font-size:13px;font-weight:700;">${formatInr(item.line_mrp_inr)}</div>
+                          <button
+                            class="section-link"
+                            style="font-size:11px;color:#b91c1c;"
+                            data-action="remove-cart-item"
+                            data-cart-id="${item.cart_id}"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    `
+                    )
+                    .join("")}
+                </div>
+
+                ${
+                  state.cart
+                    ? `
+                  <div style="background:var(--bg-surface);border-radius:18px;padding:1rem;border:1px solid var(--border-subtle);margin-bottom:1.25rem;font-size:12px;">
+                    <div style="display:flex;justify-content:space-between;margin-bottom:0.35rem;">
+                      <span style="color:var(--text-secondary);">Subtotal (MRP incl. GST)</span>
+                      <span>${formatInr(state.cart.subtotal_mrp_inr)}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:0.35rem;">
+                      <span style="color:var(--text-secondary);">Net Taxable + CGST/SGST</span>
+                      <span>${formatInr(state.cart.taxable_value_inr)} + ${formatInr(state.cart.total_gst_inr)}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:0.35rem;">
+                      <span style="color:var(--text-secondary);">Express Courier</span>
+                      <span>${state.cart.free_shipping_applied ? "Complimentary (₹0)" : formatInr(state.cart.shipping_fee_inr)}</span>
+                    </div>
+                    ${
+                      state.couponResult?.valid
+                        ? `<div style="display:flex;justify-content:space-between;color:var(--state-success-text);font-weight:600;">
+                            <span>Promo (${state.couponResult.code})</span>
+                            <span>-${formatInr(state.couponResult.discount_inr)}</span>
+                          </div>`
+                        : ""
+                    }
+                    <div style="display:flex;justify-content:space-between;font-weight:700;font-size:15px;padding-top:0.55rem;margin-top:0.55rem;border-top:1px solid var(--border-subtle);">
+                      <span>Total Payable</span>
+                      <span>${formatInr(
+                        state.couponResult?.valid ? state.couponResult.new_total_inr : state.cart.grand_total_inr
+                      )}</span>
+                    </div>
+                  </div>
+                `
+                    : ""
+                }
+
+                <form id="bag-checkout-form" data-form="checkout-form" style="display:flex;flex-direction:column;gap:0.75rem;">
+                  <div class="field-group">
+                    <label class="field-label" for="checkout-street">Delivery Street Address *</label>
+                    <input
+                      id="checkout-street"
+                      class="field-input ${errors.street ? "invalid" : ""}"
+                      type="text"
+                      value="${state.checkoutForm.street}"
+                      placeholder="14 Cathedral Road, Gopalapuram"
+                    />
+                    ${errors.street ? `<span class="field-error">${errors.street}</span>` : ""}
+                  </div>
+
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;">
+                    <div class="field-group">
+                      <label class="field-label" for="checkout-pin">6-Digit PIN Code *</label>
+                      <input
+                        id="checkout-pin"
+                        class="field-input ${errors.pinCode ? "invalid" : ""}"
+                        type="text"
+                        maxlength="6"
+                        value="${state.checkoutForm.pinCode}"
+                        placeholder="600086"
+                      />
+                      ${errors.pinCode ? `<span class="field-error">${errors.pinCode}</span>` : ""}
+                    </div>
+
+                    <div class="field-group">
+                      <label class="field-label" for="checkout-coupon">Promo Code</label>
+                      <div style="display:flex;gap:0.35rem;">
+                        <input
+                          id="checkout-coupon"
+                          class="field-input ${errors.couponCode ? "invalid" : ""}"
+                          type="text"
+                          value="${state.checkoutForm.couponCode}"
+                          placeholder="ATELIER10"
+                        />
+                        <button type="button" class="chip-pill" data-action="apply-coupon">Apply</button>
+                      </div>
+                      ${errors.couponCode ? `<span class="field-error">${errors.couponCode}</span>` : ""}
+                    </div>
+                  </div>
+
+                  <button type="submit" class="btn-pill" style="width:100%;margin-top:0.4rem;">
+                    Place Verified Order (UPI / Card)
+                  </button>
+                </form>
+              `
+          }
+        </div>
+      </aside>
+    </div>
+  `;
+}
+
+function renderAiConciergeDrawer() {
+  if (state.activeDrawer !== "ai") return "";
+
+  const agentOptions = [
+    `<option value="">Supervisor Auto-Router (All 9 Agents)</option>`,
+    ...state.agentRegistry.map(
+      (a) =>
+        `<option value="${a.agent_name}" ${state.agentPreferred === a.agent_name ? "selected" : ""}>${a.agent_name} (${a.service_account})</option>`
+    ),
+  ].join("");
+
+  const quickPrompts = [
+    "Show me Men's garments under INR 3000",
+    "Add PRD-001 size M to my shopping bag",
+    "What are the return policy rules and GST slabs?",
+    "Show GMV and order analytics report",
+  ];
+
+  return `
+    <div class="drawer-backdrop" data-action="close-drawer-backdrop">
+      <aside class="slide-drawer" aria-label="AI Stylist & 9-Agent Copilot">
+        <div class="drawer-header">
+          <div>
+            <h3 class="font-editorial" style="font-size:var(--text-2xl);">✨ Noir Atelier AI Stylist</h3>
+            <span style="font-size:11px;color:var(--text-secondary);">
+              Powered by 9 specialized agents calling shared <code>/api/*</code> endpoints
+            </span>
+          </div>
+          <button class="heart-btn" data-action="close-drawer" title="Close">✕</button>
+        </div>
+
+        <div class="drawer-body" style="display:flex;flex-direction:column;gap:0.85rem;">
+          <select id="agent-preferred-select" class="field-input" style="font-size:12px;">
+            ${agentOptions}
+          </select>
+
+          <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+            ${quickPrompts
+              .map(
+                (qp) => `
+                <button
+                  class="chip-pill"
+                  style="font-size:11px;padding:0.3rem 0.7rem;"
+                  data-action="send-quick-prompt"
+                  data-prompt="${qp}"
+                >
+                  ${qp}
+                </button>
+              `
+              )
+              .join("")}
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:0.65rem;flex:1;">
+            ${
+              state.agentMessages.length === 0
+                ? `<div style="padding:1rem;background:var(--bg-surface);border-radius:16px;border:1px solid var(--border-subtle);font-size:12px;color:var(--text-secondary);line-height:1.55;">
+                    Welcome to Noir Atelier's AI-Native Stylist & Concierge. I can search Men, Women, and Kids garments, add sizes directly to your bag, apply promo codes, place or cancel orders, initiate 4-tier returns, or answer GST & policy questions.
+                  </div>`
+                : state.agentMessages
+                    .map(
+                      (m) => `
+                      <div style="padding:0.85rem 1rem;border-radius:16px;font-size:12px;background:${
+                        m.role === "user" ? "var(--accent-noir)" : "var(--bg-surface)"
+                      };color:${m.role === "user" ? "#ffffff" : "var(--text-primary)"};border:1px solid var(--border-subtle);">
+                        ${
+                          m.role === "agent"
+                            ? `<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:0.3rem;font-family:var(--font-mono);">
+                                <span>${m.routed_agent} · ${m.service_account}</span>
+                                <span>${m.status}</span>
+                              </div>`
+                            : ""
+                        }
+                        <div style="white-space:pre-line;line-height:1.5;">${m.text}</div>
+                        ${
+                          m.tool_traces?.length
+                            ? `<div style="margin-top:0.45rem;padding-top:0.4rem;border-top:1px dashed var(--border-subtle);font-family:var(--font-mono);font-size:10px;color:var(--text-secondary);">
+                                ${m.tool_traces
+                                  .map((t) => `${t.http_method} ${t.endpoint} → ${t.status_code} (${t.latency_ms}ms)`)
+                                  .join(" · ")}
+                              </div>`
+                            : ""
+                        }
+                      </div>
+                    `
+                    )
+                    .join("")
+            }
+            ${state.agentBusy ? `<div class="shimmer" style="height:44px;border-radius:14px;"></div>` : ""}
+          </div>
+        </div>
+
+        <div class="drawer-footer">
+          <form data-form="agent-chat-form" style="display:flex;gap:0.5rem;">
+            <input
+              id="agent-chat-input"
+              class="field-input"
+              type="text"
+              placeholder="Ask AI Stylist to search, add to bag, or return..."
+            />
+            <button type="submit" class="btn-pill">Send</button>
+          </form>
+        </div>
+      </aside>
+    </div>
+  `;
+}
+
 export function renderApp() {
   const root = document.getElementById("noir-app");
   if (!root) return;
 
-  root.className = `platform-shell ${state.viewMode === "desktop" ? "desktop-mode" : ""}`;
+  let pageHtml = "";
+  if (state.activePage === "orders") {
+    pageHtml = renderOrdersAndReturnsPage();
+  } else if (state.activePage === "policies") {
+    pageHtml = renderPoliciesPage();
+  } else if (state.activePage === "admin") {
+    pageHtml = renderAdminConsolePage();
+  } else {
+    pageHtml = renderShopPage();
+  }
 
-  const mainStage =
-    state.activeSurface === "admin"
-      ? renderAdminGovernanceSurface()
-      : `<div class="showcase-grid">
-          ${renderLeftStorefrontPhone()}
-          ${renderRightDetailOrWorkspacePhone()}
-        </div>`;
-
+  root.className = "web-app";
   root.innerHTML = `
-    ${renderToolbar()}
-    <main class="workspace-stage">
+    ${renderHeader()}
+    <main class="main-container">
       ${renderGlobalBanners()}
-      ${mainStage}
+      ${pageHtml}
     </main>
+    ${renderProductDetailModal()}
+    ${renderShoppingBagDrawer()}
+    ${renderAiConciergeDrawer()}
   `;
 }
 
@@ -1135,18 +1526,25 @@ document.addEventListener("click", async (e) => {
   if (!target) return;
   const action = target.getAttribute("data-action");
 
-  if (action === "set-ui-principle") {
-    const p = target.getAttribute("data-principle");
-    state.activeUiPrinciple = p;
-    if (p === "form_validation") state.rightPaneTab = "bag";
+  if (action === "toggle-diagnostics") {
+    state.showDiagnosticsBar = !state.showDiagnosticsBar;
     renderApp();
     return;
   }
 
-  if (action === "switch-surface") {
-    state.activeSurface = target.getAttribute("data-surface");
+  if (action === "set-ui-principle") {
+    const p = target.getAttribute("data-principle");
+    state.activeUiPrinciple = p;
+    if (p === "form_validation") state.activeDrawer = "bag";
+    renderApp();
+    return;
+  }
+
+  if (action === "nav-page") {
+    state.activePage = target.getAttribute("data-page");
     state.activeUiPrinciple = "normal";
-    if (state.activeSurface === "admin") {
+    state.permissionDeniedInfo = null;
+    if (state.activePage === "admin") {
       await loadAdminDataFromDb();
     } else {
       renderApp();
@@ -1154,18 +1552,66 @@ document.addEventListener("click", async (e) => {
     return;
   }
 
-  if (action === "toggle-view-mode") {
-    state.viewMode = state.viewMode === "showcase" ? "desktop" : "showcase";
+  if (action === "nav-dept" || action === "filter-department") {
+    state.activePage = "shop";
+    state.selectedDepartment = target.getAttribute("data-department");
+    state.activeUiPrinciple = "normal";
+    await refreshProductsFromDb();
+    return;
+  }
+
+  if (action === "quick-price-slab") {
+    const mp = target.getAttribute("data-max-price");
+    state.maxPrice = Number(state.maxPrice) === Number(mp) ? "" : mp;
+    await refreshProductsFromDb();
+    return;
+  }
+
+  if (action === "scroll-to-catalog") {
+    document.getElementById("catalog-grid-anchor")?.scrollIntoView({ behavior: "smooth" });
+    return;
+  }
+
+  if (action === "open-product-modal") {
+    if (e.target.closest('[data-action="toggle-wishlist"]')) return;
+    const pid = target.getAttribute("data-product-id");
+    await openProductDetailModal(pid);
+    return;
+  }
+
+  if (action === "close-product-modal") {
+    state.detailModalProduct = null;
     renderApp();
     return;
   }
 
-  if (action === "select-product") {
-    if (e.target.closest('[data-action="toggle-wishlist"]')) return;
-    const pid = target.getAttribute("data-product-id");
-    state.rightPaneTab = "detail";
-    await selectProductFromDb(pid);
+  if (action === "close-modal-backdrop") {
+    if (e.target.classList.contains("detail-modal-backdrop")) {
+      state.detailModalProduct = null;
+      renderApp();
+    }
+    return;
+  }
+
+  if (action === "open-drawer") {
+    state.activeDrawer = target.getAttribute("data-drawer");
     renderApp();
+    return;
+  }
+
+  if (action === "close-drawer") {
+    state.activeDrawer = null;
+    if (state.activeUiPrinciple === "form_validation") state.activeUiPrinciple = "normal";
+    renderApp();
+    return;
+  }
+
+  if (action === "close-drawer-backdrop") {
+    if (e.target.classList.contains("drawer-backdrop")) {
+      state.activeDrawer = null;
+      if (state.activeUiPrinciple === "form_validation") state.activeUiPrinciple = "normal";
+      renderApp();
+    }
     return;
   }
 
@@ -1178,16 +1624,11 @@ document.addEventListener("click", async (e) => {
     return;
   }
 
-  if (action === "select-size") {
-    state.selectedSize = target.getAttribute("data-size");
+  if (action === "select-card-size") {
+    const pid = target.getAttribute("data-product-id");
+    const sz = target.getAttribute("data-size");
+    state.cardSizeSelection[pid] = sz;
     renderApp();
-    return;
-  }
-
-  if (action === "filter-department") {
-    state.selectedDepartment = target.getAttribute("data-department");
-    state.activeUiPrinciple = "normal";
-    await refreshProductsFromDb();
     return;
   }
 
@@ -1223,7 +1664,7 @@ document.addEventListener("click", async (e) => {
     api.setToken(state.actor.token);
     state.permissionDeniedInfo = null;
     state.activeUiPrinciple = "normal";
-    if (state.activeSurface === "admin") await loadAdminDataFromDb();
+    if (state.activePage === "admin") await loadAdminDataFromDb();
     else await bootstrapData();
     return;
   }
@@ -1235,31 +1676,21 @@ document.addEventListener("click", async (e) => {
     return;
   }
 
-  if (action === "open-right-tab") {
-    state.rightPaneTab = target.getAttribute("data-tab");
-    state.activeUiPrinciple = "normal";
-    renderApp();
-    return;
-  }
-
-  if (action === "focus-search") {
-    document.getElementById("catalog-search-input")?.focus();
-    return;
-  }
-
   if (action === "add-to-cart") {
     const pid = target.getAttribute("data-product-id");
+    const chosenSize = state.cardSizeSelection[pid] || "M";
     try {
       state.cart = await api.addToCart({
         productId: pid,
-        size: state.selectedSize || "M",
+        size: chosenSize,
         quantity: 1,
       });
+      state.detailModalProduct = null;
+      state.activeDrawer = "bag";
       state.toastSuccess = {
         title: "Added to Atelier Bag",
-        message: `${pid} (Size ${state.selectedSize || "M"}) saved to database cart.`,
+        message: `${pid} (Size ${chosenSize}) added to your shopping bag.`,
       };
-      state.rightPaneTab = "bag";
       renderApp();
     } catch (err) {
       state.apiError = err;
@@ -1275,21 +1706,13 @@ document.addEventListener("click", async (e) => {
     return;
   }
 
-  if (action === "clear-cart") {
-    state.cart = await api.clearCart();
-    state.couponResult = null;
-    renderApp();
-    return;
-  }
-
   if (action === "apply-coupon") {
     const codeInput = document.getElementById("checkout-coupon");
     const code = (codeInput?.value || "ATELIER10").trim().toUpperCase();
     state.checkoutForm.couponCode = code;
     const subtotal = Number(state.cart?.subtotal_mrp_inr || 0);
     if (subtotal <= 0) return;
-    const res = await api.validateCoupon(code, subtotal);
-    state.couponResult = res;
+    state.couponResult = await api.validateCoupon(code, subtotal);
     renderApp();
     return;
   }
@@ -1306,21 +1729,16 @@ document.addEventListener("click", async (e) => {
     state.orders = await api.listOrders();
     state.toastSuccess = {
       title: `Order ${oid} Cancelled (Tier 0)`,
-      message: `Status updated to '${cancelled.status}' in database under policy POL-CAN-01.`,
+      message: `Status updated to '${cancelled.status}' with full refund under policy POL-CAN-01.`,
     };
     renderApp();
     return;
   }
 
-  if (action === "ask-agent-about-product") {
-    const pid = target.getAttribute("data-product-id");
-    state.rightPaneTab = "concierge";
-    await sendAgentChatMessage(`Tell me the fabric, fit guide, and price details for ${pid}`);
-    return;
-  }
-
-  if (action === "send-quick-prompt") {
+  if (action === "trigger-ai-prompt" || action === "send-quick-prompt") {
     const prompt = target.getAttribute("data-prompt");
+    state.detailModalProduct = null;
+    state.activeDrawer = "ai";
     await sendAgentChatMessage(prompt);
     return;
   }
@@ -1366,13 +1784,16 @@ document.addEventListener("change", async (e) => {
     state.fontScale = e.target.value;
     applyFontScale(state.fontScale);
     renderApp();
+  } else if (action === "change-sort") {
+    state.sortBy = e.target.value;
+    renderApp();
   } else if (action === "change-actor") {
     const tok = e.target.value;
     const found = ACTORS.find((a) => a.token === tok) || ACTORS[0];
     state.actor = found;
     api.setToken(found.token);
     state.permissionDeniedInfo = null;
-    if (state.activeSurface === "admin") {
+    if (state.activePage === "admin") {
       await loadAdminDataFromDb();
     } else {
       await bootstrapData();
@@ -1388,8 +1809,8 @@ document.addEventListener("submit", async (e) => {
   e.preventDefault();
 
   if (formType === "catalog-search") {
+    state.activePage = "shop";
     state.searchQuery = document.getElementById("catalog-search-input")?.value || "";
-    state.maxPrice = document.getElementById("catalog-max-price")?.value || "";
     state.activeUiPrinciple = "normal";
     await refreshProductsFromDb();
     return;
@@ -1417,12 +1838,13 @@ document.addEventListener("submit", async (e) => {
       state.orders = await api.listOrders();
       state.returnForm.orderId = order.order_id;
       state.couponResult = null;
+      state.activeDrawer = null;
       state.activeUiPrinciple = "normal";
       state.toastSuccess = {
         title: `Order ${order.order_id} Confirmed!`,
         message: `Total ${formatInr(order.grand_total_inr)} (incl. GST ${formatInr(order.total_gst_inr)}) · Invoice ${order.invoice_id}`,
       };
-      state.rightPaneTab = "orders";
+      state.activePage = "orders";
       await refreshProductsFromDb();
     } catch (err) {
       state.apiError = err;
@@ -1481,7 +1903,7 @@ document.addEventListener("submit", async (e) => {
     const input = document.getElementById("agent-chat-input");
     const msg = (input?.value || "").trim();
     if (!msg) return;
-    state.agentInput = "";
+    input.value = "";
     await sendAgentChatMessage(msg);
   }
 });
