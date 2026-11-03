@@ -22,47 +22,53 @@ export function computeGstSlabFromConfig(mrpInr, taxConfig = {}) {
   };
 }
 
+export function validateAddressForm(fields = {}) {
+  const errors = {};
+  const street = String(fields.street || "").trim();
+  const city = String(fields.city || "").trim();
+  const pin = String(fields.pinCode || "").trim();
+
+  if (street.length < 6) errors.street = "Enter your full street address (at least 6 characters).";
+  if (city.length < 2) errors.city = "Enter your city.";
+  if (!/^[1-9][0-9]{5}$/.test(pin)) errors.pinCode = "Enter a valid 6-digit PIN code.";
+
+  return { valid: Object.keys(errors).length === 0, errors };
+}
+
 export function validateCheckoutForm(fields = {}) {
   const errors = {};
-  const pin = String(fields.pinCode || "").trim();
-  const street = String(fields.street || "").trim();
-  const coupon = String(fields.couponCode || "").trim().toUpperCase();
+  if (!fields.addressId) errors.addressId = "Choose where we should deliver your order.";
+  if (!fields.paymentMethod) errors.paymentMethod = "Choose a payment method.";
+  return { valid: Object.keys(errors).length === 0, errors };
+}
 
-  if (!street || street.length < 6) {
-    errors.street = "Enter a valid delivery street address (minimum 6 characters).";
-  }
-  if (!/^[1-9][0-9]{5}$/.test(pin)) {
-    errors.pinCode = "Enter a valid 6-digit Indian PIN code.";
-  }
-  if (coupon && !/^[A-Z0-9]{4,16}$/.test(coupon)) {
-    errors.couponCode = "Coupon code must be 4–16 alphanumeric characters.";
-  }
+export function validateCouponCode(code) {
+  const value = String(code || "").trim().toUpperCase();
+  if (!value) return "Enter a promo code.";
+  if (!/^[A-Z0-9]{4,16}$/.test(value)) return "Promo codes are 4–16 letters or numbers.";
+  return "";
+}
 
-  return {
-    valid: Object.keys(errors).length === 0,
-    errors,
-  };
+export function validateReviewForm(fields = {}) {
+  const errors = {};
+  if (!fields.rating || fields.rating < 1) errors.rating = "Select a star rating.";
+  if (String(fields.comment || "").trim().length < 10) {
+    errors.comment = "Tell us a little more (at least 10 characters).";
+  }
+  return { valid: Object.keys(errors).length === 0, errors };
 }
 
 export function validateReturnForm(fields = {}) {
   const errors = {};
-  const orderId = String(fields.orderId || "").trim().toUpperCase();
   const reason = String(fields.reasonNotes || "").trim();
 
-  if (!/^ORD-\d{4}$/.test(orderId)) {
-    errors.orderId = "Order ID must match format ORD-####.";
-  }
-  if (!reason || reason.length < 5) {
-    errors.reasonNotes = "Please provide a return reason (minimum 5 characters).";
-  }
+  if (!fields.orderId) errors.orderId = "Select the order you'd like to return.";
+  if (reason.length < 5) errors.reasonNotes = "Please tell us why you're returning this (at least 5 characters).";
   if (fields.tagIntact === false) {
-    errors.tagIntact = "Atelier security ribbon must be intact per database policy POL-RET-01.";
+    errors.tagIntact = "Returns need the security ribbon to be intact. Please contact concierge for damaged items.";
   }
 
-  return {
-    valid: Object.keys(errors).length === 0,
-    errors,
-  };
+  return { valid: Object.keys(errors).length === 0, errors };
 }
 
 export function validatePolicyConfigForm(fields = {}) {
@@ -86,3 +92,11 @@ export function validatePolicyConfigForm(fields = {}) {
     errors,
   };
 }
+
+export function getProductImage(product = {}) {
+  return {
+    url: product.image_gallery?.[0]?.url || product.images?.[0] || "",
+    alt: product.image_gallery?.[0]?.alt_text || product.name || "Noir Atelier garment",
+  };
+}
+

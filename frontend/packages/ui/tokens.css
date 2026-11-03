@@ -119,6 +119,25 @@
   --drawer-width: 480px;
   --touch-target-min: 44px;
 
+  --container-max: 1360px;
+  --announce-h: 38px;
+  --header-h: 68px;
+  --tabbar-h: 64px;
+
+  --widget-launcher: 60px;
+  --widget-panel-w: 392px;
+  --widget-panel-h: min(620px, calc(100dvh - 7rem));
+  --widget-offset: 1.25rem;
+
+  --z-header: 40;
+  --z-widget: 60;
+  --z-overlay: 70;
+  --z-drawer: 80;
+  --z-toast: 100;
+
+  --duration-fast: 150ms;
+  --duration-base: 240ms;
+
   --shadow-soft: 0 8px 28px -6px rgba(20, 20, 19, 0.07);
   --shadow-elevated: 0 22px 48px -12px rgba(20, 20, 19, 0.15);
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);

@@ -367,16 +367,16 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
             BusinessConfig(
                 config_key="storefront_ui",
                 config_value={
-                    "hero_eyebrow": "Noir Atelier · HSN 61 & 62 Luxury Garments",
+                    "hero_eyebrow": "Tailored luxury garments",
                     "hero_title": "The New Edit",
-                    "hero_subtitle": "Explore timeless tailored Belgian linen shirts, 22-momme mulberry silk dresses, and superfine merino knitwear across Men, Women, and Kids.",
+                    "hero_subtitle": "Belgian linen shirts, mulberry silk dresses and superfine merino knitwear, tailored in India for Men, Women and Kids.",
                     "hero_image_url": "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1200&q=85",
                     "hero_image_alt": "Noir Atelier Editorial Collection",
                     "ai_quick_prompts": [
-                        {"label": "Men's linen under ₹3,000", "prompt": "Show me Men's garments under INR 3000"},
-                        {"label": "Women's mulberry silk & cotton", "prompt": "Show me Women's garments"},
-                        {"label": "7-Day Return & GST Policy", "prompt": "What are the return policy rules and GST slabs?"},
-                        {"label": "GMV & Analytics Report", "prompt": "Show GMV and order analytics report"},
+                        {"label": "Linen for men under \u20b93,000", "prompt": "Show me Men's garments under INR 3000", "audience": "customer"},
+                        {"label": "Women's silk and cotton", "prompt": "Show me Women's garments", "audience": "customer"},
+                        {"label": "Returns and delivery info", "prompt": "What are the return policy rules and GST slabs?", "audience": "customer"},
+                        {"label": "Sales report", "prompt": "Show GMV and order analytics report", "audience": "staff"},
                     ],
                 },
             ),

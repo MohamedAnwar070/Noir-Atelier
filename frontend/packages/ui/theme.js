@@ -1,16 +1,9 @@
 export const DESIGN_TOKENS = {
-  breakpoints: {
-    xs: 360,
-    sm: 640,
-    md: 768,
-    lg: 1024,
-    xl: 1280,
-    "2xl": 1536,
-  },
+  breakpoints: { xs: 360, sm: 640, md: 768, lg: 1024, xl: 1280, "2xl": 1536 },
   fontScales: [
-    { id: "compact", label: "Compact (A-)" },
-    { id: "default", label: "Default (A)" },
-    { id: "large", label: "Large (A+)" },
+    { id: "compact", label: "A-", description: "Smaller text" },
+    { id: "default", label: "A", description: "Standard text" },
+    { id: "large", label: "A+", description: "Larger text" },
   ],
   themes: [
     { id: "light", label: "Editorial Light" },
@@ -18,43 +11,52 @@ export const DESIGN_TOKENS = {
   ],
 };
 
-export function applyFontScale(scaleKey = "default") {
-  if (typeof document !== "undefined") {
-    document.documentElement.setAttribute("data-font-scale", scaleKey);
+const STORAGE_KEYS = { theme: "noir_atelier_theme", fontScale: "noir_atelier_font_scale" };
+
+function readStorage(key) {
+  try {
+    return typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStorage(key, value) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    /* storage unavailable */
   }
 }
 
 export function applyTheme(themeKey = "light") {
-  if (typeof document !== "undefined") {
-    document.documentElement.setAttribute("data-theme", themeKey);
-    try {
-      localStorage.setItem("noir_atelier_theme", themeKey);
-    } catch {
-      // Ignore storage restrictions
-    }
-  }
+  if (typeof document === "undefined") return;
+  document.documentElement.setAttribute("data-theme", themeKey);
+  writeStorage(STORAGE_KEYS.theme, themeKey);
+}
+
+export function applyFontScale(scaleKey = "default") {
+  if (typeof document === "undefined") return;
+  document.documentElement.setAttribute("data-font-scale", scaleKey);
+  writeStorage(STORAGE_KEYS.fontScale, scaleKey);
 }
 
 export function getInitialTheme() {
-  if (typeof window !== "undefined") {
-    try {
-      const saved = localStorage.getItem("noir_atelier_theme");
-      if (saved === "light" || saved === "dark") return saved;
-    } catch {
-      // Ignore storage errors
-    }
-  }
+  const saved = readStorage(STORAGE_KEYS.theme);
+  if (saved === "light" || saved === "dark") return saved;
+  if (typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches) return "dark";
   return "light";
+}
+
+export function getInitialFontScale() {
+  const saved = readStorage(STORAGE_KEYS.fontScale);
+  return DESIGN_TOKENS.fontScales.some((f) => f.id === saved) ? saved : "default";
 }
 
 function hexToRelativeLuminance(hex) {
   const clean = String(hex || "#000000").replace("#", "");
-  const r = parseInt(clean.substring(0, 2), 16) / 255;
-  const g = parseInt(clean.substring(2, 4), 16) / 255;
-  const b = parseInt(clean.substring(4, 6), 16) / 255;
-  const [R, G, B] = [r, g, b].map((c) =>
-    c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
-  );
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(clean.substring(i, i + 2), 16) / 255);
+  const [R, G, B] = [r, g, b].map((c) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)));
   return 0.2126 * R + 0.7152 * G + 0.0722 * B;
 }
 
@@ -66,7 +68,7 @@ export function getContrastRatio(hex1, hex2) {
   return Number(((lighter + 0.05) / (darker + 0.05)).toFixed(2));
 }
 
-const ICON_SIZES = {
+export const ICON_SIZES = {
   xs: 14,
   sm: 16,
   md: 18,
@@ -74,7 +76,7 @@ const ICON_SIZES = {
   xl: 28,
 };
 
-const SVG_PATHS = {
+export const SVG_PATHS = {
   search: `<circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />`,
   bag: `<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>`,
   sparkles: `<path d="M12 3l1.9 5.3L19 10l-5.1 1.7L12 17l-1.9-5.3L5 10l5.1-1.7L12 3z"/><path d="M5 3v4"/><path d="M3 5h4"/><path d="M19 17v4"/><path d="M17 19h4"/>`,
@@ -131,5 +133,12 @@ export function getProductEditorialVisual(product = {}) {
     photoUrl: dbImgUrl,
     bgGradient,
     accentTag: dbAccentTag,
+  };
+}
+
+export function getProductImage(product = {}) {
+  return {
+    url: product.image_gallery?.[0]?.url || product.images?.[0] || "",
+    alt: product.image_gallery?.[0]?.alt_text || product.name || "Noir Atelier garment",
   };
 }

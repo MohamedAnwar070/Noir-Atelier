@@ -20,7 +20,7 @@ export class NoirApiClient {
       throw {
         status: 0,
         code: "offline",
-        message: "Browser reports no active internet connection.",
+        message: "You appear to be offline.",
         trace_id: "TRC-OFFLINE",
       };
     }
@@ -40,6 +40,10 @@ export class NoirApiClient {
     };
 
     const t0 = performance.now();
+    const slowTimer = setTimeout(() => {
+      this.onNetworkEvent?.({ type: "slow_network", pending: true });
+    }, this.slowThresholdMs);
+
     let res;
     try {
       res = await fetch(url.toString(), {
@@ -48,20 +52,18 @@ export class NoirApiClient {
         body: body ? JSON.stringify(body) : undefined,
       });
     } catch (networkErr) {
+      clearTimeout(slowTimer);
       this.onNetworkEvent?.({ type: "network_unreachable", error: networkErr });
       throw {
         status: 0,
         code: "backend_unreachable",
-        message: `Cannot reach Noir Atelier API at ${this.baseUrl}. Ensure FastAPI backend is running.`,
+        message: "We couldn't reach our servers. Please check your connection and try again.",
         trace_id: "TRC-NETERR",
       };
     }
+    clearTimeout(slowTimer);
 
     const latencyMs = Math.round(performance.now() - t0);
-    if (latencyMs >= this.slowThresholdMs) {
-      this.onNetworkEvent?.({ type: "slow_network", latencyMs });
-    }
-
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       if (res.status === 401) {
@@ -76,12 +78,14 @@ export class NoirApiClient {
       }
       throw {
         status: res.status,
-        code: data.code || "http_error",
-        message: data.message || `HTTP ${res.status}`,
+        code: data.code || data.error?.code || "http_error",
+        message: data.message || data.error?.message || `HTTP ${res.status}`,
+        details: data.details || data.error?.details || {},
         trace_id: data.trace_id || "TRC-000000",
       };
     }
 
+    this.onNetworkEvent?.({ type: "request_ok", latencyMs, slow: latencyMs >= this.slowThresholdMs });
     return { data, latencyMs };
   }
 
@@ -220,15 +224,47 @@ export class NoirApiClient {
     return data;
   }
 
-  async createOrder({ customerId, items = null, couponCode = null, paymentMethod = "upi", requestKey = null }) {
+  async createOrder({ customerId, items = null, couponCode = null, paymentMethod = "upi", requestKey = null, shippingAddressId = null }) {
     const { data } = await this.request("POST", "/api/orders", {
       body: {
         customer_id: customerId,
         items: items || undefined,
         coupon_code: couponCode || undefined,
         payment_method: paymentMethod,
+        shipping_address_id: shippingAddressId || undefined,
         request_key: requestKey || undefined,
       },
+    });
+    return data;
+  }
+
+  async holdOrder({ customerId, items = null, couponCode = null, paymentMethod = "upi", requestKey = null, shippingAddressId = null }) {
+    const { data } = await this.request("POST", "/api/orders/hold", {
+      body: {
+        customer_id: customerId,
+        items: items || undefined,
+        coupon_code: couponCode || undefined,
+        payment_method: paymentMethod,
+        shipping_address_id: shippingAddressId || undefined,
+        request_key: requestKey || undefined,
+      },
+    });
+    return data;
+  }
+
+  async payForOrder(orderId) {
+    const { data } = await this.request("POST", `/api/payments/demo/${orderId}`);
+    return data;
+  }
+
+  async getOrder(orderId) {
+    const { data } = await this.request("GET", `/api/orders/${orderId}`);
+    return data;
+  }
+
+  async addCustomerAddress(customerId, address) {
+    const { data } = await this.request("POST", `/api/customers/${customerId}/addresses`, {
+      body: address,
     });
     return data;
   }
@@ -342,12 +378,13 @@ export class NoirApiClient {
     return data;
   }
 
-  async chatWithAgents({ message, customerId, actorRole, preferredAgent = null }) {
+  async chatWithAgents({ message, customerId, actorRole, sessionId = null, preferredAgent = null }) {
     const { data } = await this.request("POST", "/api/agents/chat", {
       body: {
         message,
         customer_id: customerId,
         actor_role: actorRole,
+        session_id: sessionId || undefined,
         preferred_agent: preferredAgent || undefined,
       },
     });

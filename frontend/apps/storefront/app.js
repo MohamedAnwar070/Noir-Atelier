@@ -390,26 +390,6 @@ function renderHeader() {
                 .map((f) => `<option value="${f.id}" ${state.fontScale === f.id ? "selected" : ""}>${f.label}</option>`)
                 .join("")}
             </select>
-
-            <button
-              class="chip-pill ${state.showDiagnosticsBar ? "active" : ""}"
-              data-action="toggle-diagnostics"
-              aria-expanded="${state.showDiagnosticsBar}"
-              title="Inspect 10+ UI/UX Design States"
-            >
-              ${renderIcon("sliders", "xs")}
-              <span>UI States</span>
-            </button>
-
-            <button
-              class="btn-pill btn-pill-outline"
-              style="padding:0.48rem 1rem;font-size:var(--text-xs);"
-              data-action="open-drawer"
-              data-drawer="ai"
-            >
-              ${renderIcon("sparkles", "xs")}
-              <span>AI Stylist</span>
-            </button>
           </div>
 
           <button
@@ -478,13 +458,6 @@ function renderHeader() {
           >
             Atelier Policies
           </button>
-          <button
-            class="chip-pill ${state.showDiagnosticsBar ? "active" : ""}"
-            data-action="toggle-diagnostics"
-          >
-            ${renderIcon("sliders", "xs")}
-            <span>UI States Inspector</span>
-          </button>
         </div>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
@@ -501,34 +474,6 @@ function renderHeader() {
           </select>
         </div>
       </div>
-
-      ${
-        state.showDiagnosticsBar
-          ? `
-        <div class="diagnostics-bar" role="region" aria-label="UI Design Principles Inspector">
-          <div class="diagnostics-bar-inner">
-            <span style="font-size:11px;font-weight:600;color:var(--text-secondary);">
-              UI Design Principles Inspector (Click any state to preview):
-            </span>
-            <div class="diagnostics-pills">
-              ${UI_PRINCIPLE_STATES.map(
-                (st) => `
-                  <button
-                    class="chip-pill ${state.activeUiPrinciple === st.id ? "active" : ""}"
-                    style="padding:0.25rem 0.7rem;font-size:11px;min-height:28px;"
-                    data-action="set-ui-principle"
-                    data-principle="${st.id}"
-                  >
-                    ${st.label}
-                  </button>
-                `
-              ).join("")}
-            </div>
-          </div>
-        </div>
-      `
-          : ""
-      }
     </header>
   `;
 }
@@ -1996,6 +1941,25 @@ export function renderApp() {
     ${renderProductDetailModal()}
     ${renderShoppingBagDrawer()}
     ${renderAiConciergeDrawer()}
+    <div class="ai-widget-container" aria-live="polite">
+      ${
+        state.activeDrawer !== "ai"
+          ? `
+        <button
+          type="button"
+          class="ai-floating-trigger"
+          data-action="open-drawer"
+          data-drawer="ai"
+          aria-label="Open Noir Atelier AI Stylist Concierge"
+        >
+          <span class="ai-trigger-sparkle">${renderIcon("sparkles", "sm")}</span>
+          <span class="ai-trigger-label">AI Stylist</span>
+          <span class="ai-trigger-ping" aria-hidden="true"></span>
+        </button>
+      `
+          : ""
+      }
+    </div>
     ${renderMobileBottomNav()}
   `;
 }
