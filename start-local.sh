@@ -78,7 +78,7 @@ BACKEND_PID=$!
 if [ -f "frontend/apps/storefront/package.json" ]; then
     if command -v npm >/dev/null 2>&1; then
         echo "[*] Launching Next.js Storefront on http://localhost:3000 ..."
-        (cd frontend/apps/storefront && npm run dev) &
+        (cd frontend/apps/storefront && [ -d node_modules ] || npm install && npm run dev) &
         FRONTEND_PID=$!
     else
         echo "[INFO] npm not found; skipping storefront auto-start."

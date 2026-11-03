@@ -108,6 +108,22 @@ class TestFrontendAndDbDrivenArchitecture(unittest.TestCase):
         self.assertGreaterEqual(len(recs), 1)
         self.assertEqual(recs[0]["product_id"], "PRD-002")
 
+    def test_04_nextjs_app_router_storefront_structure(self) -> None:
+        sf_dir = PROJECT_ROOT / "frontend" / "apps" / "storefront"
+        self.assertTrue((sf_dir / "package.json").exists())
+        self.assertTrue((sf_dir / "next.config.mjs").exists())
+        self.assertTrue((sf_dir / "src" / "app" / "layout.jsx").exists())
+        self.assertTrue((sf_dir / "src" / "app" / "page.jsx").exists())
+        self.assertTrue((sf_dir / "src" / "app" / "orders" / "page.jsx").exists())
+        self.assertTrue((sf_dir / "src" / "app" / "policies" / "page.jsx").exists())
+        self.assertTrue((sf_dir / "src" / "app" / "admin" / "page.jsx").exists())
+
+        comp_text = (sf_dir / "src" / "components" / "NoirAtelierNextApp.jsx").read_text(encoding="utf-8")
+        self.assertIn("@noir/api/client.js", comp_text)
+        self.assertIn("@noir/ui/theme.js", comp_text)
+        self.assertIn("@noir/ui/states.js", comp_text)
+        self.assertIn("react_steps", comp_text)
+
 
 if __name__ == "__main__":
     unittest.main()

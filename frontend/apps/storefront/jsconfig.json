@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@noir/api/*": ["../../packages/api/*"],
+      "@noir/ui/*": ["../../packages/ui/*"],
+      "@noir/utils/*": ["../../packages/utils/*"]
+    }
+  },
+  "include": ["src/**/*", "../../packages/**/*"],
+  "exclude": ["node_modules"]
+}

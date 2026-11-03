@@ -1603,16 +1603,24 @@ function renderAiConciergeDrawer() {
                           m.role === "agent"
                             ? `<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:0.3rem;font-family:var(--font-mono);">
                                 <span>${m.routed_agent} · ${m.service_account}</span>
-                                <span>${m.status}</span>
+                                <span>${m.status} · Steps ${m.steps_taken ?? 1}/${m.step_budget_max ?? 10}</span>
                               </div>`
                             : ""
                         }
                         <div style="white-space:pre-line;line-height:1.5;">${m.text}</div>
                         ${
+                          m.react_steps?.length
+                            ? `<div style="margin-top:0.5rem;padding-top:0.4rem;border-top:1px dashed var(--border-subtle);font-family:var(--font-mono);font-size:10px;color:var(--text-secondary);">
+                                <div style="font-weight:600;margin-bottom:2px;">4-Layer ReAct Trace:</div>
+                                ${m.react_steps.map((s) => `<div>[${s.layer.toUpperCase()}] ${s.thought}</div>`).join("")}
+                              </div>`
+                            : ""
+                        }
+                        ${
                           m.tool_traces?.length
                             ? `<div style="margin-top:0.45rem;padding-top:0.4rem;border-top:1px dashed var(--border-subtle);font-family:var(--font-mono);font-size:10px;color:var(--text-secondary);">
                                 ${m.tool_traces
-                                  .map((t) => `${t.http_method} ${t.endpoint} → ${t.status_code} (${t.latency_ms}ms)`)
+                                  .map((t) => `${t.http_method} ${t.endpoint} [${t.risk_level || "read_only"}] → ${t.status_code} (${t.latency_ms}ms)`)
                                   .join(" · ")}
                               </div>`
                             : ""
@@ -2149,6 +2157,9 @@ async function sendAgentChatMessage(message) {
       trace_id: res.trace_id,
       text: res.reply,
       tool_traces: res.tool_traces || [],
+      react_steps: res.react_steps || [],
+      steps_taken: res.steps_taken ?? 1,
+      step_budget_max: res.step_budget_max ?? 10,
     });
     state.cart = await api.getCart().catch(() => state.cart);
     state.orders = await api.listOrders().catch(() => state.orders);

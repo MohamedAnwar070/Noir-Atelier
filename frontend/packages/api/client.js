@@ -3,7 +3,8 @@ export class NoirApiClient {
     this.baseUrl =
       baseUrl ||
       (typeof window !== "undefined" && window.NOIR_API_BASE) ||
-      "http://127.0.0.1:8000";
+      (typeof process !== "undefined" && process.env && process.env.NEXT_PUBLIC_API_BASE_URL) ||
+      (typeof window !== "undefined" && window.location?.origin ? window.location.origin : "http://127.0.0.1:8000");
     this.token = "demo_CUS-001";
     this.slowThresholdMs = slowThresholdMs;
     this.onNetworkEvent = onNetworkEvent;

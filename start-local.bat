@@ -50,7 +50,7 @@ if exist "frontend\apps\storefront\package.json" (
     where npm >nul 2>&1
     if %ERRORLEVEL% equ 0 (
         echo [*] Launching Next.js Storefront on http://localhost:3000 ...
-        start "Noir Atelier - Storefront UI" cmd /k "cd frontend\apps\storefront && npm run dev"
+        start "Noir Atelier - Storefront UI" cmd /k "cd frontend\apps\storefront && (if not exist node_modules npm install) && npm run dev"
     ) else (
         echo [INFO] npm not found; skipping storefront auto-start.
     )
