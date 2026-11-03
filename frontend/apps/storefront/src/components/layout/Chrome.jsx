@@ -1,182 +1,275 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import Icon from "@/components/ui/Icon";
-import Overlay from "@/components/ui/Overlay";
-import { DESIGN_TOKENS } from "@noir/ui/theme.js";
-import { ROUTES } from "@/config/ui.config";
+import { usePathname } from "next/navigation";
+import { Icon } from "@/components/ui/Icon";
 import { useStore } from "@/store/StoreProvider";
-import { useIsDesktop } from "@/hooks/useMediaQuery";
 import { formatInr } from "@noir/utils/formatters.js";
-
-const titleCase = (value = "") => value.charAt(0) + value.slice(1).toLowerCase();
 
 export function AnnouncementBar() {
   const { business, freeShippingMin } = useStore();
-  const returnDays = business.returns_and_refunds?.return_window_days;
-  const parts = [];
-  if (freeShippingMin > 0) parts.push(`Complimentary shipping over ${formatInr(freeShippingMin)}`);
-  if (returnDays) parts.push(`${returnDays}-day easy returns`);
-  if (!parts.length) return null;
+  const returnDays = business?.returns_and_refunds?.return_window_days || 7;
+  const freeThreshold = freeShippingMin || 2500;
+
   return (
-    <div className="announcement" role="note">
-      <div className="container announcement__inner">{parts.join("  ·  ")}</div>
-    </div>
-  );
-}
-
-function useScrollToCollection() {
-  const router = useRouter();
-  const pathname = usePathname();
-  return () => {
-    if (pathname !== ROUTES.shop) router.push(`${ROUTES.shop}#collection`);
-    else document.getElementById("collection")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-}
-
-function AccountPanel({ onNavigate }) {
-  const { actor, actors, config, isStaff, switchActor, theme, setTheme, fontScale, setFontScale } = useStore();
-  return (
-    <div className="account-panel">
-      <div className="account-panel__who">
-        <span className="avatar" aria-hidden="true">{(actor?.label || "G").charAt(0)}</span>
-        <div>
-          <strong>{actor?.label?.split("(")[0]?.trim() || "Guest"}</strong>
-          <span className="muted">{actor?.loyalty_tier ? actor.loyalty_tier.replace(/_/g, " ").toLowerCase() : "Welcome"}</span>
-        </div>
+    <aside className="announcement-bar" role="note" aria-label="Store privileges">
+      <div className="announcement-bar-inner">
+        <span>Complimentary Boutique Delivery over {formatInr(freeThreshold)}</span>
+        <span className="announcement-dot">·</span>
+        <span>{returnDays}-Day Atelier Returns</span>
+        <span className="announcement-dot">·</span>
+        <span>CBIC GST Certified (HSN 61/62)</span>
       </div>
-      <nav className="account-panel__links" aria-label="Account">
-        <Link href={ROUTES.orders} onClick={onNavigate}><Icon name="package" size={16} /> My orders & returns</Link>
-        <Link href={ROUTES.policies} onClick={onNavigate}><Icon name="shield" size={16} /> Shipping, returns & policies</Link>
-        {isStaff && <Link href={ROUTES.admin} onClick={onNavigate}><Icon name="lock" size={16} /> Team console</Link>}
-      </nav>
-
-      <div className="account-panel__group">
-        <span className="field__label">Appearance</span>
-        <div className="segmented" role="group" aria-label="Theme">
-          {DESIGN_TOKENS.themes.map((t) => (
-            <button key={t.id} type="button" className={theme === t.id ? "is-active" : ""} onClick={() => setTheme(t.id)} aria-pressed={theme === t.id}>
-              <Icon name={t.id === "dark" ? "moon" : "sun"} size={14} /> {t.label}
-            </button>
-          ))}
-        </div>
-        <div className="segmented" role="group" aria-label="Text size">
-          {DESIGN_TOKENS.fontScales.map((f) => (
-            <button key={f.id} type="button" className={fontScale === f.id ? "is-active" : ""} onClick={() => setFontScale(f.id)} aria-pressed={fontScale === f.id} title={f.description}>
-              {f.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {config.demoMode && actors.length > 1 && (
-        <div className="account-panel__group">
-          <label className="field__label" htmlFor="switch-account">Switch account (demo)</label>
-          <select id="switch-account" className="input" value={actor?.token || ""} onChange={(e) => { switchActor(e.target.value); onNavigate?.(); }}>
-            {actors.map((a) => (
-              <option key={a.token} value={a.token}>{a.label}</option>
-            ))}
-          </select>
-        </div>
-      )}
-    </div>
-  );
-}
-
-export function AccountSurface() {
-  const { ui, setOverlay } = useStore();
-  const isDesktop = useIsDesktop();
-  const popoverRef = useRef(null);
-  const close = () => setOverlay({ accountOpen: false });
-
-  useEffect(() => {
-    if (!ui.accountOpen || !isDesktop) return undefined;
-    const onClick = (e) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target) && !e.target.closest("[data-account-trigger]")) close();
-    };
-    const onKey = (e) => e.key === "Escape" && close();
-    document.addEventListener("mousedown", onClick);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onClick);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [ui.accountOpen, isDesktop]);
-
-  if (!ui.accountOpen) return null;
-  if (isDesktop) {
-    return (
-      <div className="popover" ref={popoverRef} role="dialog" aria-label="Account menu">
-        <AccountPanel onNavigate={close} />
-      </div>
-    );
-  }
-  return (
-    <Overlay open variant="sheet" onClose={close} title="Your account" label="Account menu">
-      <AccountPanel onNavigate={close} />
-    </Overlay>
+    </aside>
   );
 }
 
 export function SiteHeader() {
-  const { categories, filters, setFilters, resetFilters, cartCount, setOverlay, ui, wishlist, actor } = useStore();
-  const pathname = usePathname();
-  const goToCollection = useScrollToCollection();
+  const {
+    activeDepartment,
+    setActiveDepartment,
+    categories,
+    searchQuery,
+    setSearchQuery,
+    cartCount,
+    openDrawer,
+    activePage,
+    navigateTo,
+    currentActor,
+    switchActor,
+    actorsList,
+    theme,
+    setTheme,
+  } = useStore();
 
-  const selectDepartment = (department) => {
-    setFilters({ department });
-    goToCollection();
-  };
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <header className="site-header">
-      <div className="container site-header__inner">
-        <button type="button" className="icon-btn site-header__menu" aria-label="Open menu" onClick={() => setOverlay({ menuOpen: true })}>
-          <Icon name="menu" size={20} />
-        </button>
+      <div className="site-header-inner">
+        {/* Brand & Desktop Navigation */}
+        <div className="brand-group">
+          <Link
+            href="/"
+            className="brand-logo"
+            onClick={() => {
+              setActiveDepartment("ALL");
+              navigateTo("shop");
+            }}
+          >
+            NOIR ATELIER
+          </Link>
 
-        <Link href={ROUTES.shop} className="brand" onClick={() => resetFilters()}>
-          Noir Atelier
-        </Link>
+          <nav className="primary-nav" aria-label="Garment Collections">
+            <button
+              type="button"
+              className={`nav-link ${activePage === "shop" && activeDepartment === "ALL" ? "active" : ""}`}
+              onClick={() => {
+                setActiveDepartment("ALL");
+                navigateTo("shop");
+              }}
+            >
+              The Edit
+            </button>
+            {["MEN", "WOMEN", "KIDS"].map((dept) => (
+              <button
+                key={dept}
+                type="button"
+                className={`nav-link ${activePage === "shop" && activeDepartment === dept ? "active" : ""}`}
+                onClick={() => {
+                  setActiveDepartment(dept);
+                  navigateTo("shop");
+                }}
+              >
+                {dept.charAt(0) + dept.slice(1).toLowerCase()}
+              </button>
+            ))}
+            <button
+              type="button"
+              className={`nav-link ${activePage === "policies" ? "active" : ""}`}
+              onClick={() => navigateTo("policies")}
+            >
+              Policies
+            </button>
+            {["manager", "finance_admin", "admin"].includes(currentActor?.role) && (
+              <button
+                type="button"
+                className={`nav-link ${activePage === "admin" ? "active" : ""}`}
+                onClick={() => navigateTo("admin")}
+              >
+                Governance
+              </button>
+            )}
+          </nav>
+        </div>
 
-        <nav className="site-nav" aria-label="Collections">
-          <button type="button" className={`site-nav__link ${pathname === ROUTES.shop && filters.department === "ALL" ? "is-active" : ""}`} onClick={() => selectDepartment("ALL")}>
-            Shop all
+        {/* Global Search Bar */}
+        <div className="header-search">
+          <span className="header-search-icon">
+            <Icon name="search" size={15} />
+          </span>
+          <input
+            type="search"
+            placeholder="Search linen, silk, merino…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            aria-label="Search garments"
+          />
+        </div>
+
+        {/* Actions Group */}
+        <div className="header-actions">
+          <div className="header-desktop-controls">
+            {/* Demo credential profile switcher */}
+            <select
+              className="header-pill-select"
+              value={currentActor?.token || ""}
+              onChange={(e) => switchActor(e.target.value)}
+              aria-label="Switch client or staff credentials"
+            >
+              {(actorsList || []).map((a) => (
+                <option key={a.token} value={a.token}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+
+            {/* Theme switcher */}
+            <button
+              type="button"
+              className="chip-pill"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              aria-label="Toggle color theme"
+              title="Switch light or dark atelier theme"
+            >
+              <Icon name={theme === "dark" ? "sun" : "moon"} size={14} />
+              <span>{theme === "dark" ? "Light" : "Noir"}</span>
+            </button>
+          </div>
+
+          {/* Orders Link */}
+          <button
+            type="button"
+            className={`btn-pill btn-pill-outline ${activePage === "orders" ? "active" : ""}`}
+            onClick={() => navigateTo("orders")}
+            style={{ padding: "0.45rem 0.95rem", fontSize: "var(--text-xs)" }}
+            aria-label="Orders and returns"
+          >
+            <Icon name="package" size={14} />
+            <span>Orders</span>
           </button>
-          {categories.map((c) => (
-            <button key={c.category_id} type="button" className={`site-nav__link ${pathname === ROUTES.shop && filters.department === c.department ? "is-active" : ""}`} onClick={() => selectDepartment(c.department)}>
-              {titleCase(c.department)}
+
+          {/* Shopping Bag Button */}
+          <button
+            type="button"
+            className="btn-pill"
+            style={{ padding: "0.45rem 1.05rem", fontSize: "var(--text-xs)" }}
+            onClick={() => openDrawer("bag")}
+            aria-label={`Shopping bag with ${cartCount} items`}
+          >
+            <Icon name="bag" size={14} />
+            <span>Bag ({cartCount})</span>
+          </button>
+
+          {/* Mobile Hamburger Button */}
+          <button
+            type="button"
+            className="mobile-menu-btn"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="Toggle navigation menu"
+            aria-expanded={mobileMenuOpen}
+          >
+            <Icon name={mobileMenuOpen ? "close" : "menu"} size={18} />
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile Navigation Drawer */}
+      <div className={`mobile-nav-drawer ${mobileMenuOpen ? "open" : ""}`} aria-label="Mobile Navigation">
+        <div className="mobile-nav-grid">
+          <button
+            type="button"
+            className={`chip-pill ${activePage === "shop" && activeDepartment === "ALL" ? "active" : ""}`}
+            onClick={() => {
+              setActiveDepartment("ALL");
+              navigateTo("shop");
+              setMobileMenuOpen(false);
+            }}
+          >
+            The Edit (All)
+          </button>
+          {["MEN", "WOMEN", "KIDS"].map((dept) => (
+            <button
+              key={dept}
+              type="button"
+              className={`chip-pill ${activePage === "shop" && activeDepartment === dept ? "active" : ""}`}
+              onClick={() => {
+                setActiveDepartment(dept);
+                navigateTo("shop");
+                setMobileMenuOpen(false);
+              }}
+            >
+              {dept.charAt(0) + dept.slice(1).toLowerCase()}
             </button>
           ))}
-        </nav>
-
-        <form
-          className="site-search"
-          role="search"
-          onSubmit={(e) => {
-            e.preventDefault();
-            goToCollection();
-          }}
-        >
-          <Icon name="search" size={16} className="site-search__icon" />
-          <input type="search" aria-label="Search garments" placeholder="Search linen, silk, merino…" value={filters.q} onChange={(e) => setFilters({ q: e.target.value })} />
-        </form>
-
-        <div className="site-actions">
-          <div className="site-actions__account">
-            <button type="button" className="icon-btn" data-account-trigger aria-label="Account" aria-expanded={ui.accountOpen} onClick={() => setOverlay({ accountOpen: !ui.accountOpen })}>
-              <Icon name="user" size={19} />
-            </button>
-            {pathname !== "/__none" && <AccountSurface />}
-          </div>
-          <button type="button" className="icon-btn site-actions__wishlist" aria-label={`Wishlist, ${wishlist.length} saved`} onClick={() => setFilters({ q: "" })} hidden>
-            <Icon name="heart" size={19} />
+          <button
+            type="button"
+            className={`chip-pill ${activePage === "orders" ? "active" : ""}`}
+            onClick={() => {
+              navigateTo("orders");
+              setMobileMenuOpen(false);
+            }}
+          >
+            Orders &amp; Returns
           </button>
-          <button type="button" className="icon-btn icon-btn--bag" aria-label={`Shopping bag, ${cartCount} item${cartCount === 1 ? "" : "s"}`} onClick={() => setOverlay({ cartOpen: true })}>
-            <Icon name="bag" size={19} />
-            {cartCount > 0 && <span className="count-badge">{cartCount}</span>}
+          <button
+            type="button"
+            className={`chip-pill ${activePage === "policies" ? "active" : ""}`}
+            onClick={() => {
+              navigateTo("policies");
+              setMobileMenuOpen(false);
+            }}
+          >
+            Atelier Policies
+          </button>
+          {["manager", "finance_admin", "admin"].includes(currentActor?.role) && (
+            <button
+              type="button"
+              className={`chip-pill ${activePage === "admin" ? "active" : ""}`}
+              onClick={() => {
+                navigateTo("admin");
+                setMobileMenuOpen(false);
+              }}
+            >
+              Governance Portal
+            </button>
+          )}
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+          <select
+            className="header-pill-select"
+            value={currentActor?.token || ""}
+            onChange={(e) => {
+              switchActor(e.target.value);
+              setMobileMenuOpen(false);
+            }}
+            aria-label="Mobile credential switcher"
+          >
+            {(actorsList || []).map((a) => (
+              <option key={a.token} value={a.token}>
+                {a.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="chip-pill"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          >
+            <Icon name={theme === "dark" ? "sun" : "moon"} size={14} />
+            <span>{theme === "dark" ? "Light" : "Noir"}</span>
           </button>
         </div>
       </div>
@@ -184,104 +277,96 @@ export function SiteHeader() {
   );
 }
 
-export function MobileMenu() {
-  const { ui, setOverlay, categories, filters, setFilters } = useStore();
-  const goToCollection = useScrollToCollection();
-  const close = () => setOverlay({ menuOpen: false });
-  const pick = (department) => {
-    setFilters({ department });
-    close();
-    goToCollection();
-  };
-  return (
-    <Overlay open={ui.menuOpen} onClose={close} variant="menu" title="Menu" label="Main menu">
-      <nav className="menu-list" aria-label="Collections">
-        <button type="button" className={filters.department === "ALL" ? "is-active" : ""} onClick={() => pick("ALL")}>Shop all</button>
-        {categories.map((c) => (
-          <button key={c.category_id} type="button" className={filters.department === c.department ? "is-active" : ""} onClick={() => pick(c.department)}>
-            {titleCase(c.department)} <span className="muted">{c.product_count}</span>
-          </button>
-        ))}
-        <Link href={ROUTES.orders} onClick={close}>My orders & returns</Link>
-        <Link href={ROUTES.policies} onClick={close}>Shipping, returns & policies</Link>
-      </nav>
-    </Overlay>
-  );
-}
-
 export function MobileTabBar() {
-  const pathname = usePathname();
-  const { cartCount, setOverlay, ui } = useStore();
-  const tabs = [
-    { key: "shop", label: "Shop", icon: "home", href: ROUTES.shop },
-    { key: "orders", label: "Orders", icon: "package", href: ROUTES.orders },
-  ];
+  const { activePage, navigateTo, cartCount, openDrawer } = useStore();
+
   return (
-    <nav className="tab-bar" aria-label="Primary">
-      {tabs.map((t) => (
-        <Link key={t.key} href={t.href} className={`tab-bar__item ${pathname === t.href && !ui.cartOpen && !ui.accountOpen ? "is-active" : ""}`}>
-          <Icon name={t.icon} size={20} />
-          <span>{t.label}</span>
-        </Link>
-      ))}
-      <button type="button" className={`tab-bar__item ${ui.cartOpen ? "is-active" : ""}`} onClick={() => setOverlay({ cartOpen: true })}>
-        <span className="tab-bar__icon">
-          <Icon name="bag" size={20} />
-          {cartCount > 0 && <span className="count-badge">{cartCount}</span>}
-        </span>
-        <span>Bag</span>
+    <nav className="mobile-bottom-nav" aria-label="Mobile Navigation">
+      <button
+        type="button"
+        className={`mobile-tab-btn ${activePage === "shop" ? "active" : ""}`}
+        onClick={() => navigateTo("shop")}
+      >
+        <Icon name="home" size={18} />
+        <span>The Edit</span>
       </button>
-      <button type="button" className={`tab-bar__item ${ui.accountOpen ? "is-active" : ""}`} onClick={() => setOverlay({ accountOpen: true })}>
-        <Icon name="user" size={20} />
-        <span>Account</span>
+
+      <button
+        type="button"
+        className={`mobile-tab-btn ${activePage === "orders" ? "active" : ""}`}
+        onClick={() => navigateTo("orders")}
+      >
+        <Icon name="package" size={18} />
+        <span>Orders</span>
+      </button>
+
+      <button
+        type="button"
+        className="mobile-tab-btn"
+        onClick={() => openDrawer("bag")}
+      >
+        <Icon name="bag" size={18} />
+        <span>Bag ({cartCount})</span>
+      </button>
+
+      <button
+        type="button"
+        className={`mobile-tab-btn ${activePage === "policies" ? "active" : ""}`}
+        onClick={() => navigateTo("policies")}
+      >
+        <Icon name="shield" size={18} />
+        <span>Policies</span>
       </button>
     </nav>
   );
 }
 
 export function SiteFooter() {
-  const { business, categories, config, setFilters } = useStore();
-  const goToCollection = useScrollToCollection();
-  const name = business.store?.name || "Noir Atelier";
+  const { businessConfig, categories, setActiveDepartment, navigateTo } = useStore();
+  const name = businessConfig?.store?.name || "Noir Atelier";
+
   return (
     <footer className="site-footer">
-      <div className="container site-footer__grid">
+      <div className="site-footer-inner">
         <div>
-          <p className="brand brand--footer">{name}</p>
-          <p className="muted">Tailored luxury garments for Men, Women and Kids — made with care in India.</p>
+          <p className="brand-logo" style={{ fontSize: "var(--text-lg)" }}>
+            {name}
+          </p>
+          <p style={{ margin: "0.25rem 0 0", color: "var(--text-tertiary)", fontSize: "11px" }}>
+            Tailored luxury garments for Men, Women and Kids — crafted with pure natural fibers in India.
+          </p>
         </div>
-        <div>
-          <h3 className="footer-heading">Shop</h3>
-          <ul>
-            {categories.map((c) => (
-              <li key={c.category_id}>
-                <button type="button" className="link-btn" onClick={() => { setFilters({ department: c.department }); goToCollection(); }}>
-                  {titleCase(c.department)}
-                </button>
-              </li>
-            ))}
-          </ul>
+
+        <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", alignItems: "center" }}>
+          <button
+            type="button"
+            className="link-subtle"
+            onClick={() => {
+              setActiveDepartment("ALL");
+              navigateTo("shop");
+            }}
+          >
+            The Collection
+          </button>
+          <button
+            type="button"
+            className="link-subtle"
+            onClick={() => navigateTo("orders")}
+          >
+            Order Tracking
+          </button>
+          <button
+            type="button"
+            className="link-subtle"
+            onClick={() => navigateTo("policies")}
+          >
+            GST &amp; Returns
+          </button>
         </div>
-        <div>
-          <h3 className="footer-heading">Help</h3>
-          <ul>
-            <li><Link href={ROUTES.orders}>Track an order</Link></li>
-            <li><Link href={ROUTES.policies}>Shipping & returns</Link></li>
-            <li><Link href={ROUTES.policies}>Privacy & grievances</Link></li>
-          </ul>
+
+        <div style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+          © {new Date().getFullYear()} {name}. All prices include statutory Goods &amp; Services Tax (CBIC HSN 61/62).
         </div>
-        <div>
-          <h3 className="footer-heading">We accept</h3>
-          <ul className="footer-pay">
-            {config.paymentMethods.map((p) => (
-              <li key={p.method_id}>{p.name}</li>
-            ))}
-          </ul>
-        </div>
-      </div>
-      <div className="container site-footer__legal">
-        <span>© {new Date().getFullYear()} {name}. All prices include GST.</span>
-        {business.store?.grievance_officer && <span>Grievance officer: {business.store.grievance_officer}</span>}
       </div>
     </footer>
   );

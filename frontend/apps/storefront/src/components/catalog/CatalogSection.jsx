@@ -43,8 +43,12 @@ export function CatalogSection({ onSelectProduct }) {
     // Price tier filter
     const tier = PRICE_TIERS.find((t) => t.id === selectedPriceTier);
     if (tier) {
-      if (tier.min !== undefined) list = list.filter((p) => p.price >= tier.min);
-      if (tier.max !== undefined) list = list.filter((p) => p.price <= tier.max);
+      list = list.filter((p) => {
+        const pr = Number(p.price ?? p.mrp_inr ?? 0);
+        if (tier.min !== undefined && pr < tier.min) return false;
+        if (tier.max !== undefined && pr > tier.max) return false;
+        return true;
+      });
     }
 
     // Sort

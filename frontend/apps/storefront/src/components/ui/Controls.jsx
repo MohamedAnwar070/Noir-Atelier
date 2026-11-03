@@ -38,21 +38,29 @@ export function TextField({ label, error, hint, required, multiline = false, ...
   );
 }
 
-export function StarRating({ value, onChange, readOnly = false, size = 16 }) {
+export function StarRating({ value, rating, count, onChange, readOnly = true, size = 14 }) {
+  const score = Number(rating ?? value ?? 5);
+  const rounded = Math.round(score);
   return (
-    <div className="stars" role={readOnly ? "img" : "radiogroup"} aria-label={`Rating ${value} out of 5`}>
-      {[1, 2, 3, 4, 5].map((n) => (
-        <button
-          key={n}
-          type="button"
-          className={`stars__star ${n <= value ? "is-on" : ""}`}
-          disabled={readOnly}
-          onClick={() => onChange?.(n)}
-          aria-label={`${n} star${n > 1 ? "s" : ""}`}
-        >
-          <Icon name={n <= value ? "star" : "star-outline"} size={size} />
-        </button>
-      ))}
+    <div
+      className="star-rating-display"
+      role={readOnly ? "img" : "radiogroup"}
+      aria-label={`Rating ${score} out of 5`}
+    >
+      <span className="stars-gold-row">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <span
+            key={n}
+            className={`star-icon ${n <= rounded ? "filled" : "empty"}`}
+            onClick={!readOnly ? () => onChange?.(n) : undefined}
+            style={{ cursor: readOnly ? "default" : "pointer" }}
+          >
+            ★
+          </span>
+        ))}
+      </span>
+      {score > 0 && <span className="rating-score-num">{score.toFixed(1)}</span>}
+      {count !== undefined && <span className="rating-count-num">({count})</span>}
     </div>
   );
 }

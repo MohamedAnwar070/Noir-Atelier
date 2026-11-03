@@ -61,10 +61,19 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
 
   if (!product) return null;
 
+  const price = Number(product.price ?? product.mrp_inr ?? 0);
+  const stock = Number(product.stock_quantity ?? product.stock ?? 0);
+  const availableSizes =
+    Array.isArray(product.sizes) && product.sizes.length
+      ? product.sizes
+      : Array.isArray(product.sizes_available) && product.sizes_available.length
+      ? product.sizes_available
+      : ["S", "M", "L", "XL"];
+
   const img = getProductImage(product);
-  const outOfStock = Number(product.stock_quantity || 0) <= 0;
-  const maxStock = Math.min(Number(product.stock_quantity || 10), 10);
-  const gstRate = product.price <= 2500 ? 5 : 12;
+  const outOfStock = stock <= 0;
+  const maxStock = Math.min(Math.max(stock, 1), 10);
+  const gstRate = price <= 2500 ? 5 : 12;
 
   const handleAddToBag = async () => {
     if (outOfStock || isAdding) return;
@@ -177,7 +186,7 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
 
           {/* Price & GST Slab */}
           <div className="detail-pricing-box">
-            <div className="detail-price-main">{formatInr(product.price)}</div>
+            <div className="detail-price-main">{formatInr(price)}</div>
             <div className="detail-gst-explainer">
               <span className="gst-tag">{gstRate}% GST Applicable</span>
               <span className="hsn-tag">HSN {product.hsn_code || "6203"}</span>
@@ -194,7 +203,7 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
               <span className="size-fit-tip">Fits true to size</span>
             </div>
             <div className="size-options-grid" role="radiogroup" aria-label="Select size">
-              {(product.sizes || ["XS", "S", "M", "L", "XL"]).map((s) => (
+              {availableSizes.map((s) => (
                 <button
                   key={s}
                   type="button"
@@ -223,7 +232,7 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
               <span className="stock-status-label">
                 {outOfStock
                   ? "Sold Out"
-                  : `${product.stock_quantity || 10} units in Atelier Vault`}
+                  : `${stock} units in Atelier Vault`}
               </span>
             </div>
 

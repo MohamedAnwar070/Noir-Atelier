@@ -4,20 +4,30 @@ import React, { useState } from "react";
 import { useStore } from "@/store/StoreProvider";
 import { Icon } from "@/components/ui/Icon";
 import { StarRating } from "@/components/ui/Controls";
-import { formatInr, getProductImage, computeGstSlabFromConfig } from "@noir/utils/formatters.js";
+import { formatInr, getProductImage } from "@noir/utils/formatters.js";
 
 export function ProductCard({ product, onSelect }) {
-  const { addToBag, toggleWishlist, isWishlisted, businessConfig } = useStore();
-  const [selectedSize, setSelectedSize] = useState(product.sizes?.[0] || "M");
+  const { addToBag, toggleWishlist, isWishlisted } = useStore();
+
+  const price = Number(product.price ?? product.mrp_inr ?? 0);
+  const stock = Number(product.stock_quantity ?? product.stock ?? 0);
+  const availableSizes =
+    Array.isArray(product.sizes) && product.sizes.length
+      ? product.sizes
+      : Array.isArray(product.sizes_available) && product.sizes_available.length
+      ? product.sizes_available
+      : ["S", "M", "L", "XL"];
+
+  const [selectedSize, setSelectedSize] = useState(availableSizes[0] || "M");
   const [isAdding, setIsAdding] = useState(false);
 
   const img = getProductImage(product);
   const wishlisted = isWishlisted(product.product_id);
-  const outOfStock = Number(product.stock_quantity || 0) <= 0;
-  const lowStock = Number(product.stock_quantity || 0) > 0 && Number(product.stock_quantity || 0) <= 3;
+  const outOfStock = stock <= 0;
+  const lowStock = stock > 0 && stock <= 3;
 
-  // Determine GST slab
-  const gstRate = product.price <= 2500 ? 5 : 12;
+  // Determine GST slab based on actual price
+  const gstRate = price <= 2500 ? 5 : 12;
 
   const handleQuickAdd = async (e) => {
     e.stopPropagation();
@@ -70,7 +80,7 @@ export function ProductCard({ product, onSelect }) {
             <span className="card-accent-pill">{product.accent_tag}</span>
           )}
           {lowStock && (
-            <span className="card-stock-pill warning">Only {product.stock_quantity} left</span>
+            <span className="card-stock-pill warning">Only {stock} left</span>
           )}
           {outOfStock && (
             <span className="card-stock-pill danger">Sold Out</span>
@@ -88,14 +98,14 @@ export function ProductCard({ product, onSelect }) {
         </button>
 
         {/* Quick Size Overlay on hover/focus */}
-        {!outOfStock && Array.isArray(product.sizes) && product.sizes.length > 1 && (
+        {!outOfStock && availableSizes.length > 0 && (
           <div
             className="card-quick-sizes"
             onClick={(e) => e.stopPropagation()}
             role="radiogroup"
             aria-label="Available garment sizes"
           >
-            {product.sizes.map((s) => (
+            {availableSizes.map((s) => (
               <button
                 key={s}
                 type="button"
@@ -118,18 +128,19 @@ export function ProductCard({ product, onSelect }) {
       <div className="product-card-body">
         <div className="product-card-meta">
           <span className="product-dept-tag">{product.department}</span>
-          {product.average_rating ? (
-            <div className="product-card-rating">
-              <StarRating rating={product.average_rating} count={product.review_count} />
-            </div>
-          ) : null}
+          <div className="product-card-rating">
+            <StarRating
+              rating={product.average_rating || 5}
+              count={product.review_count || 1}
+            />
+          </div>
         </div>
 
         <h3 className="product-card-title">{product.name}</h3>
 
         <div className="product-card-footer">
           <div className="product-price-stack">
-            <span className="product-price-main">{formatInr(product.price)}</span>
+            <span className="product-price-main">{formatInr(price)}</span>
             <span className="product-gst-caption">
               incl. {gstRate}% GST ({product.hsn_code || "HSN 6203"})
             </span>

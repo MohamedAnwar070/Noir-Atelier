@@ -30,10 +30,39 @@ function writeJson(key, value) {
   }
 }
 
+export function normalizeProduct(p) {
+  if (!p) return p;
+  const price = Number(p.price ?? p.mrp_inr ?? 0);
+  const stock = Number(p.stock_quantity ?? p.stock ?? 0);
+  const sizes =
+    Array.isArray(p.sizes) && p.sizes.length
+      ? p.sizes
+      : Array.isArray(p.sizes_available) && p.sizes_available.length
+      ? p.sizes_available
+      : ["S", "M", "L", "XL"];
+  const rating = Number(p.average_rating ?? p.rating ?? 5.0);
+  const reviewCount = Number(p.review_count ?? (p.reviews?.length ?? 1));
+  const accentTag = p.accent_tag || (p.department ? `100% Tailored ${p.department}` : "Atelier Edition");
+
+  return {
+    ...p,
+    price,
+    mrp_inr: p.mrp_inr ?? price.toFixed(2),
+    stock,
+    stock_quantity: stock,
+    sizes,
+    sizes_available: sizes,
+    average_rating: rating,
+    rating,
+    review_count: reviewCount,
+    accent_tag: accentTag,
+  };
+}
+
 function sortProducts(items, sort) {
-  const list = [...items];
-  if (sort === "price_asc") list.sort((a, b) => Number(a.mrp_inr) - Number(b.mrp_inr));
-  else if (sort === "price_desc") list.sort((a, b) => Number(b.mrp_inr) - Number(a.mrp_inr));
+  const list = (items || []).map(normalizeProduct);
+  if (sort === "price_asc") list.sort((a, b) => Number(a.price) - Number(b.price));
+  else if (sort === "price_desc") list.sort((a, b) => Number(b.price) - Number(a.price));
   else if (sort === "rating") list.sort((a, b) => Number(b.average_rating || 0) - Number(a.average_rating || 0));
   return list;
 }
@@ -118,8 +147,9 @@ export function StoreProvider({ children, initialPage = "shop" }) {
           maxPrice: nextFilters.maxPrice,
           inStockOnly: nextFilters.inStockOnly,
         });
-        setCatalog({ status: "ready", items: Array.isArray(items) ? items : [], error: null });
-        return items;
+        const normalized = (Array.isArray(items) ? items : []).map(normalizeProduct);
+        setCatalog({ status: "ready", items: normalized, error: null });
+        return normalized;
       } catch (error) {
         setCatalog((prev) => ({ ...prev, status: "error", error }));
         return null;
@@ -205,8 +235,9 @@ export function StoreProvider({ children, initialPage = "shop" }) {
       setActors(actorList);
       setActor(resolved);
       setCategories(Array.isArray(cats) ? cats : []);
-      setAllProducts(Array.isArray(products) ? products : []);
-      setCatalog({ status: "ready", items: Array.isArray(products) ? products : [], error: null });
+      const normalizedProducts = (Array.isArray(products) ? products : []).map(normalizeProduct);
+      setAllProducts(normalizedProducts);
+      setCatalog({ status: "ready", items: normalizedProducts, error: null });
       setBoot({ status: "ready", error: null });
       await loadAccountData();
     } catch (error) {
