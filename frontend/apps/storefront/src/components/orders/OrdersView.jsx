@@ -15,6 +15,9 @@ const RETURN_REASONS = [
   { id: "changed_mind", label: "Changed Mind / Prefer Different Silhouette" },
 ];
 
+/** Reasons that are the atelier's fault — sent as a defect claim (exempt from Final Sale rules). */
+const DEFECT_REASONS = new Set(["fabric_defect", "damaged_transit"]);
+
 export function OrdersView() {
   const {
     orders,
@@ -29,7 +32,6 @@ export function OrdersView() {
 
   // Return modal state
   const [returnOrder, setReturnOrder] = useState(null);
-  const [returnItem, setReturnItem] = useState(null);
   const [returnReason, setReturnReason] = useState("size_fit");
   const [tagIntact, setTagIntact] = useState(true);
   const [customerNote, setCustomerNote] = useState("");
@@ -63,7 +65,6 @@ export function OrdersView() {
 
   const handleOpenReturnModal = (order) => {
     setReturnOrder(order);
-    setReturnItem(order.items?.[0] || null);
     setReturnReason("size_fit");
     setTagIntact(true);
     setCustomerNote("");
@@ -85,20 +86,19 @@ export function OrdersView() {
     setIsSubmittingReturn(true);
 
     try {
-      const res = await apiClient.createReturn({
-        order_id: returnOrder.order_id,
-        item_id: returnItem?.product_id || returnOrder.items?.[0]?.product_id,
-        reason: returnReason,
-        condition: tagIntact ? "tags_intact" : "tags_missing",
-        customer_note: customerNote.trim(),
+      // Returns are raised per order (the API has no per-item return).
+      const res = await apiClient.initiateReturn({
+        orderId: returnOrder.order_id,
+        reasonCategory: returnReason,
+        customerNotes: customerNote.trim(),
+        tagIntact,
+        isDefectiveClaim: DEFECT_REASONS.has(returnReason),
       });
 
       notify({
         type: "success",
-        title: "Return Request Created",
-        description: `Return #${res.return_id || "RMA-NEW"} created. Refund Tier: ${
-          res.refund_tier || "Tier 1 Instant"
-        }.`,
+        title: "Return requested",
+        description: `Return #${res.return_id} created · Tier ${res.approval_tier ?? 1} refund review.`,
       });
       setReturnOrder(null);
       await refreshOrders();

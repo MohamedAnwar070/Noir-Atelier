@@ -13,31 +13,41 @@ import {
   validateCouponCode,
 } from "@noir/utils/formatters.js";
 
+/** Used only if the config endpoint returned no methods. IDs match the backend's PaymentMethod.method_id. */
+const FALLBACK_PAYMENT_METHODS = [
+  { id: "upi", label: "UPI (Instant)", minOrder: 0 },
+  { id: "card", label: "Credit / Debit Card", minOrder: 0 },
+];
+
 export function ShoppingBagDrawer({ isOpen, onClose }) {
   const {
     cart,
     cartTotals,
     updateQuantity,
     removeFromBag,
-    clearBag,
     appliedCoupon,
-    applyCouponCode,
+    applyCoupon,
     removeCoupon,
-    currentActor,
     customerAddresses,
     addCustomerAddress,
     paymentMethods,
-    apiClient,
+    placeOrder,
+    freeShippingMin,
     notify,
     navigateTo,
   } = useStore();
 
   const [couponInput, setCouponInput] = useState("");
   const [couponError, setCouponError] = useState("");
-  const [selectedAddressId, setSelectedAddressId] = useState(
-    customerAddresses?.[0]?.address_id || "ADDR-DEFAULT"
-  );
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("upi_direct");
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+
+  // Explicit user choices; until one is made, fall back to the first loaded option
+  // (addresses/methods load asynchronously, so a default can't be captured in useState).
+  const [chosenAddressId, setSelectedAddressId] = useState(null);
+  const [chosenPaymentMethod, setSelectedPaymentMethod] = useState(null);
+  const methods = paymentMethods.length ? paymentMethods : FALLBACK_PAYMENT_METHODS;
+  const selectedAddressId = chosenAddressId ?? customerAddresses?.[0]?.address_id ?? null;
+  const selectedPaymentMethod = chosenPaymentMethod ?? methods[0]?.id ?? "upi";
 
   // New Address Modal state
   const [showAddressModal, setShowAddressModal] = useState(false);
@@ -57,25 +67,27 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
   const [checkoutError, setCheckoutError] = useState(null);
 
   const subtotal = cartTotals.subtotal || 0;
-  const freeShippingThreshold = 2500;
-  const freeShippingProgress = Math.min(100, (subtotal / freeShippingThreshold) * 100);
-  const remainingForFreeShipping = Math.max(0, freeShippingThreshold - subtotal);
+  const freeShippingProgress = Math.min(100, (subtotal / freeShippingMin) * 100);
+  const remainingForFreeShipping = Math.max(0, freeShippingMin - subtotal);
 
-  const handleApplyCoupon = (e) => {
+  const handleApplyCoupon = async (e) => {
     e.preventDefault();
+    if (isApplyingCoupon) return;
     setCouponError("");
-    const trimmed = couponInput.trim().toUpperCase();
-    if (!trimmed) return;
-    const ok = applyCouponCode(trimmed);
-    if (ok) {
+    const code = couponInput.trim().toUpperCase();
+    const formatError = validateCouponCode(code);
+    if (formatError) {
+      setCouponError(formatError);
+      return;
+    }
+    setIsApplyingCoupon(true);
+    const result = await applyCoupon(code);
+    setIsApplyingCoupon(false);
+    if (result.ok) {
       setCouponInput("");
-      notify({
-        type: "success",
-        title: "Coupon Applied",
-        description: `Promo code ${trimmed} was successfully activated.`,
-      });
+      notify({ type: "success", title: "Coupon applied", description: result.message });
     } else {
-      setCouponError(`Invalid promo code "${trimmed}". Try ATELIER10 or LUXURY500.`);
+      setCouponError(result.message);
     }
   };
 
@@ -115,35 +127,19 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
     setIsPlacingOrder(true);
 
     try {
-      const payload = {
-        customer_id: currentActor.customerId || "CUS-001",
-        items: cart.map((i) => ({
-          product_id: i.product_id,
-          size: i.size,
-          quantity: i.quantity,
-          unit_price: i.price,
-        })),
-        coupon_code: appliedCoupon?.code || undefined,
-        payment_method: selectedPaymentMethod,
-        shipping_address:
-          customerAddresses.find((a) => a.address_id === selectedAddressId) ||
-          customerAddresses[0] || {
-            street: "Atelier Signature Vault, Colaba",
-            city: "Mumbai",
-            state: "Maharashtra",
-            postal_code: "400001",
-          },
-      };
+      // The server checks out its own copy of the cart (hold → pay, idempotent);
+      // we only send the shopper's choices.
+      const order = await placeOrder({
+        addressId: selectedAddressId,
+        paymentMethod: selectedPaymentMethod,
+        couponCode: appliedCoupon?.code || null,
+      });
 
-      const res = await apiClient.createOrder(payload);
-
-      // Successfully placed order
-      clearBag();
       onClose();
       notify({
         type: "success",
-        title: "Order Placed Successfully",
-        description: `Order #${res.order_id || "CONFIRMED"} confirmed. Invoice generated.`,
+        title: "Order placed",
+        description: `Order #${order?.order_id || ""} is confirmed. Your invoice has been generated.`,
       });
       navigateTo("orders");
     } catch (err) {
@@ -240,7 +236,7 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
                           max={10}
                         />
                         <span className="bag-item-total">
-                          {formatInr(item.price * item.quantity)}
+                          {formatInr(item.lineTotal)}
                         </span>
                       </div>
                     </div>
@@ -282,8 +278,13 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
                     }}
                     aria-label="Promo code"
                   />
-                  <button type="submit" className="btn-pill btn-sm">
-                    Apply
+                  <button
+                    type="submit"
+                    className="btn-pill btn-sm"
+                    disabled={isApplyingCoupon}
+                    aria-busy={isApplyingCoupon || undefined}
+                  >
+                    {isApplyingCoupon ? "Checking…" : "Apply"}
                   </button>
                 </form>
               )}
@@ -337,25 +338,24 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
             <div className="bag-checkout-section">
               <span className="control-label">Payment Method</span>
               <div className="payment-options-grid" role="radiogroup" aria-label="Payment method">
-                {(paymentMethods.length > 0
-                  ? paymentMethods
-                  : [
-                      { id: "upi_direct", label: "Instant UPI / QR" },
-                      { id: "card_vault", label: "Credit / Debit Card" },
-                      { id: "pod_luxury", label: "Atelier Pay on Delivery" },
-                    ]
-                ).map((pm) => (
-                  <button
-                    key={pm.id}
-                    type="button"
-                    className={`payment-method-chip ${selectedPaymentMethod === pm.id ? "active" : ""}`}
-                    onClick={() => setSelectedPaymentMethod(pm.id)}
-                    role="radio"
-                    aria-checked={selectedPaymentMethod === pm.id}
-                  >
-                    {pm.label}
-                  </button>
-                ))}
+                {methods.map((pm) => {
+                  // e.g. EMI has a minimum order value enforced by the backend
+                  const belowMinimum = cartTotals.grandTotal < (pm.minOrder || 0);
+                  return (
+                    <button
+                      key={pm.id}
+                      type="button"
+                      className={`payment-method-chip ${selectedPaymentMethod === pm.id ? "active" : ""}`}
+                      onClick={() => setSelectedPaymentMethod(pm.id)}
+                      role="radio"
+                      aria-checked={selectedPaymentMethod === pm.id}
+                      disabled={belowMinimum}
+                      title={belowMinimum ? `Available on orders above ${formatInr(pm.minOrder)}` : undefined}
+                    >
+                      {pm.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 

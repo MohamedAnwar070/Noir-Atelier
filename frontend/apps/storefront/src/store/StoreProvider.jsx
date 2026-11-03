@@ -59,6 +59,44 @@ export function normalizeProduct(p) {
   };
 }
 
+/**
+ * Cart API → view model. The API returns totals at the top level and lines as
+ * { cart_id, product_id, product_name, unit_mrp_inr, line_mrp_inr, gst_rate_pct,
+ * included_gst_inr }. Views read `name`, `price` and `lineTotal`, and the
+ * applied coupon (the API does not echo it, so we attach the code we sent).
+ */
+export function normalizeCart(raw, couponCode = null) {
+  if (!raw) return null;
+  const items = (raw.items || []).map((line) => {
+    const price = Number(line.unit_mrp_inr ?? line.price ?? 0);
+    const quantity = Number(line.quantity || 0);
+    return {
+      ...line,
+      name: line.product_name || line.name || line.product_id,
+      price,
+      quantity,
+      lineTotal: Number(line.line_mrp_inr ?? price * quantity),
+    };
+  });
+  const discount = Number(raw.discount_inr || 0);
+  return {
+    ...raw,
+    items,
+    coupon: couponCode ? { code: couponCode, discount, description: discount > 0 ? "Discount applied" : "Applied" } : null,
+  };
+}
+
+/** Payment method API → view model ({ method_id, name } → { id, label }). */
+function normalizePaymentMethod(m) {
+  return {
+    ...m,
+    id: m.method_id ?? m.id,
+    label: m.name ?? m.label ?? m.method_id,
+    minOrder: Number(m.min_order_inr ?? 0),
+    maxOrder: m.max_order_inr != null ? Number(m.max_order_inr) : Infinity,
+  };
+}
+
 function sortProducts(items, sort) {
   const list = (items || []).map(normalizeProduct);
   if (sort === "price_asc") list.sort((a, b) => Number(a.price) - Number(b.price));
@@ -78,6 +116,13 @@ export function StoreProvider({ children, initialPage = "shop" }) {
   const [catalog, setCatalog] = useState({ status: "loading", items: [], error: null });
   const [filters, setFiltersState] = useState(DEFAULT_FILTERS);
   const [cart, setCart] = useState(null);
+  // Applied coupon code. Mirrored in a ref so async cart loaders always use the latest value.
+  const [couponCode, setCouponCodeState] = useState(null);
+  const couponRef = useRef(null);
+  const setCouponCode = useCallback((code) => {
+    couponRef.current = code;
+    setCouponCodeState(code);
+  }, []);
   const [addresses, setAddresses] = useState([]);
   const [orders, setOrders] = useState({ status: "idle", items: [], error: null });
   const [wishlist, setWishlist] = useState([]);
@@ -161,13 +206,27 @@ export function StoreProvider({ children, initialPage = "shop" }) {
   const loadCart = useCallback(async () => {
     if (actorRef.current?.role !== "customer") return null;
     try {
-      const next = await api.getCart();
+      const next = normalizeCart(await api.getCart({ couponCode: couponRef.current }), couponRef.current);
       setCart(next);
       return next;
     } catch {
       return null;
     }
   }, [api]);
+
+  /**
+   * Store the cart returned by a mutation. Mutation endpoints price the cart
+   * without a coupon, so when one is applied we re-fetch the coupon-priced cart.
+   */
+  const commitCart = useCallback(
+    async (raw) => {
+      if (couponRef.current) return loadCart();
+      const next = normalizeCart(raw);
+      setCart(next);
+      return next;
+    },
+    [loadCart]
+  );
 
   const loadOrders = useCallback(async () => {
     if (actorRef.current?.role !== "customer") {
@@ -227,7 +286,7 @@ export function StoreProvider({ children, initialPage = "shop" }) {
       setConfig({
         business: cfg.business_config || {},
         policies: cfg.policies || [],
-        paymentMethods: cfg.payment_methods || [],
+        paymentMethods: (cfg.payment_methods || []).map(normalizePaymentMethod),
         coupons: cfg.coupons || [],
         zones: cfg.shipping_zones || [],
         demoMode: Boolean(health?.demo_mode),
@@ -385,8 +444,7 @@ export function StoreProvider({ children, initialPage = "shop" }) {
       if (!guardCustomer()) return null;
       setBusyKey(`add:${productId}`);
       try {
-        const next = await api.addToCart({ productId, size, quantity });
-        setCart(next);
+        const next = await commitCart(await api.addToCart({ productId, size, quantity }));
         if (openCart) setUi((prev) => ({ ...prev, cartOpen: true, productId: null }));
         notify({
           title: "Added to your bag",
@@ -400,21 +458,21 @@ export function StoreProvider({ children, initialPage = "shop" }) {
         setBusyKey(null);
       }
     },
-    [api, guardCustomer, notify]
+    [api, commitCart, guardCustomer, notify]
   );
 
   const removeCartItem = useCallback(
     async (cartId) => {
       setBusyKey(`cart:${cartId}`);
       try {
-        setCart(await api.removeCartItem(cartId));
+        await commitCart(await api.removeCartItem(cartId));
       } catch (error) {
         notify({ tone: "error", title: "Couldn't update your bag", message: friendlyErrorMessage(error) });
       } finally {
         setBusyKey(null);
       }
     },
-    [api, notify]
+    [api, commitCart, notify]
   );
 
   const changeCartQuantity = useCallback(
@@ -425,10 +483,11 @@ export function StoreProvider({ children, initialPage = "shop" }) {
       setBusyKey(`cart:${item.cart_id}`);
       try {
         if (delta > 0) {
-          setCart(await api.addToCart({ productId: item.product_id, size: item.size, quantity: delta }));
+          await commitCart(await api.addToCart({ productId: item.product_id, size: item.size, quantity: delta }));
         } else {
+          // No "set quantity" endpoint: remove the line, then re-add at the new quantity.
           await api.removeCartItem(item.cart_id);
-          setCart(await api.addToCart({ productId: item.product_id, size: item.size, quantity: nextQuantity }));
+          await commitCart(await api.addToCart({ productId: item.product_id, size: item.size, quantity: nextQuantity }));
         }
       } catch (error) {
         notify({ tone: "error", title: "Couldn't update quantity", message: friendlyErrorMessage(error) });
@@ -438,7 +497,7 @@ export function StoreProvider({ children, initialPage = "shop" }) {
       }
       return null;
     },
-    [api, loadCart, notify, removeCartItem]
+    [api, commitCart, loadCart, notify, removeCartItem]
   );
 
   const validateCoupon = useCallback(
@@ -449,10 +508,33 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     [api, cart]
   );
 
+  /** Validates a code server-side, then re-prices the cart with it. Resolves to { ok, message }. */
+  const applyCoupon = useCallback(
+    async (rawCode) => {
+      const code = String(rawCode || "").trim().toUpperCase();
+      if (!code) return { ok: false, message: "Enter a promo code." };
+      try {
+        const result = await validateCoupon(code);
+        if (result?.valid === false) return { ok: false, message: result.message || `"${code}" isn't valid.` };
+        setCouponCode(code);
+        await loadCart();
+        return { ok: true, message: result?.message || `${code} applied.` };
+      } catch (error) {
+        return { ok: false, message: friendlyErrorMessage(error) };
+      }
+    },
+    [loadCart, setCouponCode, validateCoupon]
+  );
+
+  const removeCoupon = useCallback(async () => {
+    setCouponCode(null);
+    await loadCart();
+  }, [loadCart, setCouponCode]);
+
   const checkoutKeyRef = useRef(null);
 
   const placeOrder = useCallback(
-    async ({ addressId, paymentMethod, couponCode }) => {
+    async ({ addressId, paymentMethod, couponCode = couponRef.current }) => {
       if (!checkoutKeyRef.current) checkoutKeyRef.current = `chk-${crypto.randomUUID()}`;
       const customerId = actorRef.current.id;
 
@@ -473,11 +555,12 @@ export function StoreProvider({ children, initialPage = "shop" }) {
       }
 
       checkoutKeyRef.current = null;
+      setCouponCode(null); // the coupon has been redeemed on this order
       const order = settled.order || (await api.getOrder(hold.order_id));
       await Promise.all([loadCart(), loadOrders(), fetchProducts(filtersRef.current, { silent: true })]);
       return order;
     },
-    [api, fetchProducts, loadCart, loadOrders]
+    [api, fetchProducts, loadCart, loadOrders, setCouponCode]
   );
 
   const payForOrder = useCallback(
@@ -533,21 +616,20 @@ export function StoreProvider({ children, initialPage = "shop" }) {
   const cartItems = cart?.items || [];
   const cartCount = cartItems.reduce((sum, i) => sum + Number(i.quantity || 0), 0);
 
-  // Compute rich cart totals
-  const rawSubtotal = cartItems.reduce(
-    (sum, i) => sum + Number(i.price || i.unit_price || i.mrp_inr || 0) * Number(i.quantity || 1),
-    0
-  );
-  const cartSubtotal = Number(cart?.summary?.subtotal_mrp_inr ?? rawSubtotal);
-  const cartDiscount = Number(cart?.summary?.discount_inr ?? 0);
-  const cartGst5 = Number(cart?.summary?.gst_breakdown?.gst_5_inr ?? 0);
-  const cartGst12 = Number(cart?.summary?.gst_breakdown?.gst_12_inr ?? 0);
+  // Cart totals come from the API (prices are GST-inclusive, so GST is shown, not added).
+  // Fallbacks only cover the brief window before the first cart response.
+  const gstAtRate = (rate) =>
+    cartItems
+      .filter((i) => Number(i.gst_rate_pct) === rate)
+      .reduce((sum, i) => sum + Number(i.included_gst_inr || 0), 0);
+  const cartSubtotal = Number(cart?.subtotal_mrp_inr ?? cartItems.reduce((sum, i) => sum + i.lineTotal, 0));
+  const cartDiscount = Number(cart?.discount_inr ?? 0);
+  const cartGst5 = gstAtRate(5);
+  const cartGst12 = gstAtRate(12);
   const cartShipping = Number(
-    cart?.summary?.shipping_fee_inr ?? (cartCount > 0 ? (cartSubtotal >= freeShippingMin ? 0 : 250) : 0)
+    cart?.shipping_fee_inr ?? (cartCount > 0 && cartSubtotal < freeShippingMin ? 250 : 0)
   );
-  const cartGrandTotal = Number(
-    cart?.summary?.grand_total_inr ?? Math.max(0, cartSubtotal - cartDiscount + cartGst5 + cartGst12 + cartShipping)
-  );
+  const cartGrandTotal = Number(cart?.grand_total_inr ?? Math.max(0, cartSubtotal - cartDiscount + cartShipping));
   const cartTotals = {
     subtotal: cartSubtotal,
     discount: cartDiscount,
@@ -566,7 +648,6 @@ export function StoreProvider({ children, initialPage = "shop" }) {
   // Dual-compatible cart
   const cartArray = [...cartItems];
   cartArray.items = cartItems;
-  cartArray.summary = cart?.summary || {};
   cartArray.coupon = cart?.coupon || null;
 
   // Dual-compatible orders
@@ -591,33 +672,34 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     return res;
   };
 
-  const addToBag = async (product, size, qty = 1) => {
-    return addToCart(product, size, qty);
-  };
+  /*
+   * Product-oriented cart API used by views and the assistant:
+   *   addToBag(product, size, qty)        → addToCart({ productId, … })
+   *   removeFromBag / updateQuantity       → resolve (productId, size) to its cart line first,
+   *                                          because the cart endpoints are keyed by cart_id.
+   * addToBag resolves to the updated cart, or null if the add failed (the store already
+   * showed an error toast), so callers can branch on success.
+   */
+  const findCartLine = (productId, size) =>
+    cartItems.find((i) => i.product_id === productId && i.size === size) || null;
+
+  const addToBag = (product, size, qty = 1, { openCart = false } = {}) =>
+    addToCart({
+      productId: product.product_id,
+      size: size || product.sizes?.[0] || "M",
+      quantity: qty,
+      productName: product.name,
+      openCart,
+    });
 
   const removeFromBag = async (productId, size) => {
-    return removeCartItem(productId, size);
+    const line = findCartLine(productId, size);
+    return line ? removeCartItem(line.cart_id) : null;
   };
 
   const updateQuantity = async (productId, size, qty) => {
-    return changeCartQuantity(productId, size, qty);
-  };
-
-  const clearBag = () => {
-    setCart(null);
-  };
-
-  const applyCouponCode = async (code) => {
-    try {
-      await validateCoupon(code);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
-  const removeCoupon = () => {
-    if (cart) setCart({ ...cart, coupon: null });
+    const line = findCartLine(productId, size);
+    return line ? changeCartQuantity(line, qty) : null;
   };
 
   const value = {
@@ -669,10 +751,9 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     removeFromBag,
     changeCartQuantity,
     updateQuantity,
-    clearBag,
     validateCoupon,
     appliedCoupon: cart?.coupon || null,
-    applyCouponCode,
+    applyCoupon,
     removeCoupon,
     paymentMethods: config.paymentMethods || [],
     placeOrder,

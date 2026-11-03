@@ -3,9 +3,15 @@
 import React, { useState, useEffect } from "react";
 import { useStore } from "@/store/StoreProvider";
 import { StatePanel, ListSkeleton } from "@/components/ui/StatePanel";
-import { Icon } from "@/components/ui/Icon";
-import { Button } from "@/components/ui/Controls";
 import { formatInr } from "@noir/utils/formatters.js";
+
+/** Refund statuses that still need an approver (Tier 3 needs two). */
+const PENDING_REFUND_STATUSES = new Set(["pending_approval", "awaiting_secondary_approval"]);
+
+const REFUND_STATUS_LABEL = {
+  pending_approval: "Awaiting approval",
+  awaiting_secondary_approval: "Awaiting 2nd approval",
+};
 
 export function AdminView() {
   const {
@@ -38,12 +44,12 @@ export function AdminView() {
     try {
       const data = await apiClient.getAdminDashboard();
       setDashboardData(data);
-      // Load pending returns
+      // Refunds still awaiting a decision. Non-fatal: the dashboard is still useful without it.
       try {
-        const rmas = await apiClient.getRefundsQueue();
-        setReturnsQueue(Array.isArray(rmas) ? rmas : []);
+        const refunds = await apiClient.listRefunds();
+        setReturnsQueue((Array.isArray(refunds) ? refunds : []).filter((r) => PENDING_REFUND_STATUSES.has(r.status)));
       } catch {
-        // May fallback
+        setReturnsQueue([]);
       }
     } catch (err) {
       if (err.status === 403 || err.code === "permission_denied") {
@@ -78,16 +84,24 @@ export function AdminView() {
     }
   };
 
-  const handleApproveReturn = async (rmaId) => {
-    setApprovingRma(rmaId);
+  const handleApproveReturn = async (refundId) => {
+    setApprovingRma(refundId);
     try {
-      await apiClient.approveReturn(rmaId);
+      const updated = await apiClient.approveRefund(refundId, "policy_verified_qc_passed");
+      const stillPending = PENDING_REFUND_STATUSES.has(updated?.status);
       notify({
         type: "success",
-        title: "Refund Approved",
-        description: `Return #${rmaId} approved and processed to client original payment.`,
+        title: stillPending ? "First approval recorded" : "Refund approved",
+        description: stillPending
+          ? `Refund #${refundId} is Tier 3 and now needs a second admin (Finance) approval.`
+          : `Refund #${refundId} approved for payout to the original payment method.`,
       });
-      setReturnsQueue((prev) => prev.filter((r) => r.return_id !== rmaId));
+      // Tier 3 needs two distinct approvers: keep the row (with its new status) until fully approved.
+      setReturnsQueue((prev) =>
+        stillPending
+          ? prev.map((r) => (r.refund_id === refundId ? { ...r, ...updated } : r))
+          : prev.filter((r) => r.refund_id !== refundId)
+      );
     } catch (err) {
       notify({
         type: "error",
@@ -101,7 +115,7 @@ export function AdminView() {
 
   const handleRestockProduct = async (productId) => {
     try {
-      await apiClient.restockProduct(productId, 5);
+      await apiClient.restockInventory(productId, 5);
       notify({
         type: "success",
         title: "Inventory Updated",
@@ -235,35 +249,37 @@ export function AdminView() {
               <table className="admin-table">
                 <thead>
                   <tr>
-                    <th>RMA ID</th>
-                    <th>Order Ref</th>
-                    <th>Reason</th>
+                    <th>Refund</th>
+                    <th>Return / Order</th>
+                    <th>Amount</th>
                     <th>Status</th>
-                    <th>Refund Tier</th>
+                    <th>Tier</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {returnsQueue.map((rma) => (
-                    <tr key={rma.return_id}>
-                      <td><strong>#{rma.return_id}</strong></td>
-                      <td>#{rma.order_id}</td>
-                      <td>{rma.reason}</td>
+                  {returnsQueue.map((refund) => (
+                    <tr key={refund.refund_id}>
+                      <td><strong>#{refund.refund_id}</strong></td>
+                      <td>
+                        {refund.return_id ? `#${refund.return_id} · ` : ""}#{refund.order_id}
+                      </td>
+                      <td>{formatInr(refund.amount_inr)}</td>
                       <td>
                         <span className="badge status-pill status-pending">
-                          Pending Studio Review
+                          {REFUND_STATUS_LABEL[refund.status] || refund.status}
                         </span>
                       </td>
-                      <td>{rma.refund_tier || "Tier 2 Physical Verify"}</td>
+                      <td>Tier {refund.approval_tier}</td>
                       <td>
                         <div className="table-actions">
                           <button
                             type="button"
                             className="btn-pill btn-xs"
-                            onClick={() => handleApproveReturn(rma.return_id)}
-                            disabled={approvingRma === rma.return_id}
+                            onClick={() => handleApproveReturn(refund.refund_id)}
+                            disabled={approvingRma === refund.refund_id}
                           >
-                            {approvingRma === rma.return_id ? "Approving..." : "Approve Refund"}
+                            {approvingRma === refund.refund_id ? "Approving…" : "Approve refund"}
                           </button>
                         </div>
                       </td>

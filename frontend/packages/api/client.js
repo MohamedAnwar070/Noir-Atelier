@@ -1,3 +1,23 @@
+/**
+ * FastAPI/Pydantic errors arrive as `{ detail: string | [{ loc, msg }] }`.
+ * Turn them into a readable message plus a { field: message } map, so a 422
+ * never surfaces to users as a bare "HTTP 422".
+ */
+function parseValidationDetail(detail) {
+  if (!detail) return null;
+  if (typeof detail === "string") return { message: detail, fields: {} };
+  if (!Array.isArray(detail)) return null;
+  const fields = {};
+  for (const issue of detail) {
+    const field = (issue.loc || []).filter((part) => part !== "body" && part !== "query").join(".") || "request";
+    fields[field] = issue.msg;
+  }
+  const message = Object.entries(fields)
+    .map(([field, msg]) => `${field}: ${msg}`)
+    .join("; ");
+  return { message: `Invalid request — ${message}`, fields };
+}
+
 export class NoirApiClient {
   constructor({ baseUrl = "", slowThresholdMs = 1200, onNetworkEvent = null } = {}) {
     this.baseUrl =
@@ -76,11 +96,12 @@ export class NoirApiClient {
           endpoint: `${method} ${path}`,
         });
       }
+      const validation = parseValidationDetail(data.detail);
       throw {
         status: res.status,
-        code: data.code || data.error?.code || "http_error",
-        message: data.message || data.error?.message || `HTTP ${res.status}`,
-        details: data.details || data.error?.details || {},
+        code: data.code || data.error?.code || (validation ? "validation_error" : "http_error"),
+        message: data.message || data.error?.message || validation?.message || `HTTP ${res.status}`,
+        details: data.details || data.error?.details || (validation ? { fields: validation.fields } : {}),
         trace_id: data.trace_id || "TRC-000000",
       };
     }
@@ -345,6 +366,15 @@ export class NoirApiClient {
   async updateInventory(productId, quantityAvailable, reason = "admin_stock_adjustment", tokenOverride = null) {
     const { data } = await this.request("PUT", `/api/inventory/${productId}`, {
       body: { quantity_available: Number(quantityAvailable), reason },
+      tokenOverride: tokenOverride || this.token,
+    });
+    return data;
+  }
+
+  /** Adds `quantity` units to available stock (relative; use updateInventory to set an absolute level). */
+  async restockInventory(productId, quantity, tokenOverride = null) {
+    const { data } = await this.request("POST", "/api/inventory/restock", {
+      body: { product_id: productId, quantity: Number(quantity) },
       tokenOverride: tokenOverride || this.token,
     });
     return data;

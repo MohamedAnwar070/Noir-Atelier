@@ -1,10 +1,10 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useStore } from "@/store/StoreProvider";
+import { useStore, normalizeProduct } from "@/store/StoreProvider";
 import { Modal } from "@/components/ui/Overlay";
 import { Icon } from "@/components/ui/Icon";
-import { StarRating, QuantityStepper, TextField, Button } from "@/components/ui/Controls";
+import { StarRating, QuantityStepper, Button } from "@/components/ui/Controls";
 import { formatInr, getProductImage, validateReviewForm } from "@noir/utils/formatters.js";
 
 export function ProductDetailModal({ product, isOpen, onClose }) {
@@ -22,7 +22,6 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
 
   // Recommendations state
   const [recommendations, setRecommendations] = useState([]);
-  const [loadingRecs, setLoadingRecs] = useState(false);
 
   // Reviews state
   const [reviews, setReviews] = useState([]);
@@ -47,16 +46,23 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
       setShowReviewForm(false);
       setFormErrors({});
 
-      // Load DB recommendations
-      setLoadingRecs(true);
+      // "Complete the look" — optional, so a failure just hides the section.
+      // Ignore late responses if the user has already switched product.
+      let cancelled = false;
+      setRecommendations([]);
       apiClient
-        .getProductRecommendations(product.product_id)
+        .getRecommendations(product.product_id)
         .then((recs) => {
-          setRecommendations(Array.isArray(recs) ? recs : []);
+          if (!cancelled) setRecommendations((Array.isArray(recs) ? recs : []).map(normalizeProduct));
         })
-        .catch(() => setRecommendations([]))
-        .finally(() => setLoadingRecs(false));
+        .catch(() => {
+          if (!cancelled) setRecommendations([]);
+        });
+      return () => {
+        cancelled = true;
+      };
     }
+    return undefined;
   }, [product, isOpen, apiClient]);
 
   if (!product) return null;
@@ -75,18 +81,19 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
   const maxStock = Math.min(Math.max(stock, 1), 10);
   const gstRate = price <= 2500 ? 5 : 12;
 
+  /** Resolves to true when the item reached the bag (the store toasts any error). */
   const handleAddToBag = async () => {
-    if (outOfStock || isAdding) return;
+    if (outOfStock || isAdding) return false;
     setIsAdding(true);
     try {
-      await addToBag(product, selectedSize, quantity);
+      return Boolean(await addToBag(product, selectedSize, quantity));
     } finally {
       setIsAdding(false);
     }
   };
 
   const handleBuyNow = async () => {
-    await handleAddToBag();
+    if (!(await handleAddToBag())) return; // stay on the product if the add failed
     onClose();
     openDrawer("bag");
   };
@@ -107,7 +114,7 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
     try {
       const res = await apiClient.addProductReview(product.product_id, {
         rating: reviewRating,
-        fit_feedback: fitFeedback,
+        fitFeedback,
         comment: reviewComment.trim(),
       });
       notify({
