@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncGenerator
 
 from fastapi import FastAPI, Request
@@ -98,6 +99,10 @@ async def root() -> dict:
 
 _packages_dir = PROJECT_ROOT / "frontend" / "packages"
 _storefront_dir = PROJECT_ROOT / "frontend" / "apps" / "storefront"
+_storage_dir = Path(settings.storage_root).resolve()
+_storage_dir.mkdir(parents=True, exist_ok=True)
+
+app.mount("/media", StaticFiles(directory=str(_storage_dir)), name="media")
 if _packages_dir.is_dir():
     app.mount("/packages", StaticFiles(directory=str(_packages_dir)), name="frontend_packages")
 if _storefront_dir.is_dir():

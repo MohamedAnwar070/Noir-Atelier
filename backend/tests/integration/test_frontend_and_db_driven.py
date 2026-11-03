@@ -112,7 +112,11 @@ class TestFrontendAndDbDrivenArchitecture(unittest.TestCase):
         self.assertIn("review_count", prod)
         self.assertGreaterEqual(prod["review_count"], 1)
         self.assertTrue(len(prod.get("images", [])) >= 1)
-        self.assertTrue(prod["images"][0].startswith("https://"))
+        self.assertTrue(prod["images"][0].startswith(("/media/", "http://", "https://")))
+        if prod["images"][0].startswith("/media/"):
+            media_res = self.client.get(prod["images"][0])
+            self.assertEqual(media_res.status_code, 200)
+            self.assertEqual(media_res.headers.get("content-type"), "image/jpeg")
         self.assertEqual(prod["accent_tag"], "100% European Flax Linen")
         self.assertTrue(len(prod.get("reviews", [])) >= 1)
 

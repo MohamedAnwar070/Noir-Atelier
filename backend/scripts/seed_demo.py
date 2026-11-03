@@ -69,7 +69,8 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 "final_sale": False,
                 "stock": 40,
                 "size_breakdown": {"S": 8, "M": 14, "L": 12, "XL": 6},
-                "image_url": "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=900&q=80",
+                "image_filename": "product.jpg",
+                "remote_image_url": "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=1200&q=85",
                 "accent_tag": "100% European Flax Linen",
             },
             {
@@ -88,7 +89,8 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 "final_sale": False,
                 "stock": 20,
                 "size_breakdown": {"M": 7, "L": 8, "XL": 5},
-                "image_url": "https://images.unsplash.com/photo-1544022613-e87ca75a784a?auto=format&fit=crop&w=900&q=80",
+                "image_filename": "product.jpg",
+                "remote_image_url": "https://images.unsplash.com/photo-1544022613-e87ca75a784a?auto=format&fit=crop&w=1200&q=85",
                 "accent_tag": "Double-Faced Merino Wool",
             },
             {
@@ -107,7 +109,8 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 "final_sale": False,
                 "stock": 15,
                 "size_breakdown": {"XS": 3, "S": 5, "M": 5, "L": 2},
-                "image_url": "https://images.unsplash.com/photo-1539008835657-9e8e9680c956?auto=format&fit=crop&w=900&q=80",
+                "image_filename": "product.jpg",
+                "remote_image_url": "https://images.unsplash.com/photo-1539008835657-9e8e9680c956?auto=format&fit=crop&w=1200&q=85",
                 "accent_tag": "22-Momme Mulberry Silk",
             },
             {
@@ -126,7 +129,8 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 "final_sale": False,
                 "stock": 60,
                 "size_breakdown": {"XS": 10, "S": 15, "M": 18, "L": 12, "XL": 5},
-                "image_url": "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=900&q=80",
+                "image_filename": "product.jpg",
+                "remote_image_url": "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=1200&q=85",
                 "accent_tag": "220 GSM Peruvian Pima",
             },
             {
@@ -145,12 +149,27 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 "final_sale": False,
                 "stock": 35,
                 "size_breakdown": {"4Y": 6, "6Y": 8, "8Y": 9, "10Y": 7, "12Y": 5},
-                "image_url": "https://images.unsplash.com/photo-1519238263530-99bdd11df2ea?auto=format&fit=crop&w=900&q=80",
+                "image_filename": "product.jpg",
+                "remote_image_url": "https://images.unsplash.com/photo-1519238263530-99bdd11df2ea?auto=format&fit=crop&w=1200&q=85",
                 "accent_tag": "Superfine ZQ Merino Knit",
             },
         ]
 
         for p in products_spec:
+            img_filename = p.get("image_filename", "product.jpg")
+            img_rel_key = f"products/{p['product_id']}/{img_filename}"
+            img_target = object_store.root / img_rel_key
+            if not img_target.exists() and "remote_image_url" in p:
+                try:
+                    import httpx
+                    resp = httpx.get(p["remote_image_url"], timeout=10.0, follow_redirects=True)
+                    if resp.status_code == 200:
+                        object_store.put_bytes("products", p["product_id"], img_filename, resp.content)
+                except Exception:
+                    pass
+
+            image_url = p.get("image_url") or f"/media/{img_rel_key}"
+
             prod = Product(
                 product_id=p["product_id"],
                 sku=p["sku"],
@@ -172,7 +191,7 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
             session.add(
                 ProductImage(
                     product_id=p["product_id"],
-                    url=p["image_url"],
+                    url=image_url,
                     alt_text=p["accent_tag"],
                     display_order=1,
                 )
@@ -198,7 +217,7 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                     "department": p["department"],
                     "mrp_inr": str(p["mrp_inr"]),
                     "hsn_code": p["hsn_code"],
-                    "image_url": p["image_url"],
+                    "image_url": image_url,
                     "accent_tag": p["accent_tag"],
                 },
             )
