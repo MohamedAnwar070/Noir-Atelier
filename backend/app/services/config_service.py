@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..auth import ActorContext
-from ..models import BusinessConfig, PaymentMethod, Policy
+from ..models import BusinessConfig, Coupon, Customer, PaymentMethod, Policy, ShippingZone
 from .audit_service import record_audit
 
 _config_cache: Dict[str, Any] = {}
@@ -29,6 +29,22 @@ def get_business_config_map(db: Session) -> Dict[str, Dict[str, Any]]:
             "departments": ["MEN", "WOMEN", "KIDS"],
             "currency": "INR",
             "timezone": "Asia/Kolkata",
+        },
+    )
+    cfg_map.setdefault(
+        "storefront_ui",
+        {
+            "hero_eyebrow": "Noir Atelier · HSN 61 & 62 Luxury Garments",
+            "hero_title": "The New Edit",
+            "hero_subtitle": "Explore timeless tailored Belgian linen shirts, 22-momme mulberry silk dresses, and superfine merino knitwear across Men, Women, and Kids.",
+            "hero_image_url": "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1200&q=85",
+            "hero_image_alt": "Noir Atelier Editorial Collection",
+            "ai_quick_prompts": [
+                {"label": "Men's linen under ₹3,000", "prompt": "Show me Men's garments under INR 3000"},
+                {"label": "Women's mulberry silk & cotton", "prompt": "Show me Women's garments"},
+                {"label": "7-Day Return & GST Policy", "prompt": "What are the return policy rules and GST slabs?"},
+                {"label": "GMV & Analytics Report", "prompt": "Show GMV and order analytics report"},
+            ],
         },
     )
     cfg_map.setdefault(
@@ -73,6 +89,84 @@ def get_business_config_map(db: Session) -> Dict[str, Dict[str, Any]]:
     return cfg_map
 
 
+def list_payment_methods(db: Session) -> List[Dict[str, Any]]:
+    methods = db.scalars(select(PaymentMethod).where(PaymentMethod.is_active.is_(True))).all()
+    return [
+        {
+            "method_id": m.method_id,
+            "name": m.name,
+            "min_order_inr": float(m.min_order_inr),
+            "max_order_inr": float(m.max_order_inr),
+        }
+        for m in methods
+    ]
+
+
+def list_active_coupons(db: Session) -> List[Dict[str, Any]]:
+    coupons = db.scalars(select(Coupon).where(Coupon.is_active.is_(True))).all()
+    return [
+        {
+            "code": c.code,
+            "discount_type": c.discount_type,
+            "discount_value": float(c.discount_value),
+            "min_order_value_inr": float(c.min_order_value_inr),
+            "max_discount_inr": float(c.max_discount_inr),
+        }
+        for c in coupons
+    ]
+
+
+def list_shipping_zones(db: Session) -> List[Dict[str, Any]]:
+    zones = db.scalars(select(ShippingZone).where(ShippingZone.is_active.is_(True))).all()
+    return [
+        {
+            "zone_id": z.zone_id,
+            "name": z.name,
+            "pin_prefixes": list(z.pin_prefixes or []),
+            "base_fee_inr": float(z.base_fee_inr),
+            "estimated_days": z.estimated_days,
+        }
+        for z in zones
+    ]
+
+
+def list_platform_actors(db: Session) -> List[Dict[str, Any]]:
+    customers = db.scalars(
+        select(Customer).where(Customer.is_active.is_(True)).order_by(Customer.customer_id)
+    ).all()
+    actors: List[Dict[str, Any]] = []
+    for c in customers:
+        tier_label = "VIP Gold" if c.loyalty_tier == "VIP_GOLD" else "Standard"
+        actors.append(
+            {
+                "token": f"demo_{c.customer_id}",
+                "id": c.customer_id,
+                "role": "customer",
+                "loyalty_tier": c.loyalty_tier,
+                "label": f"{c.name.split()[0]} · {tier_label} ({c.customer_id})",
+            }
+        )
+    actors.extend(
+        [
+            {
+                "token": "admin_manager",
+                "id": "MGR-001",
+                "role": "manager",
+                "loyalty_tier": "STAFF",
+                "label": "Store Manager (MGR-001)",
+            },
+            {
+                "token": "admin_finance",
+                "id": "FIN-001",
+                "role": "finance_admin",
+                "loyalty_tier": "STAFF",
+                "label": "Finance Admin (FIN-001)",
+            },
+        ]
+    )
+    return actors
+
+
 def get_policies_and_config(db: Session) -> Dict[str, Any]:
     cfg = get_business_config_map(db)
     policies = db.scalars(select(Policy).where(Policy.is_active.is_(True))).all()
@@ -90,6 +184,10 @@ def get_policies_and_config(db: Session) -> Dict[str, Any]:
             }
             for p in policies
         ],
+        "payment_methods": list_payment_methods(db),
+        "coupons": list_active_coupons(db),
+        "shipping_zones": list_shipping_zones(db),
+        "actors": list_platform_actors(db),
     }
 
 
@@ -121,16 +219,3 @@ def update_business_config(
     db.commit()
     invalidate_config_cache()
     return {"config_key": config_key, "config_value": row.config_value, "updated_by": row.updated_by}
-
-
-def list_payment_methods(db: Session) -> List[Dict[str, Any]]:
-    methods = db.scalars(select(PaymentMethod).where(PaymentMethod.is_active.is_(True))).all()
-    return [
-        {
-            "method_id": m.method_id,
-            "name": m.name,
-            "min_order_inr": float(m.min_order_inr),
-            "max_order_inr": float(m.max_order_inr),
-        }
-        for m in methods
-    ]

@@ -4,16 +4,18 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from ..auth import ActorContext, require_admin, require_agent_or_admin, resolve_actor
+from ..auth import ActorContext, require_admin, require_agent_or_admin, require_authenticated, resolve_actor
 from ..database import get_db
 from ..schemas.product_schema import (
     InventoryReserveRequest,
     InventoryUpdateRequest,
     ProductCreateRequest,
+    ProductReviewCreateRequest,
     ProductUpdateRequest,
 )
 from ..services.order_service import get_orders_analytics
 from ..services.product_service import (
+    add_product_review,
     create_product,
     discontinue_product,
     get_product_by_id_or_sku,
@@ -80,6 +82,16 @@ def api_get_recommendations(
     _actor: ActorContext = Depends(resolve_actor),
 ) -> List[Dict[str, Any]]:
     return get_product_recommendations(db, product_id, limit=limit)
+
+
+@router.post("/api/products/{product_id}/reviews", status_code=201)
+def api_create_product_review(
+    product_id: str,
+    req: ProductReviewCreateRequest,
+    db: Session = Depends(get_db),
+    actor: ActorContext = Depends(require_authenticated),
+) -> Dict[str, Any]:
+    return add_product_review(db, actor, product_id, req.rating, req.fit_feedback, req.comment)
 
 
 @router.post("/api/products", status_code=201)

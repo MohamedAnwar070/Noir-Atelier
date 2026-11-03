@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..auth import ActorContext
-from ..models import Category, Inventory, Product, ProductImage, ProductReview
+from ..models import Category, Inventory, Product, ProductImage, ProductReview, Recommendation
 from ..schemas.product_schema import InventoryUpdateRequest, ProductCreateRequest, ProductUpdateRequest
 from ..utils.exceptions import AppError
 from .audit_service import next_entity_id, record_audit
@@ -27,22 +27,39 @@ SYNONYM_MAP: Dict[str, List[str]] = {
 
 def serialize_product(p: Product, db: Optional[Session] = None) -> Dict[str, Any]:
     inv = p.inventory
-    images = [img.url for img in sorted(p.images, key=lambda x: x.display_order)]
-    avg_rating = 4.9
+    sorted_imgs = sorted(p.images, key=lambda x: x.display_order)
+    images = [img.url for img in sorted_imgs]
+    image_gallery = [
+        {"url": img.url, "alt_text": img.alt_text, "display_order": img.display_order}
+        for img in sorted_imgs
+    ]
+    accent_tag = sorted_imgs[0].alt_text if sorted_imgs and sorted_imgs[0].alt_text else p.department
+
+    avg_rating = 5.0
     review_count = 0
+    reviews_list: List[Dict[str, Any]] = []
     if db is not None:
-        row = db.execute(
-            select(
-                func.avg(ProductReview.rating).label("avg_r"),
-                func.count(ProductReview.review_id).label("cnt"),
-            ).where(
+        rev_rows = db.scalars(
+            select(ProductReview)
+            .where(
                 ProductReview.product_id == p.product_id,
                 ProductReview.is_active.is_(True),
             )
-        ).first()
-        if row and row.cnt:
-            avg_rating = round(float(row.avg_r), 1)
-            review_count = int(row.cnt)
+            .order_by(ProductReview.review_id.desc())
+        ).all()
+        if rev_rows:
+            review_count = len(rev_rows)
+            avg_rating = round(sum(int(r.rating) for r in rev_rows) / review_count, 1)
+            reviews_list = [
+                {
+                    "review_id": r.review_id,
+                    "customer_id": r.customer_id,
+                    "rating": int(r.rating),
+                    "fit_feedback": r.fit_feedback,
+                    "comment": r.comment,
+                }
+                for r in rev_rows
+            ]
 
     return {
         "product_id": p.product_id,
@@ -64,8 +81,11 @@ def serialize_product(p: Product, db: Optional[Session] = None) -> Dict[str, Any
         "quantity_reserved": inv.quantity_reserved if inv else 0,
         "size_breakdown": dict(inv.size_breakdown or {}) if inv else {},
         "images": images,
+        "image_gallery": image_gallery,
+        "accent_tag": accent_tag,
         "average_rating": avg_rating,
         "review_count": review_count,
+        "reviews": reviews_list,
     }
 
 
@@ -151,14 +171,79 @@ def get_product_by_id_or_sku(db: Session, identifier: str) -> Product:
 
 def get_product_recommendations(db: Session, identifier: str, limit: int = 4) -> List[Dict[str, Any]]:
     source = get_product_by_id_or_sku(db, identifier)
+    rec_rows = db.scalars(
+        select(Recommendation)
+        .where(Recommendation.source_product_id == source.product_id)
+        .order_by(Recommendation.score.desc())
+    ).all()
+
+    results: List[Dict[str, Any]] = []
+    seen_ids = {source.product_id}
+
+    for rec in rec_rows:
+        target = db.scalar(
+            select(Product).where(
+                Product.product_id == rec.recommended_product_id,
+                Product.is_active.is_(True),
+            )
+        )
+        if target and target.product_id not in seen_ids:
+            seen_ids.add(target.product_id)
+            serialized = serialize_product(target, db)
+            serialized["relation_type"] = rec.relation_type
+            serialized["recommendation_score"] = float(rec.score)
+            results.append(serialized)
+            if len(results) >= limit:
+                return results
+
     others = db.scalars(
-        select(Product).where(Product.is_active.is_(True), Product.product_id != source.product_id)
+        select(Product).where(Product.is_active.is_(True), Product.product_id.notin_(seen_ids))
     ).all()
     ranked = sorted(
         others,
         key=lambda p: (0 if p.department == source.department else 1, abs(p.mrp_inr - source.mrp_inr)),
     )
-    return [serialize_product(p) for p in ranked[:limit]]
+    for p in ranked:
+        if len(results) >= limit:
+            break
+        serialized = serialize_product(p, db)
+        serialized["relation_type"] = "department_pair"
+        serialized["recommendation_score"] = 0.85
+        results.append(serialized)
+
+    return results
+
+
+def add_product_review(
+    db: Session,
+    actor: ActorContext,
+    product_id: str,
+    rating: int,
+    fit_feedback: str = "true_to_size",
+    comment: str = "",
+) -> Dict[str, Any]:
+    prod = get_product_by_id_or_sku(db, product_id)
+    clamped_rating = max(1, min(5, int(rating)))
+    rev = ProductReview(
+        product_id=prod.product_id,
+        customer_id=actor.actor_id if actor.actor_type == "customer" else "CUS-001",
+        rating=clamped_rating,
+        fit_feedback=fit_feedback or "true_to_size",
+        comment=comment.strip() or "Verified Noir Atelier garment review.",
+    )
+    db.add(rev)
+    record_audit(
+        db,
+        actor,
+        "product_review",
+        prod.product_id,
+        "create_review",
+        {"rating": clamped_rating, "fit_feedback": fit_feedback},
+        "customer_review_submission",
+    )
+    db.commit()
+    db.refresh(prod)
+    return serialize_product(prod, db)
 
 
 def list_categories(db: Session) -> List[Dict[str, Any]]:
@@ -202,7 +287,8 @@ def create_product(db: Session, actor: ActorContext, req: ProductCreateRequest) 
         security_tag_required=True,
     )
     db.add(prod)
-    db.add(ProductImage(product_id=pid, url=f"products/{pid}/01.jpg", alt_text=prod.name, display_order=1))
+    default_img = "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=900&q=80"
+    db.add(ProductImage(product_id=pid, url=default_img, alt_text=f"{dept} Atelier Edition", display_order=1))
     db.add(
         Inventory(
             product_id=pid,
@@ -215,7 +301,7 @@ def create_product(db: Session, actor: ActorContext, req: ProductCreateRequest) 
     record_audit(db, actor, "product", pid, "create_product", {"sku": prod.sku, "mrp_inr": float(prod.mrp_inr)}, "admin_catalog_create")
     db.commit()
     db.refresh(prod)
-    return serialize_product(prod)
+    return serialize_product(prod, db)
 
 
 def update_product(db: Session, actor: ActorContext, product_id: str, req: ProductUpdateRequest) -> Dict[str, Any]:
@@ -230,7 +316,7 @@ def update_product(db: Session, actor: ActorContext, product_id: str, req: Produ
     record_audit(db, actor, "product", prod.product_id, "update_product", changes, "admin_catalog_update")
     db.commit()
     db.refresh(prod)
-    return serialize_product(prod)
+    return serialize_product(prod, db)
 
 
 def discontinue_product(db: Session, actor: ActorContext, product_id: str, reason: str = "discontinued") -> Dict[str, Any]:
@@ -252,6 +338,7 @@ def list_inventory(db: Session, low_stock_only: bool = False) -> List[Dict[str, 
         output.append(
             {
                 "product_id": inv.product_id,
+                "name": inv.product.name if inv.product else inv.product_id,
                 "product_name": inv.product.name if inv.product else inv.product_id,
                 "quantity_available": inv.quantity_available,
                 "quantity_reserved": inv.quantity_reserved,

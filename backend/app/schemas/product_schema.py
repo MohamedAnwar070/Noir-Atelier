@@ -68,3 +68,9 @@ class InventoryReserveRequest(BaseModel):
     product_id: str
     quantity: int = Field(gt=0)
     order_id: Optional[str] = None
+
+
+class ProductReviewCreateRequest(BaseModel):
+    rating: int = Field(default=5, ge=1, le=5)
+    fit_feedback: str = "true_to_size"
+    comment: str = Field(min_length=3, max_length=500)

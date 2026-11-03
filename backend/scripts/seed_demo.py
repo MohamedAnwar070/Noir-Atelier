@@ -50,6 +50,7 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
             Category(category_id="CAT-KID", name="Kids' Atelier Garments", department="KIDS"),
         ]
         session.add_all(categories)
+        session.flush()
 
         products_spec = [
             {
@@ -68,6 +69,8 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 "final_sale": False,
                 "stock": 40,
                 "size_breakdown": {"S": 8, "M": 14, "L": 12, "XL": 6},
+                "image_url": "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=900&q=80",
+                "accent_tag": "100% European Flax Linen",
             },
             {
                 "product_id": "PRD-002",
@@ -85,6 +88,8 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 "final_sale": False,
                 "stock": 20,
                 "size_breakdown": {"M": 7, "L": 8, "XL": 5},
+                "image_url": "https://images.unsplash.com/photo-1544022613-e87ca75a784a?auto=format&fit=crop&w=900&q=80",
+                "accent_tag": "Double-Faced Merino Wool",
             },
             {
                 "product_id": "PRD-003",
@@ -102,6 +107,8 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 "final_sale": False,
                 "stock": 15,
                 "size_breakdown": {"XS": 3, "S": 5, "M": 5, "L": 2},
+                "image_url": "https://images.unsplash.com/photo-1539008835657-9e8e9680c956?auto=format&fit=crop&w=900&q=80",
+                "accent_tag": "22-Momme Mulberry Silk",
             },
             {
                 "product_id": "PRD-004",
@@ -119,6 +126,8 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 "final_sale": False,
                 "stock": 60,
                 "size_breakdown": {"XS": 10, "S": 15, "M": 18, "L": 12, "XL": 5},
+                "image_url": "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=900&q=80",
+                "accent_tag": "220 GSM Peruvian Pima",
             },
             {
                 "product_id": "PRD-005",
@@ -136,6 +145,8 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 "final_sale": False,
                 "stock": 35,
                 "size_breakdown": {"4Y": 6, "6Y": 8, "8Y": 9, "10Y": 7, "12Y": 5},
+                "image_url": "https://images.unsplash.com/photo-1519238263530-99bdd11df2ea?auto=format&fit=crop&w=900&q=80",
+                "accent_tag": "Superfine ZQ Merino Knit",
             },
         ]
 
@@ -157,11 +168,12 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 security_tag_required=True,
             )
             session.add(prod)
+            session.flush()
             session.add(
                 ProductImage(
                     product_id=p["product_id"],
-                    url=f"products/{p['product_id']}/01.jpg",
-                    alt_text=p["name"],
+                    url=p["image_url"],
+                    alt_text=p["accent_tag"],
                     display_order=1,
                 )
             )
@@ -186,6 +198,8 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                     "department": p["department"],
                     "mrp_inr": str(p["mrp_inr"]),
                     "hsn_code": p["hsn_code"],
+                    "image_url": p["image_url"],
+                    "accent_tag": p["accent_tag"],
                 },
             )
 
@@ -206,6 +220,7 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
             ),
         ]
         session.add_all(customers)
+        session.flush()
 
         addresses = [
             CustomerAddress(
@@ -275,10 +290,28 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                     score=Decimal("0.9600"),
                 ),
                 Recommendation(
+                    source_product_id="PRD-002",
+                    recommended_product_id="PRD-001",
+                    relation_type="complete_the_look",
+                    score=Decimal("0.9500"),
+                ),
+                Recommendation(
                     source_product_id="PRD-003",
                     recommended_product_id="PRD-004",
                     relation_type="complete_the_look",
                     score=Decimal("0.9400"),
+                ),
+                Recommendation(
+                    source_product_id="PRD-004",
+                    recommended_product_id="PRD-003",
+                    relation_type="complete_the_look",
+                    score=Decimal("0.9300"),
+                ),
+                Recommendation(
+                    source_product_id="PRD-005",
+                    recommended_product_id="PRD-001",
+                    relation_type="family_matching_edit",
+                    score=Decimal("0.9100"),
                 ),
             ]
         )
@@ -310,6 +343,22 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                     "currency": "INR",
                     "timezone": "Asia/Kolkata",
                     "grievance_officer": "Meera Krishnan (grievance@noir.test)",
+                },
+            ),
+            BusinessConfig(
+                config_key="storefront_ui",
+                config_value={
+                    "hero_eyebrow": "Noir Atelier · HSN 61 & 62 Luxury Garments",
+                    "hero_title": "The New Edit",
+                    "hero_subtitle": "Explore timeless tailored Belgian linen shirts, 22-momme mulberry silk dresses, and superfine merino knitwear across Men, Women, and Kids.",
+                    "hero_image_url": "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1200&q=85",
+                    "hero_image_alt": "Noir Atelier Editorial Collection",
+                    "ai_quick_prompts": [
+                        {"label": "Men's linen under ₹3,000", "prompt": "Show me Men's garments under INR 3000"},
+                        {"label": "Women's mulberry silk & cotton", "prompt": "Show me Women's garments"},
+                        {"label": "7-Day Return & GST Policy", "prompt": "What are the return policy rules and GST slabs?"},
+                        {"label": "GMV & Analytics Report", "prompt": "Show GMV and order analytics report"},
+                    ],
                 },
             ),
             BusinessConfig(
@@ -523,5 +572,10 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
 
 
 if __name__ == "__main__":
-    result = seed_database()
+    force_reset = "--reset" in sys.argv
+    settings = get_settings()
+    engine = create_engine(settings.database_sync_url)
+    if force_reset:
+        Base.metadata.drop_all(bind=engine)
+    result = seed_database(engine)
     print("Database seed result:", result)
