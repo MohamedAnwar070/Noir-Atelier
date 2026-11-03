@@ -77,7 +77,7 @@ class ProductMaterial(Base, TimestampMixin):
     )
     percentage: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
 
-    material: Mapped["Material"] = relationship(lazy="joined")
+    material: Mapped["Material"] = relationship(lazy="selectin")
 
     __table_args__ = (
         CheckConstraint("percentage > 0 AND percentage <= 100", name="ck_product_materials_pct_range"),

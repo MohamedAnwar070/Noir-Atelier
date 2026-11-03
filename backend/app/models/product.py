@@ -82,7 +82,7 @@ class Product(Base, TimestampMixin, SoftDeleteMixin):
     security_tag_required: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     category: Mapped["Category"] = relationship(back_populates="products")
-    color: Mapped["Color"] = relationship(lazy="joined")
+    color: Mapped["Color"] = relationship(lazy="selectin")
     materials: Mapped[List["ProductMaterial"]] = relationship(
         cascade="all, delete-orphan",
         order_by="ProductMaterial.percentage.desc()",

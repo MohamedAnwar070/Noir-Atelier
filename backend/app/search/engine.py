@@ -128,7 +128,8 @@ def run_search(
             .options(
                 selectinload(Product.variants),
                 selectinload(Product.images),
-                selectinload(Product.materials),
+                selectinload(Product.color),
+                selectinload(Product.materials).selectinload(ProductMaterial.material),
                 selectinload(Product.inventory),
                 selectinload(Product.category),
             )

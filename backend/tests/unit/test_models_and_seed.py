@@ -171,6 +171,24 @@ class TestModelsAndSeed(unittest.TestCase):
             policies = session.scalars(select(Policy)).all()
             self.assertEqual(len(policies), 4)
 
+    def test_postgresql_for_update_queries_have_no_outer_joins(self) -> None:
+        """PostgreSQL rejects `FOR UPDATE` on the nullable side of a LEFT OUTER JOIN.
+        Ensure all row-locking queries compile cleanly under the PostgreSQL dialect
+        without outer-joining reference tables.
+        """
+        from sqlalchemy.dialects import postgresql
+        from backend.app.models.order import Order
+
+        locked_queries = [
+            select(Product).where(Product.product_id.in_(["PRD-001", "PRD-004"])).order_by(Product.product_id.asc()).with_for_update(),
+            select(Inventory).where(Inventory.product_id.in_(["PRD-001", "PRD-004"])).order_by(Inventory.product_id.asc()).with_for_update(),
+            select(Order).where(Order.order_id == "ORD-1001").with_for_update(),
+        ]
+        for stmt in locked_queries:
+            sql = str(stmt.compile(dialect=postgresql.dialect()))
+            self.assertNotIn("OUTER JOIN", sql.upper(), f"Unexpected OUTER JOIN in FOR UPDATE SQL: {sql}")
+            self.assertIn("FOR UPDATE", sql.upper())
+
 
 if __name__ == "__main__":
     unittest.main()
