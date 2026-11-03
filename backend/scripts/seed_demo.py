@@ -15,20 +15,24 @@ from backend.app.models import (
     Base,
     BusinessConfig,
     Category,
+    Color,
     Coupon,
     Customer,
     CustomerAddress,
     CustomerPreference,
     Inventory,
+    Material,
     PaymentMethod,
     Policy,
     Product,
     ProductImage,
+    ProductMaterial,
     ProductReview,
     Recommendation,
     ShippingZone,
 )
 from backend.app.storage.object_store import LocalObjectStore
+from backend.app.reference_data import CATEGORIES, FIT_FEEDBACK_OPTIONS, ensure_reference_data
 from backend.app.services.variant_service import set_variant_prices
 
 
@@ -41,17 +45,16 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
     object_store = LocalObjectStore()
 
     with Session(engine) as session:
-        existing_cat = session.scalar(select(Category).where(Category.category_id == "CAT-MEN"))
-        if existing_cat is not None:
+        # Vocabulary (departments, taxonomy, colours, materials, synonyms, statuses)
+        # is shared with migration 0003 — one definition in app/reference_data.py.
+        ensure_reference_data(session)
+        session.commit()
+
+        if session.get(Product, "PRD-001") is not None:
             return {"status": "already_seeded"}
 
-        categories = [
-            Category(category_id="CAT-MEN", name="Men's Atelier Garments", department="MEN"),
-            Category(category_id="CAT-WMN", name="Women's Atelier Garments", department="WOMEN"),
-            Category(category_id="CAT-KID", name="Kids' Atelier Garments", department="KIDS"),
-        ]
-        session.add_all(categories)
-        session.flush()
+        color_ids = {c.name: c.color_id for c in session.scalars(select(Color))}
+        material_ids = {m.name: m.material_id for m in session.scalars(select(Material))}
 
         products_spec = [
             {
@@ -59,7 +62,8 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 "sku": "PRD-001-BLK",
                 "name": "Tailored Belgian Linen Shirt",
                 "description": "Noir Atelier signature relaxed-tailored shirt crafted from 100% European flax linen.",
-                "category_id": "CAT-MEN",
+                "category_id": "CAT-11",  # product type
+                "materials": [("Belgian Linen", 100)],
                 "department": "MEN",
                 "hsn_code": "6205",
                 "color": "Noir Black",
@@ -79,7 +83,8 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 "sku": "PRD-002-CHR",
                 "name": "Structured Merino-Wool Overshirt",
                 "description": "Architectural double-faced merino wool-blend overshirt with horn buttons.",
-                "category_id": "CAT-MEN",
+                "category_id": "CAT-21",  # product type
+                "materials": [("Merino Wool", 80), ("Recycled Polyamide", 20)],
                 "department": "MEN",
                 "hsn_code": "6201",
                 "color": "Charcoal",
@@ -99,7 +104,8 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 "sku": "PRD-003-NOI",
                 "name": "Silk-Crepe Draped Midi Dress",
                 "description": "Fluid bias-cut midi dress in heavyweight mulberry silk crepe de chine.",
-                "category_id": "CAT-WMN",
+                "category_id": "CAT-40",  # product type
+                "materials": [("Mulberry Silk", 100)],
                 "department": "WOMEN",
                 "hsn_code": "6204",
                 "color": "Obsidian",
@@ -119,7 +125,8 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 "sku": "PRD-004-IVR",
                 "name": "Minimalist Pima Cotton Tee",
                 "description": "High-twist Peruvian Pima cotton jersey tee with rib-bound neckline.",
-                "category_id": "CAT-WMN",
+                "category_id": "CAT-12",  # product type
+                "materials": [("Pima Cotton", 100)],
                 "department": "WOMEN",
                 "hsn_code": "6109",
                 "color": "Ivory",
@@ -139,7 +146,8 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 "sku": "PRD-005-NVY",
                 "name": "Kids Organic Merino Crewneck",
                 "description": "Ultra-soft itch-free superfine merino knit pullover for children.",
-                "category_id": "CAT-KID",
+                "category_id": "CAT-30",  # product type
+                "materials": [("Merino Wool", 100)],
                 "department": "KIDS",
                 "hsn_code": "6110",
                 "color": "Midnight Navy",
@@ -180,7 +188,7 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 department=p["department"],
                 mrp_inr=min(p["variant_prices"].values()),  # re-derived by set_variant_prices
                 hsn_code=p["hsn_code"],
-                color=p["color"],
+                color_id=color_ids[p["color"]],
                 sizes_available=list(p["variant_prices"]),
                 fit_guide=p["fit_guide"],
                 fabric_and_care=p["fabric_and_care"],
@@ -190,6 +198,8 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
             session.add(prod)
             session.flush()
             set_variant_prices(session, prod, p["variant_prices"])
+            for material, pct in p["materials"]:
+                session.add(ProductMaterial(product_id=prod.product_id, material_id=material_ids[material], percentage=pct))
             session.add(
                 ProductImage(
                     product_id=p["product_id"],
@@ -421,6 +431,13 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                     },
                 },
             ),
+            BusinessConfig(
+                config_key="catalog",
+                config_value={
+                    "luxury_tier_min_inr": 7000,
+                    "fit_feedback_options": list(FIT_FEEDBACK_OPTIONS),
+                },
+            ),
         ]
         session.add_all(configs)
 
@@ -521,7 +538,14 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 service_account="svc-catalog",
                 resource_type="products",
                 action="read",
-                allowed_endpoints=["/api/products/search", "/api/products/{id}", "/api/products/{id}/recommendations", "/api/categories"],
+                allowed_endpoints=[
+                    "/api/products/search",
+                    "/api/products/{id}",
+                    "/api/products/{id}/recommendations",
+                    "/api/categories",
+                    "/api/catalog/meta",
+                    "/api/catalog/search",
+                ],
             ),
             AgentPermission(
                 agent_type="cart_agent",
@@ -597,7 +621,7 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
 
         return {
             "status": "seeded",
-            "categories": 3,
+            "categories": len(CATEGORIES),
             "products": len(products_spec),
             "customers": len(customers),
             "agent_permissions": len(permissions),

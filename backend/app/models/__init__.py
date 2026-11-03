@@ -1,4 +1,5 @@
 from ..database import Base
+from .catalog import Color, Department, Material, ProductMaterial, SearchSynonym
 from .customer import Customer, CustomerAddress, CustomerPreference, CustomerVector
 from .fulfillment import Refund, ReturnRequest, Shipment, ShippingZone
 from .governance import (
@@ -14,6 +15,7 @@ from .governance import (
 )
 from .order import Cart, Coupon, CouponUsage, Order, OrderItem
 from .payment import Invoice, Payment, PaymentMethod
+from .reference import OrderStatus, RefundStatus, ReturnReason
 from .product import (
     Category,
     Inventory,
@@ -27,6 +29,14 @@ from .product import (
 
 __all__ = [
     "Base",
+    "Department",
+    "Color",
+    "Material",
+    "ProductMaterial",
+    "SearchSynonym",
+    "OrderStatus",
+    "RefundStatus",
+    "ReturnReason",
     "Customer",
     "CustomerAddress",
     "CustomerPreference",

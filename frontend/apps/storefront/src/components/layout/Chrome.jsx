@@ -2,24 +2,23 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { Icon } from "@/components/ui/Icon";
 import { useStore } from "@/store/StoreProvider";
 import { formatInr } from "@noir/utils/formatters.js";
 
 export function AnnouncementBar() {
-  const { business, freeShippingMin } = useStore();
-  const returnDays = business?.returns_and_refunds?.return_window_days || 7;
-  const freeThreshold = freeShippingMin; // from business config
+  const { business, freeShippingMin, taxRules } = useStore();
+  const returnDays = business?.returns_and_refunds?.return_window_days ?? 7;
+  const hsnChapters = (taxRules?.hsnChapters || ["61", "62"]).join("/");
 
   return (
     <aside className="announcement-bar" role="note" aria-label="Store privileges">
       <div className="announcement-bar-inner">
-        <span>Complimentary Boutique Delivery over {formatInr(freeThreshold)}</span>
+        <span>Complimentary Boutique Delivery over {formatInr(freeShippingMin)}</span>
         <span className="announcement-dot">·</span>
         <span>{returnDays}-Day Atelier Returns</span>
         <span className="announcement-dot">·</span>
-        <span>CBIC GST Certified (HSN 61/62)</span>
+        <span>CBIC GST Certified (HSN {hsnChapters})</span>
       </div>
     </aside>
   );
@@ -29,7 +28,7 @@ export function SiteHeader() {
   const {
     activeDepartment,
     setActiveDepartment,
-    categories,
+    catalogMeta,
     searchQuery,
     setSearchQuery,
     cartCount,
@@ -37,13 +36,17 @@ export function SiteHeader() {
     activePage,
     navigateTo,
     currentActor,
+    isStaff,
     switchActor,
     actorsList,
+    businessConfig,
     theme,
     setTheme,
   } = useStore();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const departments = catalogMeta?.departments || [];
+  const brandTitle = (businessConfig?.store?.name || "NOIR ATELIER").toUpperCase();
 
   return (
     <header className="site-header">
@@ -58,7 +61,7 @@ export function SiteHeader() {
               navigateTo("shop");
             }}
           >
-            NOIR ATELIER
+            {brandTitle}
           </Link>
 
           <nav className="primary-nav" aria-label="Garment Collections">
@@ -72,17 +75,17 @@ export function SiteHeader() {
             >
               The Edit
             </button>
-            {["MEN", "WOMEN", "KIDS"].map((dept) => (
+            {departments.map((dept) => (
               <button
-                key={dept}
+                key={dept.code}
                 type="button"
-                className={`nav-link ${activePage === "shop" && activeDepartment === dept ? "active" : ""}`}
+                className={`nav-link ${activePage === "shop" && activeDepartment === dept.code ? "active" : ""}`}
                 onClick={() => {
-                  setActiveDepartment(dept);
+                  setActiveDepartment(dept.code);
                   navigateTo("shop");
                 }}
               >
-                {dept.charAt(0) + dept.slice(1).toLowerCase()}
+                {dept.name}
               </button>
             ))}
             <button
@@ -92,7 +95,7 @@ export function SiteHeader() {
             >
               Policies
             </button>
-            {["manager", "finance_admin", "admin"].includes(currentActor?.role) && (
+            {isStaff && (
               <button
                 type="button"
                 className={`nav-link ${activePage === "admin" ? "active" : ""}`}
@@ -111,9 +114,12 @@ export function SiteHeader() {
           </span>
           <input
             type="search"
-            placeholder="Search linen, silk, merino…"
+            placeholder="Search black cotton tees, linen under ₹3,000, merino…"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              if (activePage !== "shop") navigateTo("shop");
+            }}
             aria-label="Search garments"
           />
         </div>
@@ -199,18 +205,18 @@ export function SiteHeader() {
           >
             The Edit (All)
           </button>
-          {["MEN", "WOMEN", "KIDS"].map((dept) => (
+          {departments.map((dept) => (
             <button
-              key={dept}
+              key={dept.code}
               type="button"
-              className={`chip-pill ${activePage === "shop" && activeDepartment === dept ? "active" : ""}`}
+              className={`chip-pill ${activePage === "shop" && activeDepartment === dept.code ? "active" : ""}`}
               onClick={() => {
-                setActiveDepartment(dept);
+                setActiveDepartment(dept.code);
                 navigateTo("shop");
                 setMobileMenuOpen(false);
               }}
             >
-              {dept.charAt(0) + dept.slice(1).toLowerCase()}
+              {dept.name}
             </button>
           ))}
           <button
@@ -233,7 +239,7 @@ export function SiteHeader() {
           >
             Atelier Policies
           </button>
-          {["manager", "finance_admin", "admin"].includes(currentActor?.role) && (
+          {isStaff && (
             <button
               type="button"
               className={`chip-pill ${activePage === "admin" ? "active" : ""}`}
@@ -322,8 +328,10 @@ export function MobileTabBar() {
 }
 
 export function SiteFooter() {
-  const { businessConfig, categories, setActiveDepartment, navigateTo } = useStore();
+  const { businessConfig, catalogMeta, setActiveDepartment, navigateTo, taxRules } = useStore();
   const name = businessConfig?.store?.name || "Noir Atelier";
+  const deptNames = (catalogMeta?.departments || []).map((d) => d.name).join(", ");
+  const hsnChapters = (taxRules?.hsnChapters || ["61", "62"]).join("/");
 
   return (
     <footer className="site-footer">
@@ -333,7 +341,7 @@ export function SiteFooter() {
             {name}
           </p>
           <p style={{ margin: "0.25rem 0 0", color: "var(--text-muted)", fontSize: "11px" }}>
-            Tailored luxury garments for Men, Women and Kids — crafted with pure natural fibers in India.
+            Tailored luxury garments{deptNames ? ` across ${deptNames}` : ""} — crafted with certified natural fibers in India.
           </p>
         </div>
 
@@ -365,7 +373,7 @@ export function SiteFooter() {
         </div>
 
         <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-          © {new Date().getFullYear()} {name}. All prices include statutory Goods &amp; Services Tax (CBIC HSN 61/62).
+          © {new Date().getFullYear()} {name}. All prices include statutory Goods &amp; Services Tax (CBIC HSN {hsnChapters}).
         </div>
       </div>
     </footer>

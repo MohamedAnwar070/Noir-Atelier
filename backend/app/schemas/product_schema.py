@@ -6,9 +6,18 @@ from pydantic import BaseModel, Field
 
 class CategoryDTO(BaseModel):
     category_id: str
+    slug: str
     name: str
-    department: str
+    parent_id: Optional[str] = None
+    display_order: int = 0
     product_count: int = 0
+    direct_product_count: int = 0
+
+
+class ProductMaterialInput(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    family: Optional[str] = Field(default=None, max_length=24)
+    percentage: Decimal = Field(gt=0, le=100)
 
 
 class ProductVariantDTO(BaseModel):
@@ -56,6 +65,9 @@ class ProductCreateRequest(BaseModel):
     mrp_inr: Decimal = Field(gt=0)  # base price, used for any size not in variant_prices
     hsn_code: str = "6205"
     color: str
+    color_family: Optional[str] = None
+    color_hex: Optional[str] = None
+    materials: Optional[List[ProductMaterialInput]] = None
     sizes_available: List[str] = Field(default_factory=lambda: ["S", "M", "L", "XL"])
     # Optional per-size prices, e.g. {"S": 2399, "M": 2499, "XL": 2699}. When given,
     # these sizes (and only these) are created; otherwise every sizes_available entry
@@ -70,10 +82,47 @@ class ProductCreateRequest(BaseModel):
 class ProductUpdateRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    category_id: Optional[str] = None
+    department: Optional[str] = None
+    color: Optional[str] = None
+    color_family: Optional[str] = None
+    color_hex: Optional[str] = None
+    materials: Optional[List[ProductMaterialInput]] = None
     mrp_inr: Optional[Decimal] = Field(default=None, gt=0)
     fit_guide: Optional[str] = None
     fabric_and_care: Optional[str] = None
     final_sale: Optional[bool] = None
+
+
+class SynonymCreateRequest(BaseModel):
+    term: str = Field(min_length=1, max_length=40)
+    dimension: str = Field(min_length=3, max_length=16)
+    value: str = Field(min_length=1, max_length=40)
+
+
+class ColorCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=40)
+    family: str = Field(min_length=1, max_length=24)
+    hex_code: Optional[str] = Field(default=None, max_length=7)
+
+
+class MaterialCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    family: str = Field(min_length=1, max_length=24)
+
+
+class CategoryCreateRequest(BaseModel):
+    category_id: Optional[str] = Field(default=None, max_length=16)
+    slug: str = Field(min_length=1, max_length=40)
+    name: str = Field(min_length=1, max_length=80)
+    parent_id: Optional[str] = Field(default=None, max_length=16)
+    display_order: int = 0
+
+
+class DepartmentCreateRequest(BaseModel):
+    code: str = Field(min_length=2, max_length=16)
+    name: str = Field(min_length=1, max_length=60)
+    display_order: int = 0
 
 
 class VariantUpdateRequest(BaseModel):

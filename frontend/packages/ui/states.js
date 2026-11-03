@@ -1,3 +1,5 @@
+import { renderIcon } from "./theme.js";
+
 export const STATE_KINDS = [
   "empty",
   "loading",
@@ -111,6 +113,7 @@ const FRIENDLY_BY_CODE = {
   cancel_not_eligible: "This order has already been dispatched, so it can no longer be cancelled.",
   not_cancellable: "This order can no longer be cancelled.",
   forbidden_order_access: "You don't have access to this order.",
+  invalid_return_reason: "Please select a valid return reason from the list.",
   validation_error: "Please review the details and try again.",
 };
 
@@ -128,4 +131,120 @@ export function friendlyErrorMessage(err, fallback = "Something went wrong. Plea
   }
   if (err.status >= 500) return fallback;
   return err.message || fallback;
+}
+
+/* -------------------------------------------------------------------------- */
+/* HTML State Helpers (used by /storefront/app.js ES module shell)            */
+/* -------------------------------------------------------------------------- */
+
+function renderStateBox({ icon, title, description, actionLabel, actionAttr = "", meta = "" }) {
+  return `
+    <div class="surface-card" role="status" style="padding:2rem 1.5rem;text-align:center;">
+      <div style="margin-bottom:0.65rem;">${renderIcon(icon || "sparkles", "lg")}</div>
+      <h3 class="font-editorial" style="font-size:var(--text-xl);margin-bottom:0.35rem;">${title}</h3>
+      <p style="font-size:var(--text-xs);color:var(--text-secondary);max-width:480px;margin:0 auto 1rem;">${description}</p>
+      ${meta ? `<div style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);margin-bottom:0.85rem;">${meta}</div>` : ""}
+      ${actionLabel ? `<button type="button" class="btn-pill" ${actionAttr}><span>${actionLabel}</span></button>` : ""}
+    </div>
+  `;
+}
+
+export function renderEmptyState({ title, description, actionLabel, actionAttr = 'data-action="clear-filters"' } = {}) {
+  const copy = getStateCopy("empty", { title, description, actionLabel });
+  return renderStateBox({ ...copy, actionAttr });
+}
+
+export function renderLoadingState({ count = 4, label = "Loading garments..." } = {}) {
+  const cards = Array.from({ length: count })
+    .map(() => `<div class="shimmer" style="height:280px;border-radius:18px;"></div>`)
+    .join("");
+  return `
+    <div aria-busy="true" aria-live="polite">
+      <p style="font-size:var(--text-xs);color:var(--text-secondary);margin-bottom:0.85rem;">${label}</p>
+      <div class="catalog-grid">${cards}</div>
+    </div>
+  `;
+}
+
+export function renderErrorState({ code = "http_error", message, traceId = "" } = {}) {
+  const copy = getStateCopy("error", { description: message || STATE_CATALOG.error.description });
+  return renderStateBox({
+    ...copy,
+    meta: `${code}${traceId ? ` · ${traceId}` : ""}`,
+    actionAttr: 'data-action="retry-load"',
+  });
+}
+
+export function renderNoSearchResultState({ query = "", department = "ALL", maxPrice = "" } = {}) {
+  const parts = [];
+  if (query) parts.push(`"${query}"`);
+  if (department && department !== "ALL") parts.push(department);
+  if (maxPrice) parts.push(`≤ ₹${maxPrice}`);
+  const summary = parts.length ? `No pieces matched ${parts.join(" · ")}. ` : "";
+  return renderStateBox({
+    ...getStateCopy("no_results", {
+      description: `${summary}Try broadening your search or clearing active filters.`,
+    }),
+    actionAttr: 'data-action="clear-filters"',
+  });
+}
+
+export function renderPermissionDeniedState({ actorId = "", requiredRole = "Manager or Finance Admin", endpoint = "" } = {}) {
+  return renderStateBox({
+    ...getStateCopy("permission_denied", {
+      description: `Actor ${actorId} does not have permission${endpoint ? ` for ${endpoint}` : ""}. Required: ${requiredRole}.`,
+      actionLabel: "Switch to Store Manager",
+    }),
+    actionAttr: 'data-action="switch-to-manager"',
+  });
+}
+
+export function renderSessionExpiredState() {
+  return renderStateBox({
+    ...getStateCopy("session_expired"),
+    actionAttr: 'data-action="renew-session"',
+  });
+}
+
+export function renderPendingApprovalState({ returnId = "RET-PENDING", refundId = "RFD-PENDING", tier = 2, status = "pending_approval" } = {}) {
+  return renderStateBox({
+    ...getStateCopy("pending_approval", {
+      title: `Tier ${tier} Refund Review (${status})`,
+      description: `Return ${returnId} · Refund ${refundId} has been routed for administrative approval.`,
+      actionLabel: "",
+    }),
+  });
+}
+
+export function renderNoInternetBanner() {
+  return `
+    <div class="surface-card" role="alert" style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;padding:0.75rem 1rem;">
+      <div style="display:flex;align-items:center;gap:0.5rem;font-size:var(--text-xs);">
+        ${renderIcon("wifi-off", "sm")}
+        <span><strong>Offline:</strong> ${STATE_CATALOG.offline.description}</span>
+      </div>
+      <button type="button" class="chip-pill" data-action="reconnect-network">Retry</button>
+    </div>
+  `;
+}
+
+export function renderSlowNetworkBanner({ latencyMs = 1500 } = {}) {
+  return `
+    <div class="surface-card" role="status" style="display:flex;align-items:center;gap:0.5rem;padding:0.65rem 1rem;font-size:var(--text-xs);">
+      ${renderIcon("clock", "sm")}
+      <span>Slow connection (${latencyMs}ms) — syncing live catalogue data…</span>
+    </div>
+  `;
+}
+
+export function renderSuccessBanner({ title = "Confirmed", message = "" } = {}) {
+  return `
+    <div class="surface-card" role="status" style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;padding:0.75rem 1rem;">
+      <div style="display:flex;align-items:center;gap:0.5rem;font-size:var(--text-xs);">
+        ${renderIcon("check", "sm")}
+        <span><strong>${title}:</strong> ${message}</span>
+      </div>
+      <button type="button" class="chip-pill" data-action="dismiss-toast">Dismiss</button>
+    </div>
+  `;
 }

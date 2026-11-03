@@ -8,16 +8,6 @@ import { Button } from "@/components/ui/Controls";
 import { StatePanel, ListSkeleton } from "@/components/ui/StatePanel";
 import { formatInr, validateReturnForm } from "@noir/utils/formatters.js";
 
-const RETURN_REASONS = [
-  { id: "size_fit", label: "Size / Fit Adjustment Required" },
-  { id: "fabric_defect", label: "Fabric or Weave Inconsistency" },
-  { id: "damaged_transit", label: "Damaged in Transit" },
-  { id: "changed_mind", label: "Changed Mind / Prefer Different Silhouette" },
-];
-
-/** Reasons that are the atelier's fault — sent as a defect claim (exempt from Final Sale rules). */
-const DEFECT_REASONS = new Set(["fabric_defect", "damaged_transit"]);
-
 const ORDER_DATE_FORMAT = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" });
 
 export function OrdersView() {
@@ -28,15 +18,20 @@ export function OrdersView() {
     refreshOrders,
     apiClient,
     currentActor,
+    catalogMeta,
+    business,
     notify,
     navigateTo,
   } = useStore();
+
+  const returnReasons = catalogMeta?.return_reasons || [];
+  const returnDays = business?.returns_and_refunds?.return_window_days ?? 7;
 
   const [invoiceOrder, setInvoiceOrder] = useState(null);
 
   // Return modal state
   const [returnOrder, setReturnOrder] = useState(null);
-  const [returnReason, setReturnReason] = useState("size_fit");
+  const [returnReason, setReturnReason] = useState("");
   const [tagIntact, setTagIntact] = useState(true);
   const [customerNote, setCustomerNote] = useState("");
   const [returnErrors, setReturnErrors] = useState({});
@@ -69,20 +64,24 @@ export function OrdersView() {
 
   const handleOpenReturnModal = (order) => {
     setReturnOrder(order);
-    setReturnReason("size_fit");
+    setReturnReason(returnReasons[0]?.code || "");
     setTagIntact(true);
     setCustomerNote("");
     setReturnErrors({});
   };
 
+  const selectedReasonMeta = returnReasons.find((r) => r.code === returnReason) || null;
+
   const handleSubmitReturn = async (e) => {
     e.preventDefault();
-    const errors = validateReturnForm({
-      reason: returnReason,
-      condition: tagIntact ? "tags_intact" : "tags_missing",
+    const { valid, errors } = validateReturnForm({
+      orderId: returnOrder?.order_id,
+      reasonCategory: returnReason,
       customer_note: customerNote,
+      optionalNotes: true,
+      tagIntact,
     });
-    if (Object.keys(errors).length > 0) {
+    if (!valid) {
       setReturnErrors(errors);
       return;
     }
@@ -90,13 +89,12 @@ export function OrdersView() {
     setIsSubmittingReturn(true);
 
     try {
-      // Returns are raised per order (the API has no per-item return).
       const res = await apiClient.initiateReturn({
         orderId: returnOrder.order_id,
         reasonCategory: returnReason,
-        customerNotes: customerNote.trim(),
+        customerNotes: customerNote.trim() || selectedReasonMeta?.label || "",
         tagIntact,
-        isDefectiveClaim: DEFECT_REASONS.has(returnReason),
+        isDefectiveClaim: Boolean(selectedReasonMeta?.is_defect_claim),
       });
 
       notify({
@@ -125,7 +123,7 @@ export function OrdersView() {
           <span className="hero-eyebrow">Client Order History</span>
           <h1 className="page-heading">Your Atelier Dispatches</h1>
           <p className="page-subheading">
-            Track status, view GST invoices, and manage 7-day atelier garment returns.
+            Track status, view GST invoices, and manage {returnDays}-day atelier garment returns.
           </p>
         </div>
         <button
@@ -167,100 +165,97 @@ export function OrdersView() {
       {/* Orders List */}
       {!isLoadingOrders && !ordersError && orders && orders.length > 0 && (
         <div className="orders-list-stack">
-          {orders.map((order) => {
-            // `order` is normalized in the store (store/normalizers.js → normalizeOrder)
-            return (
-              <article key={order.order_id} className="order-record-card">
-                <header className="order-card-header">
-                  <div className="order-id-group">
-                    <span className="order-ref-label">Order Ref:</span>
-                    <strong className="order-id-value">#{order.order_id}</strong>
-                    <span className={`badge order-status-pill status-${order.status}`}>
-                      {order.statusLabel}
-                    </span>
-                  </div>
-
-                  <div className="order-header-meta">
-                    {order.placedAt && (
-                      <time className="order-date" dateTime={order.placedAt.toISOString()}>
-                        {ORDER_DATE_FORMAT.format(order.placedAt)}
-                      </time>
-                    )}
-                    <span className="order-grand-total">{formatInr(order.grandTotal)}</span>
-                  </div>
-                </header>
-
-                {/* Items in this order */}
-                <div className="order-items-grid">
-                  {order.items.map((item) => (
-                    <div key={`${item.product_id}-${item.size}`} className="order-item-snippet">
-                      <div className="order-item-lead">
-                        <span className="order-item-name">{item.name}</span>
-                        <span className="order-item-sub">
-                          Size: {item.size} · Qty: {item.quantity}
-                          {item.quantity > 1 && ` · ${formatInr(item.unitPrice)} each`}
-                        </span>
-                      </div>
-                      <span className="order-item-price">{formatInr(item.lineTotal)}</span>
-                    </div>
-                  ))}
+          {orders.map((order) => (
+            <article key={order.order_id} className="order-record-card">
+              <header className="order-card-header">
+                <div className="order-id-group">
+                  <span className="order-ref-label">Order Ref:</span>
+                  <strong className="order-id-value">#{order.order_id}</strong>
+                  <span className={`badge order-status-pill status-${order.status}`}>
+                    {order.statusLabel}
+                  </span>
                 </div>
 
-                {/* Footer Actions: Cancel, Return, Invoice */}
-                <footer className="order-card-footer">
-                  <div className="order-meta-info">
-                    {order.gstTotal > 0 && (
-                      <span className="badge gst-badge">Incl. GST {formatInr(order.gstTotal)}</span>
-                    )}
-                    {order.paymentStatus && (
-                      <span className="badge payment-status-badge">
-                        Payment: {order.paymentStatus.replace(/_/g, " ")}
+                <div className="order-header-meta">
+                  {order.placedAt && (
+                    <time className="order-date" dateTime={order.placedAt.toISOString()}>
+                      {ORDER_DATE_FORMAT.format(order.placedAt)}
+                    </time>
+                  )}
+                  <span className="order-grand-total">{formatInr(order.grandTotal)}</span>
+                </div>
+              </header>
+
+              {/* Items in this order */}
+              <div className="order-items-grid">
+                {order.items.map((item) => (
+                  <div key={`${item.product_id}-${item.size}`} className="order-item-snippet">
+                    <div className="order-item-lead">
+                      <span className="order-item-name">{item.name}</span>
+                      <span className="order-item-sub">
+                        Size: {item.size} · Qty: {item.quantity}
+                        {item.quantity > 1 && ` · ${formatInr(item.unitPrice)} each`}
                       </span>
-                    )}
+                    </div>
+                    <span className="order-item-price">{formatInr(item.lineTotal)}</span>
                   </div>
+                ))}
+              </div>
 
-                  <div className="order-actions-group">
-                    {order.canCancel && (
-                      <button
-                        type="button"
-                        className="btn-pill btn-pill-outline btn-sm btn-danger-tone"
-                        onClick={() => handleCancelOrder(order.order_id)}
-                        disabled={cancellingOrderId === order.order_id}
-                      >
-                        {cancellingOrderId === order.order_id ? "Cancelling..." : "Cancel Order"}
-                      </button>
-                    )}
+              {/* Footer Actions: Cancel, Return, Invoice */}
+              <footer className="order-card-footer">
+                <div className="order-meta-info">
+                  {order.gstTotal > 0 && (
+                    <span className="badge gst-badge">Incl. GST {formatInr(order.gstTotal)}</span>
+                  )}
+                  {order.paymentStatus && (
+                    <span className="badge payment-status-badge">
+                      Payment: {order.paymentStatus.replace(/_/g, " ")}
+                    </span>
+                  )}
+                </div>
 
-                    {order.canReturn && (
-                      <button
-                        type="button"
-                        className="btn-pill btn-pill-outline btn-sm"
-                        onClick={() => handleOpenReturnModal(order)}
-                      >
-                        <Icon name="refresh" size={13} />
-                        <span>Request return</span>
-                      </button>
-                    )}
+                <div className="order-actions-group">
+                  {order.canCancel && (
+                    <button
+                      type="button"
+                      className="btn-pill btn-pill-outline btn-sm btn-danger-tone"
+                      onClick={() => handleCancelOrder(order.order_id)}
+                      disabled={cancellingOrderId === order.order_id}
+                    >
+                      {cancellingOrderId === order.order_id ? "Cancelling..." : "Cancel Order"}
+                    </button>
+                  )}
 
-                    {order.invoice_id && (
-                      <button
-                        type="button"
-                        className="btn-pill btn-pill-outline btn-sm"
-                        onClick={() => setInvoiceOrder(order)}
-                      >
-                        <Icon name="file" size={13} />
-                        <span>View invoice</span>
-                      </button>
-                    )}
-                  </div>
-                </footer>
-              </article>
-            );
-          })}
+                  {order.canReturn && (
+                    <button
+                      type="button"
+                      className="btn-pill btn-pill-outline btn-sm"
+                      onClick={() => handleOpenReturnModal(order)}
+                    >
+                      <Icon name="refresh" size={13} />
+                      <span>Request return</span>
+                    </button>
+                  )}
+
+                  {order.invoice_id && (
+                    <button
+                      type="button"
+                      className="btn-pill btn-pill-outline btn-sm"
+                      onClick={() => setInvoiceOrder(order)}
+                    >
+                      <Icon name="file" size={13} />
+                      <span>View invoice</span>
+                    </button>
+                  )}
+                </div>
+              </footer>
+            </article>
+          ))}
         </div>
       )}
 
-      {/* 4-Tier Garment Return Modal (Principle 9: Form Validation) */}
+      {/* 4-Tier Garment Return Modal (Database-Driven Return Reasons) */}
       <Modal
         isOpen={!!returnOrder}
         onClose={() => setReturnOrder(null)}
@@ -269,7 +264,7 @@ export function OrdersView() {
       >
         <form onSubmit={handleSubmitReturn} className="form-stack">
           <p className="return-policy-note">
-            Noir Atelier honors a 7-day return window. Garments must have original security
+            Noir Atelier honors a {returnDays}-day return window. Garments must have original security
             tags intact for Tier 1 instant full refund.
           </p>
 
@@ -283,12 +278,20 @@ export function OrdersView() {
               value={returnReason}
               onChange={(e) => setReturnReason(e.target.value)}
             >
-              {RETURN_REASONS.map((r) => (
-                <option key={r.id} value={r.id}>
+              {returnReasons.map((r) => (
+                <option key={r.code} value={r.code}>
                   {r.label}
                 </option>
               ))}
             </select>
+            {selectedReasonMeta?.is_defect_claim && (
+              <span style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "0.25rem", display: "block" }}>
+                Defect &amp; transit claims are eligible across all garments, including Final Sale pieces.
+              </span>
+            )}
+            {returnErrors.reasonCategory && (
+              <span className="field-error-msg">{returnErrors.reasonCategory}</span>
+            )}
           </div>
 
           <div className="form-field-group">
@@ -313,14 +316,14 @@ export function OrdersView() {
             </label>
             <textarea
               id="return-note-input"
-              className={`textarea-control ${returnErrors.customer_note ? "error" : ""}`}
+              className={`textarea-control ${returnErrors.reasonNotes ? "error" : ""}`}
               rows={3}
               placeholder="Provide specific notes regarding fit, drape, or replacement size desired…"
               value={customerNote}
               onChange={(e) => setCustomerNote(e.target.value)}
             />
-            {returnErrors.customer_note && (
-              <span className="field-error-msg">{returnErrors.customer_note}</span>
+            {returnErrors.reasonNotes && (
+              <span className="field-error-msg">{returnErrors.reasonNotes}</span>
             )}
           </div>
 
@@ -336,7 +339,7 @@ export function OrdersView() {
               type="submit"
               variant="primary"
               isLoading={isSubmittingReturn}
-              disabled={!tagIntact}
+              disabled={!tagIntact || !returnReason}
             >
               Submit Return Claim
             </Button>

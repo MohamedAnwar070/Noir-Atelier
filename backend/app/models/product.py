@@ -1,6 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from sqlalchemy import (
     Boolean,
@@ -20,19 +20,33 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from ..database import Base
 from .base import SoftDeleteMixin, TimestampMixin
 
+if TYPE_CHECKING:  # resolved at runtime via the SQLAlchemy registry
+    from .catalog import Color, ProductMaterial
+
 
 class Category(Base, TimestampMixin, SoftDeleteMixin):
+    """Product-type taxonomy (Tops › T-Shirts, Outerwear › Overshirts, …).
+
+    Department is NOT a category: a product type spans departments, so the
+    department lives on the product (FK to departments).
+    """
+
     __tablename__ = "categories"
 
     category_id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    # Stable, URL/search-safe key (e.g. "t-shirt"); synonyms point at slugs.
+    slug: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(80), nullable=False)
-    department: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
     parent_id: Mapped[Optional[str]] = mapped_column(
-        String(16), ForeignKey("categories.category_id", ondelete="SET NULL"), nullable=True
+        String(16), ForeignKey("categories.category_id", ondelete="SET NULL"), nullable=True, index=True
     )
+    display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     icon_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     products: Mapped[List["Product"]] = relationship(back_populates="category")
+    parent: Mapped[Optional["Category"]] = relationship(remote_side="Category.category_id")
+
+    __table_args__ = (CheckConstraint("slug = LOWER(slug)", name="ck_categories_slug_lower"),)
 
 
 class Product(Base, TimestampMixin, SoftDeleteMixin):
@@ -47,14 +61,18 @@ class Product(Base, TimestampMixin, SoftDeleteMixin):
     category_id: Mapped[str] = mapped_column(
         String(16), ForeignKey("categories.category_id", ondelete="RESTRICT"), nullable=False
     )
-    department: Mapped[str] = mapped_column(String(16), nullable=False)
+    department: Mapped[str] = mapped_column(
+        String(16), ForeignKey("departments.code", ondelete="RESTRICT"), nullable=False, index=True
+    )
     # Derived "from" price = lowest active variant price. Kept on the product for
     # catalog listing, sorting and price filters; maintained by variant_service,
     # never charged directly (checkout always prices the variant).
     mrp_inr: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     original_mrp_inr: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
     hsn_code: Mapped[str] = mapped_column(String(12), default="6205", nullable=False)
-    color: Mapped[str] = mapped_column(String(40), nullable=False)
+    color_id: Mapped[int] = mapped_column(
+        ForeignKey("colors.color_id", ondelete="RESTRICT"), nullable=False, index=True
+    )
     # Derived from active variants (in display order); maintained by variant_service.
     sizes_available: Mapped[List[str]] = mapped_column(JSON, default=list, nullable=False)
     fit_guide: Mapped[str] = mapped_column(Text, nullable=False)
@@ -64,6 +82,11 @@ class Product(Base, TimestampMixin, SoftDeleteMixin):
     security_tag_required: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     category: Mapped["Category"] = relationship(back_populates="products")
+    color: Mapped["Color"] = relationship(lazy="joined")
+    materials: Mapped[List["ProductMaterial"]] = relationship(
+        cascade="all, delete-orphan",
+        order_by="ProductMaterial.percentage.desc()",
+    )
     images: Mapped[List["ProductImage"]] = relationship(
         back_populates="product", cascade="all, delete-orphan"
     )
@@ -167,7 +190,7 @@ class ProductReview(Base, TimestampMixin, SoftDeleteMixin):
         String(16), ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False, index=True
     )
     customer_id: Mapped[str] = mapped_column(
-        String(16), ForeignKey("customers.customer_id", ondelete="CASCADE"), nullable=False
+        String(16), ForeignKey("customers.customer_id", ondelete="CASCADE"), nullable=False, index=True
     )
     rating: Mapped[int] = mapped_column(Integer, nullable=False)
     fit_feedback: Mapped[str] = mapped_column(String(32), default="true_to_size", nullable=False)
@@ -185,7 +208,7 @@ class Recommendation(Base, TimestampMixin):
         String(16), ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False, index=True
     )
     recommended_product_id: Mapped[str] = mapped_column(
-        String(16), ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False
+        String(16), ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False, index=True
     )
     relation_type: Mapped[str] = mapped_column(String(32), default="complete_the_look", nullable=False)
     score: Mapped[Decimal] = mapped_column(Numeric(5, 4), default=Decimal("0.9000"), nullable=False)

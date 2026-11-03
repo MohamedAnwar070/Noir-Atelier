@@ -61,6 +61,8 @@ AGENT_ENDPOINT_WHITELIST: Dict[str, List[Tuple[str, str]]] = {
         ("GET", "/api/products/{id}"),
         ("GET", "/api/products/{id}/recommendations"),
         ("GET", "/api/categories"),
+        ("GET", "/api/catalog/meta"),
+        ("GET", "/api/catalog/search"),
     ],
     AgentRole.CART.value: [
         ("POST", "/api/cart/add"),

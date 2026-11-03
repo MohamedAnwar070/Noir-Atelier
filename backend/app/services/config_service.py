@@ -4,8 +4,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..auth import ActorContext
-from ..models import BusinessConfig, Coupon, Customer, PaymentMethod, Policy, ShippingZone
+from ..models import BusinessConfig, Coupon, Customer, Department, PaymentMethod, Policy, ShippingZone
+from ..reference_data import FIT_FEEDBACK_OPTIONS
 from .audit_service import record_audit
+
+STAFF_ROLES = ["manager", "finance_admin", "super_admin", "admin"]
 
 _config_cache: Dict[str, Any] = {}
 
@@ -20,17 +23,24 @@ def get_business_config_map(db: Session) -> Dict[str, Dict[str, Any]]:
 
     rows = db.scalars(select(BusinessConfig)).all()
     cfg_map: Dict[str, Dict[str, Any]] = {r.config_key: dict(r.config_value) for r in rows}
+    dept_codes = [
+        d.code
+        for d in db.scalars(
+            select(Department).where(Department.is_active.is_(True)).order_by(Department.display_order, Department.code)
+        ).all()
+    ] or ["MEN", "WOMEN", "KIDS"]
 
     cfg_map.setdefault(
         "store",
         {
             "name": "Noir Atelier",
             "domain": "premium_garments_only",
-            "departments": ["MEN", "WOMEN", "KIDS"],
+            "departments": dept_codes,
             "currency": "INR",
             "timezone": "Asia/Kolkata",
         },
     )
+    cfg_map["store"]["departments"] = dept_codes
     cfg_map.setdefault(
         "storefront_ui",
         {
@@ -82,6 +92,14 @@ def get_business_config_map(db: Session) -> Dict[str, Dict[str, Any]]:
                 "tier_2_manager_approval_max_inr": 25000,
                 "tier_3_dual_approval_max_inr": 50000,
             },
+        },
+    )
+
+    cfg_map.setdefault(
+        "catalog",
+        {
+            "luxury_tier_min_inr": 7000,
+            "fit_feedback_options": [dict(opt) for opt in FIT_FEEDBACK_OPTIONS],
         },
     )
 
@@ -141,7 +159,9 @@ def list_platform_actors(db: Session) -> List[Dict[str, Any]]:
             {
                 "token": f"demo_{c.customer_id}",
                 "id": c.customer_id,
+                "actor_type": "customer",
                 "role": "customer",
+                "is_staff": False,
                 "loyalty_tier": c.loyalty_tier,
                 "label": f"{c.name.split()[0]} · {tier_label} ({c.customer_id})",
             }
@@ -151,14 +171,18 @@ def list_platform_actors(db: Session) -> List[Dict[str, Any]]:
             {
                 "token": "admin_manager",
                 "id": "MGR-001",
+                "actor_type": "admin",
                 "role": "manager",
+                "is_staff": True,
                 "loyalty_tier": "STAFF",
                 "label": "Store Manager (MGR-001)",
             },
             {
                 "token": "admin_finance",
                 "id": "FIN-001",
+                "actor_type": "admin",
                 "role": "finance_admin",
+                "is_staff": True,
                 "loyalty_tier": "STAFF",
                 "label": "Finance Admin (FIN-001)",
             },
@@ -172,6 +196,7 @@ def get_policies_and_config(db: Session) -> Dict[str, Any]:
     policies = db.scalars(select(Policy).where(Policy.is_active.is_(True))).all()
     return {
         "business_config": cfg,
+        "staff_roles": list(STAFF_ROLES),
         "policies": [
             {
                 "policy_id": p.policy_id,

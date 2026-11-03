@@ -1,20 +1,46 @@
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+import re
+from typing import Any, Dict, List, Optional, Set
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..auth import ActorContext
-from ..models import Category, Inventory, Product, ProductImage, ProductReview, ProductVariant, Recommendation
+from ..models import (
+    Category,
+    Color,
+    Department,
+    Inventory,
+    Material,
+    OrderStatus,
+    Product,
+    ProductImage,
+    ProductMaterial,
+    ProductReview,
+    ProductVariant,
+    Recommendation,
+    RefundStatus,
+    ReturnReason,
+    SearchSynonym,
+)
+from ..models.catalog import SYNONYM_DIMENSIONS
 from ..schemas.product_schema import (
+    CategoryCreateRequest,
+    ColorCreateRequest,
+    DepartmentCreateRequest,
     InventoryUpdateRequest,
+    MaterialCreateRequest,
     ProductCreateRequest,
+    ProductMaterialInput,
     ProductUpdateRequest,
+    SynonymCreateRequest,
     VariantUpdateRequest,
 )
+from ..search.engine import SORT_OPTIONS
 from ..utils.exceptions import AppError
 from .audit_service import next_entity_id, record_audit
+from .config_service import get_business_config_map, invalidate_config_cache
 from .variant_service import (
     normalize_size,
     price_range,
@@ -23,21 +49,28 @@ from .variant_service import (
     set_variant_prices,
 )
 
-SYNONYM_MAP: Dict[str, List[str]] = {
-    "tee": ["tee", "t-shirt", "cotton"],
-    "t-shirt": ["t-shirt", "tee", "cotton"],
-    "shirt": ["shirt", "linen", "overshirt"],
-    "pullover": ["crewneck", "merino", "knit", "sweater"],
-    "sweater": ["crewneck", "merino", "knit", "sweater"],
-    "jacket": ["overshirt", "outerwear", "wool"],
-    "dress": ["dress", "midi", "silk"],
-    "kids": ["kids", "children", "merino"],
-    "men": ["men", "linen", "overshirt"],
-    "women": ["women", "silk", "pima", "dress", "tee"],
-}
+
+def load_reviews(db: Session, product_ids: List[str]) -> Dict[str, List[ProductReview]]:
+    """Active reviews for many products in ONE query (avoids N+1 on listing pages)."""
+    grouped: Dict[str, List[ProductReview]] = {pid: [] for pid in product_ids}
+    if not product_ids:
+        return grouped
+    rows = db.scalars(
+        select(ProductReview)
+        .where(ProductReview.product_id.in_(product_ids), ProductReview.is_active.is_(True))
+        .order_by(ProductReview.review_id.desc())
+    ).all()
+    for r in rows:
+        grouped[r.product_id].append(r)
+    return grouped
 
 
-def serialize_product(p: Product, db: Optional[Session] = None) -> Dict[str, Any]:
+def serialize_product(
+    p: Product,
+    db: Optional[Session] = None,
+    reviews: Optional[List[ProductReview]] = None,
+) -> Dict[str, Any]:
+    """Product API shape. Pass ``reviews`` (from load_reviews) when serializing many products."""
     inv = p.inventory
     sorted_imgs = sorted(p.images, key=lambda x: x.display_order)
     images = [img.url for img in sorted_imgs]
@@ -47,31 +80,21 @@ def serialize_product(p: Product, db: Optional[Session] = None) -> Dict[str, Any
     ]
     accent_tag = sorted_imgs[0].alt_text if sorted_imgs and sorted_imgs[0].alt_text else p.department
 
-    avg_rating = 5.0
-    review_count = 0
-    reviews_list: List[Dict[str, Any]] = []
-    if db is not None:
-        rev_rows = db.scalars(
-            select(ProductReview)
-            .where(
-                ProductReview.product_id == p.product_id,
-                ProductReview.is_active.is_(True),
-            )
-            .order_by(ProductReview.review_id.desc())
-        ).all()
-        if rev_rows:
-            review_count = len(rev_rows)
-            avg_rating = round(sum(int(r.rating) for r in rev_rows) / review_count, 1)
-            reviews_list = [
-                {
-                    "review_id": r.review_id,
-                    "customer_id": r.customer_id,
-                    "rating": int(r.rating),
-                    "fit_feedback": r.fit_feedback,
-                    "comment": r.comment,
-                }
-                for r in rev_rows
-            ]
+    if reviews is None and db is not None:
+        reviews = load_reviews(db, [p.product_id])[p.product_id]
+    rev_rows = reviews or []
+    review_count = len(rev_rows)
+    avg_rating = round(sum(int(r.rating) for r in rev_rows) / review_count, 1) if rev_rows else 5.0
+    reviews_list: List[Dict[str, Any]] = [
+        {
+            "review_id": r.review_id,
+            "customer_id": r.customer_id,
+            "rating": int(r.rating),
+            "fit_feedback": r.fit_feedback,
+            "comment": r.comment,
+        }
+        for r in rev_rows
+    ]
 
     return {
         "product_id": p.product_id,
@@ -79,13 +102,21 @@ def serialize_product(p: Product, db: Optional[Session] = None) -> Dict[str, Any
         "name": p.name,
         "description": p.description,
         "category_id": p.category_id,
+        "category": {"id": p.category.category_id, "slug": p.category.slug, "name": p.category.name},
         "department": p.department,
         # "From" price (lowest active size). Per-size prices are in `variants`.
         "mrp_inr": p.mrp_inr,
         "price_range": price_range(p),
         "variants": serialize_variants(p),
         "hsn_code": p.hsn_code,
-        "color": p.color,
+        # Colour and fabric are structured data (searchable); "color" stays a display name.
+        "color": p.color.name,
+        "color_family": p.color.family,
+        "color_hex": p.color.hex_code,
+        "materials": [
+            {"name": pm.material.name, "family": pm.material.family, "percentage": float(pm.percentage)}
+            for pm in p.materials
+        ],
         "sizes_available": list(p.sizes_available or []),
         "fit_guide": p.fit_guide,
         "fabric_and_care": p.fabric_and_care,
@@ -109,66 +140,32 @@ def search_products(
     q: Optional[str] = None,
     category: Optional[str] = None,
     department: Optional[str] = None,
+    color: Optional[str] = None,
+    material: Optional[str] = None,
+    min_price: Optional[Decimal] = None,
     max_price: Optional[Decimal] = None,
     in_stock_only: bool = False,
+    sort: str = "featured",
     limit: int = 20,
+    offset: int = 0,
 ) -> List[Dict[str, Any]]:
-    stmt = select(Product).where(Product.is_active.is_(True))
+    from .search_service import search_catalog
 
-    if category:
-        cat_norm = category.strip().upper()
-        if cat_norm in ("MEN", "WOMEN", "KIDS"):
-            stmt = stmt.where(func.upper(Product.department) == cat_norm)
-        else:
-            stmt = stmt.where(func.upper(Product.category_id) == cat_norm)
-
-    if department:
-        stmt = stmt.where(func.upper(Product.department) == department.strip().upper())
-
-    if max_price is not None:
-        stmt = stmt.where(Product.mrp_inr <= max_price)
-
-    candidates = db.scalars(stmt.order_by(Product.product_id)).all()
-
-    if in_stock_only:
-        candidates = [p for p in candidates if p.inventory and p.inventory.quantity_available > 0]
-
-    if q and q.strip():
-        raw_tokens = [
-            t.strip(".,?!:;\"'").lower()
-            for t in q.strip().split()
-            if len(t.strip(".,?!:;\"'")) >= 2
-        ]
-        stop_words = {"show", "me", "find", "under", "below", "for", "the", "with", "in", "and", "or", "inr", "rs"}
-        tokens = [t for t in raw_tokens if t not in stop_words and not t.isdigit()]
-
-        if tokens:
-            scored: List[tuple[int, Product]] = []
-            for prod in candidates:
-                blob = " ".join(
-                    [
-                        prod.product_id,
-                        prod.sku,
-                        prod.name,
-                        prod.description,
-                        prod.department,
-                        prod.color,
-                        prod.fabric_and_care,
-                    ]
-                ).lower()
-                score = 0
-                for tok in tokens:
-                    expanded = SYNONYM_MAP.get(tok, [tok])
-                    if any(term in blob for term in expanded):
-                        score += 2
-                        if any(term in prod.name.lower() for term in expanded):
-                            score += 3
-                if score > 0:
-                    scored.append((score, prod))
-            scored.sort(key=lambda item: (-item[0], item[1].product_id))
-            candidates = [item[1] for item in scored]
-
-    return [serialize_product(p, db) for p in candidates[:limit]]
+    result = search_catalog(
+        db,
+        q=q,
+        department=department,
+        category=category,
+        color=color,
+        material=material,
+        min_price=min_price,
+        max_price=max_price,
+        in_stock_only=in_stock_only,
+        sort=sort,
+        limit=limit,
+        offset=offset,
+    )
+    return result["items"]
 
 
 def get_product_by_id_or_sku(db: Session, identifier: str) -> Product:
@@ -243,11 +240,22 @@ def add_product_review(
 ) -> Dict[str, Any]:
     prod = get_product_by_id_or_sku(db, product_id)
     clamped_rating = max(1, min(5, int(rating)))
+    cfg = get_business_config_map(db).get("catalog", {})
+    allowed_fits = {
+        opt["code"] for opt in cfg.get("fit_feedback_options", []) if isinstance(opt, dict) and "code" in opt
+    }
+    normalized_fit = (fit_feedback or "true_to_size").strip().lower()
+    if allowed_fits and normalized_fit not in allowed_fits:
+        raise AppError(
+            "invalid_fit_feedback",
+            f"Unsupported fit_feedback '{fit_feedback}'. Allowed: {', '.join(sorted(allowed_fits))}.",
+            422,
+        )
     rev = ProductReview(
         product_id=prod.product_id,
         customer_id=actor.actor_id if actor.actor_type == "customer" else "CUS-001",
         rating=clamped_rating,
-        fit_feedback=fit_feedback or "true_to_size",
+        fit_feedback=normalized_fit,
         comment=comment.strip() or "Verified Noir Atelier garment review.",
     )
     db.add(rev)
@@ -257,7 +265,7 @@ def add_product_review(
         "product_review",
         prod.product_id,
         "create_review",
-        {"rating": clamped_rating, "fit_feedback": fit_feedback},
+        {"rating": clamped_rating, "fit_feedback": normalized_fit},
         "customer_review_submission",
     )
     db.commit()
@@ -266,27 +274,271 @@ def add_product_review(
 
 
 def list_categories(db: Session) -> List[Dict[str, Any]]:
-    cats = db.scalars(select(Category).where(Category.is_active.is_(True)).order_by(Category.category_id)).all()
-    result = []
+    cats = db.scalars(
+        select(Category).where(Category.is_active.is_(True)).order_by(Category.display_order, Category.category_id)
+    ).all()
+    direct_counts: Dict[str, int] = dict(
+        db.execute(
+            select(Product.category_id, func.count(Product.product_id))
+            .where(Product.is_active.is_(True))
+            .group_by(Product.category_id)
+        ).all()
+    )
+    children_by_parent: Dict[str, List[str]] = {}
+    cat_ids = {c.category_id for c in cats}
     for c in cats:
-        active_count = sum(1 for p in c.products if p.is_active)
+        if c.parent_id and c.parent_id in cat_ids:
+            children_by_parent.setdefault(c.parent_id, []).append(c.category_id)
+
+    def subtree_ids(cid: str) -> Set[str]:
+        out = {cid}
+        for child_id in children_by_parent.get(cid, []):
+            out |= subtree_ids(child_id)
+        return out
+
+    result: List[Dict[str, Any]] = []
+    for c in cats:
+        direct = int(direct_counts.get(c.category_id, 0))
+        total_in_subtree = sum(int(direct_counts.get(sid, 0)) for sid in subtree_ids(c.category_id))
         result.append(
             {
                 "category_id": c.category_id,
+                "slug": c.slug,
                 "name": c.name,
-                "department": c.department,
-                "product_count": active_count,
+                "parent_id": c.parent_id,
+                "display_order": c.display_order,
+                "product_count": total_in_subtree,
+                "direct_product_count": direct,
             }
         )
     return result
 
 
+def get_catalog_meta(db: Session) -> Dict[str, Any]:
+    """Single database-driven vocabulary & filter metadata payload for UI and AI agents."""
+    cfg = get_business_config_map(db)
+    slab_threshold = int(cfg.get("tax", {}).get("garment_slab_threshold_inr", 2500))
+    luxury_min = int(cfg.get("catalog", {}).get("luxury_tier_min_inr", 7000))
+    fit_options = list(cfg.get("catalog", {}).get("fit_feedback_options", []))
+
+    dept_counts: Dict[str, int] = dict(
+        db.execute(
+            select(Product.department, func.count(Product.product_id))
+            .where(Product.is_active.is_(True))
+            .group_by(Product.department)
+        ).all()
+    )
+    departments = [
+        {
+            "code": d.code,
+            "name": d.name,
+            "display_order": d.display_order,
+            "product_count": int(dept_counts.get(d.code, 0)),
+        }
+        for d in db.scalars(
+            select(Department).where(Department.is_active.is_(True)).order_by(Department.display_order, Department.code)
+        ).all()
+    ]
+
+    categories = list_categories(db)
+
+    color_counts: Dict[int, int] = dict(
+        db.execute(
+            select(Product.color_id, func.count(Product.product_id))
+            .where(Product.is_active.is_(True))
+            .group_by(Product.color_id)
+        ).all()
+    )
+    color_rows = db.scalars(select(Color).order_by(Color.family, Color.name)).all()
+    colors: List[Dict[str, Any]] = []
+    family_acc: Dict[str, Dict[str, Any]] = {}
+    for c in color_rows:
+        cnt = int(color_counts.get(c.color_id, 0))
+        colors.append(
+            {
+                "color_id": c.color_id,
+                "name": c.name,
+                "family": c.family,
+                "hex_code": c.hex_code,
+                "product_count": cnt,
+            }
+        )
+        fam = family_acc.setdefault(
+            c.family,
+            {"family": c.family, "label": c.family.capitalize(), "hex_code": c.hex_code, "product_count": 0},
+        )
+        if not fam["hex_code"] and c.hex_code:
+            fam["hex_code"] = c.hex_code
+        fam["product_count"] += cnt
+
+    material_counts: Dict[int, int] = dict(
+        db.execute(
+            select(ProductMaterial.material_id, func.count(func.distinct(ProductMaterial.product_id)))
+            .join(Product, Product.product_id == ProductMaterial.product_id)
+            .where(Product.is_active.is_(True))
+            .group_by(ProductMaterial.material_id)
+        ).all()
+    )
+    material_rows = db.scalars(select(Material).order_by(Material.family, Material.name)).all()
+    materials: List[Dict[str, Any]] = []
+    mat_family_acc: Dict[str, Dict[str, Any]] = {}
+    for m in material_rows:
+        cnt = int(material_counts.get(m.material_id, 0))
+        materials.append(
+            {
+                "material_id": m.material_id,
+                "name": m.name,
+                "family": m.family,
+                "product_count": cnt,
+            }
+        )
+        mfam = mat_family_acc.setdefault(
+            m.family,
+            {"family": m.family, "label": m.family.capitalize(), "product_count": 0},
+        )
+        mfam["product_count"] += cnt
+
+    price_tiers = [
+        {"id": "ALL", "label": "Any price", "min_price": None, "max_price": None},
+        {"id": "ESSENTIAL", "label": f"Up to \u20b9{slab_threshold:,}", "min_price": None, "max_price": slab_threshold},
+        {
+            "id": "SIGNATURE",
+            "label": f"\u20b9{slab_threshold + 1:,} \u2013 \u20b9{luxury_min - 1:,}",
+            "min_price": slab_threshold + 1,
+            "max_price": luxury_min - 1,
+        },
+        {"id": "ATELIER", "label": f"\u20b9{luxury_min:,}+", "min_price": luxury_min, "max_price": None},
+    ]
+
+    order_statuses = [
+        {
+            "code": s.code,
+            "label": s.label,
+            "tone": s.tone,
+            "is_cancellable": s.is_cancellable,
+            "is_returnable": s.is_returnable,
+            "display_order": s.display_order,
+        }
+        for s in db.scalars(select(OrderStatus).order_by(OrderStatus.display_order, OrderStatus.code)).all()
+    ]
+    refund_statuses = [
+        {
+            "code": s.code,
+            "label": s.label,
+            "tone": s.tone,
+            "awaiting_approval": s.awaiting_approval,
+            "display_order": s.display_order,
+        }
+        for s in db.scalars(select(RefundStatus).order_by(RefundStatus.display_order, RefundStatus.code)).all()
+    ]
+    return_reasons = [
+        {
+            "code": r.code,
+            "label": r.label,
+            "is_defect_claim": r.is_defect_claim,
+            "display_order": r.display_order,
+        }
+        for r in db.scalars(
+            select(ReturnReason).where(ReturnReason.is_active.is_(True)).order_by(ReturnReason.display_order, ReturnReason.code)
+        ).all()
+    ]
+
+    return {
+        "departments": departments,
+        "categories": categories,
+        "colors": colors,
+        "color_families": list(family_acc.values()),
+        "materials": materials,
+        "material_families": list(mat_family_acc.values()),
+        "sort_options": [dict(opt) for opt in SORT_OPTIONS],
+        "price_tiers": price_tiers,
+        "order_statuses": order_statuses,
+        "refund_statuses": refund_statuses,
+        "return_reasons": return_reasons,
+        "fit_feedback_options": fit_options,
+    }
+
+
+def _resolve_department(db: Session, raw_dept: str) -> Department:
+    dept_code = raw_dept.strip().upper()
+    dept = db.scalar(select(Department).where(Department.code == dept_code, Department.is_active.is_(True)))
+    if dept is None:
+        valid = [
+            d.code
+            for d in db.scalars(select(Department).where(Department.is_active.is_(True)).order_by(Department.display_order)).all()
+        ]
+        raise AppError(
+            "invalid_department",
+            f"Unsupported department '{raw_dept}'. Active departments: {', '.join(valid)}.",
+            422,
+        )
+    return dept
+
+
+def _resolve_category(db: Session, raw_category: str) -> Category:
+    cleaned = raw_category.strip()
+    cat = db.scalar(
+        select(Category).where(
+            Category.is_active.is_(True),
+            (func.upper(Category.category_id) == cleaned.upper()) | (Category.slug == cleaned.lower()),
+        )
+    )
+    if cat is None:
+        raise AppError("invalid_category", f"Category '{raw_category}' does not exist.", 422)
+    return cat
+
+
+def _resolve_or_create_color(
+    db: Session, color_name: str, color_family: Optional[str] = None, color_hex: Optional[str] = None
+) -> Color:
+    clean_name = color_name.strip()
+    if not clean_name:
+        raise AppError("invalid_color", "Product colour name is required.", 422)
+    hex_val = color_hex.strip().upper() if color_hex and color_hex.strip() else None
+    if hex_val and not re.match(r"^#[0-9A-F]{6}$", hex_val):
+        raise AppError("invalid_color_hex", "hex_code must be a 7-character hex colour such as '#111111'.", 422)
+    existing = db.scalar(select(Color).where(func.lower(Color.name) == clean_name.lower()))
+    if existing is not None:
+        if hex_val and not existing.hex_code:
+            existing.hex_code = hex_val
+        return existing
+    family = (color_family or clean_name.split()[-1]).strip().lower()
+    col = Color(name=clean_name, family=family, hex_code=hex_val)
+    db.add(col)
+    db.flush()
+    return col
+
+
+def _set_product_materials(db: Session, prod: Product, items: List[ProductMaterialInput]) -> None:
+    total_pct = sum((item.percentage for item in items), Decimal("0"))
+    if total_pct > Decimal("100"):
+        raise AppError("invalid_material_composition", "Material composition percentages cannot exceed 100%.", 422)
+    prod.materials.clear()
+    db.flush()
+    seen_material_ids: Set[int] = set()
+    for item in items:
+        clean_name = item.name.strip()
+        mat = db.scalar(select(Material).where(func.lower(Material.name) == clean_name.lower()))
+        if mat is None:
+            fam = (item.family or clean_name.split()[-1]).strip().lower()
+            mat = Material(name=clean_name, family=fam)
+            db.add(mat)
+            db.flush()
+        if mat.material_id in seen_material_ids:
+            raise AppError("duplicate_material", f"Duplicate material '{clean_name}' in product composition.", 422)
+        seen_material_ids.add(mat.material_id)
+        prod.materials.append(
+            ProductMaterial(product_id=prod.product_id, material_id=mat.material_id, percentage=item.percentage)
+        )
+
+
 def create_product(db: Session, actor: ActorContext, req: ProductCreateRequest) -> Dict[str, Any]:
-    dept = req.department.strip().upper()
-    if dept not in ("MEN", "WOMEN", "KIDS"):
-        raise AppError("invalid_department", "Noir Atelier supports MEN, WOMEN, and KIDS garments only.", 422)
+    dept_row = _resolve_department(db, req.department)
+    cat_row = _resolve_category(db, req.category_id)
     if not req.hsn_code.startswith(("61", "62")):
         raise AppError("invalid_hsn", "Only HSN Chapter 61 and 62 garments are permitted.", 422)
+
+    color_row = _resolve_or_create_color(db, req.color, req.color_family, req.color_hex)
 
     # Per-size prices if given, otherwise every listed size at the base price.
     size_prices = req.variant_prices or {size: req.mrp_inr for size in req.sizes_available}
@@ -298,11 +550,11 @@ def create_product(db: Session, actor: ActorContext, req: ProductCreateRequest) 
         sku=req.sku.strip().upper(),  # style code; variant SKUs are derived from it
         name=req.name.strip(),
         description=req.description.strip(),
-        category_id=req.category_id.strip().upper(),
-        department=dept,
+        category_id=cat_row.category_id,
+        department=dept_row.code,
         mrp_inr=req.mrp_inr,  # provisional; re-derived from variants below
         hsn_code=req.hsn_code,
-        color=req.color,
+        color_id=color_row.color_id,
         sizes_available=sizes,
         fit_guide=req.fit_guide,
         fabric_and_care=req.fabric_and_care,
@@ -310,9 +562,12 @@ def create_product(db: Session, actor: ActorContext, req: ProductCreateRequest) 
         security_tag_required=True,
     )
     db.add(prod)
+    db.flush()
     set_variant_prices(db, prod, size_prices)
+    if req.materials:
+        _set_product_materials(db, prod, req.materials)
     default_img = "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=900&q=80"
-    db.add(ProductImage(product_id=pid, url=default_img, alt_text=f"{dept} Atelier Edition", display_order=1))
+    db.add(ProductImage(product_id=pid, url=default_img, alt_text=f"{dept_row.code} Atelier Edition", display_order=1))
     db.add(
         Inventory(
             product_id=pid,
@@ -328,7 +583,12 @@ def create_product(db: Session, actor: ActorContext, req: ProductCreateRequest) 
         "product",
         pid,
         "create_product",
-        {"sku": prod.sku, "variant_prices": {v.size: float(v.mrp_inr) for v in prod.variants}},
+        {
+            "sku": prod.sku,
+            "category_id": cat_row.category_id,
+            "color": color_row.name,
+            "variant_prices": {v.size: float(v.mrp_inr) for v in prod.variants},
+        },
         "admin_catalog_create",
     )
     db.commit()
@@ -344,6 +604,25 @@ def update_product(db: Session, actor: ActorContext, product_id: str, req: Produ
         if val is not None:
             setattr(prod, field_name, val)
             changes[field_name] = val
+
+    if req.department is not None:
+        dept_row = _resolve_department(db, req.department)
+        prod.department = dept_row.code
+        changes["department"] = dept_row.code
+
+    if req.category_id is not None:
+        cat_row = _resolve_category(db, req.category_id)
+        prod.category_id = cat_row.category_id
+        changes["category_id"] = cat_row.category_id
+
+    if req.color is not None:
+        color_row = _resolve_or_create_color(db, req.color, req.color_family, req.color_hex)
+        prod.color_id = color_row.color_id
+        changes["color"] = color_row.name
+
+    if req.materials is not None:
+        _set_product_materials(db, prod, req.materials)
+        changes["materials"] = [{"name": m.name, "percentage": float(m.percentage)} for m in req.materials]
 
     # Price lives on variants. A single mrp_inr means "every active size at this
     # price"; per-size pricing goes through update_variant.
@@ -453,3 +732,203 @@ def update_inventory_stock(
         "quantity_available": inv.quantity_available,
         "quantity_reserved": inv.quantity_reserved,
     }
+
+
+def list_search_synonyms(db: Session) -> List[Dict[str, Any]]:
+    rows = db.scalars(select(SearchSynonym).order_by(SearchSynonym.dimension, SearchSynonym.term)).all()
+    return [
+        {
+            "synonym_id": s.synonym_id,
+            "term": s.term,
+            "dimension": s.dimension,
+            "value": s.value,
+            "is_active": s.is_active,
+        }
+        for s in rows
+    ]
+
+
+def _validate_synonym_target(db: Session, dimension: str, raw_value: str) -> str:
+    if dimension not in SYNONYM_DIMENSIONS:
+        raise AppError(
+            "invalid_synonym_dimension",
+            f"dimension must be one of {', '.join(SYNONYM_DIMENSIONS)}.",
+            422,
+        )
+    if dimension == "department":
+        val = raw_value.strip().upper()
+        exists_row = db.scalar(select(Department).where(Department.code == val, Department.is_active.is_(True)))
+        if not exists_row:
+            raise AppError("invalid_synonym_target", f"Department '{val}' does not exist.", 422)
+        return val
+    val = raw_value.strip().lower()
+    if dimension == "product_type":
+        exists_row = db.scalar(select(Category).where(Category.slug == val, Category.is_active.is_(True)))
+        if not exists_row:
+            raise AppError("invalid_synonym_target", f"Category slug '{val}' does not exist.", 422)
+        return val
+    if dimension == "color":
+        exists_row = db.scalar(select(Color).where(Color.family == val))
+        if not exists_row:
+            raise AppError("invalid_synonym_target", f"Colour family '{val}' does not exist.", 422)
+        return val
+    exists_row = db.scalar(select(Material).where(Material.family == val))
+    if not exists_row:
+        raise AppError("invalid_synonym_target", f"Material family '{val}' does not exist.", 422)
+    return val
+
+
+def create_search_synonym(db: Session, actor: ActorContext, req: SynonymCreateRequest) -> Dict[str, Any]:
+    term = " ".join(req.term.strip().lower().replace("-", " ").split())
+    if not term:
+        raise AppError("invalid_synonym_term", "Synonym term cannot be empty.", 422)
+    dimension = req.dimension.strip().lower()
+    canonical_value = _validate_synonym_target(db, dimension, req.value)
+
+    row = db.scalar(select(SearchSynonym).where(SearchSynonym.term == term))
+    if row is None:
+        row = SearchSynonym(term=term, dimension=dimension, value=canonical_value, is_active=True)
+        db.add(row)
+    else:
+        row.dimension = dimension
+        row.value = canonical_value
+        row.is_active = True
+    db.flush()
+    record_audit(
+        db,
+        actor,
+        "search_synonym",
+        str(row.synonym_id),
+        "upsert_synonym",
+        {"term": term, "dimension": dimension, "value": canonical_value},
+        "admin_vocabulary_update",
+    )
+    db.commit()
+    return {
+        "synonym_id": row.synonym_id,
+        "term": row.term,
+        "dimension": row.dimension,
+        "value": row.value,
+        "is_active": row.is_active,
+    }
+
+
+def delete_search_synonym(db: Session, actor: ActorContext, synonym_id: int) -> Dict[str, Any]:
+    row = db.get(SearchSynonym, synonym_id)
+    if row is None:
+        raise AppError("synonym_not_found", f"Search synonym '{synonym_id}' not found.", 404)
+    term = row.term
+    db.delete(row)
+    record_audit(db, actor, "search_synonym", str(synonym_id), "delete_synonym", {"term": term}, "admin_vocabulary_delete")
+    db.commit()
+    return {"synonym_id": synonym_id, "term": term, "deleted": True}
+
+
+def create_catalog_color(db: Session, actor: ActorContext, req: ColorCreateRequest) -> Dict[str, Any]:
+    col = _resolve_or_create_color(db, req.name, req.family, req.hex_code)
+    col.family = req.family.strip().lower()
+    if req.hex_code:
+        col.hex_code = req.hex_code.strip().upper()
+    record_audit(
+        db,
+        actor,
+        "color",
+        str(col.color_id),
+        "upsert_color",
+        {"name": col.name, "family": col.family, "hex_code": col.hex_code},
+        "admin_vocabulary_update",
+    )
+    db.commit()
+    return {"color_id": col.color_id, "name": col.name, "family": col.family, "hex_code": col.hex_code}
+
+
+def create_catalog_material(db: Session, actor: ActorContext, req: MaterialCreateRequest) -> Dict[str, Any]:
+    clean_name = req.name.strip()
+    clean_family = req.family.strip().lower()
+    mat = db.scalar(select(Material).where(func.lower(Material.name) == clean_name.lower()))
+    if mat is None:
+        mat = Material(name=clean_name, family=clean_family)
+        db.add(mat)
+    else:
+        mat.family = clean_family
+    db.flush()
+    record_audit(
+        db,
+        actor,
+        "material",
+        str(mat.material_id),
+        "upsert_material",
+        {"name": mat.name, "family": mat.family},
+        "admin_vocabulary_update",
+    )
+    db.commit()
+    return {"material_id": mat.material_id, "name": mat.name, "family": mat.family}
+
+
+def create_catalog_category(db: Session, actor: ActorContext, req: CategoryCreateRequest) -> Dict[str, Any]:
+    slug = re.sub(r"[^a-z0-9-]+", "-", req.slug.strip().lower()).strip("-")
+    if not slug:
+        raise AppError("invalid_category_slug", "Category slug must contain lowercase letters or numbers.", 422)
+    if db.scalar(select(Category).where(Category.slug == slug)) is not None:
+        raise AppError("duplicate_category_slug", f"Category slug '{slug}' already exists.", 409)
+    if req.parent_id:
+        parent = db.get(Category, req.parent_id.strip().upper())
+        if parent is None:
+            raise AppError("invalid_parent_category", f"Parent category '{req.parent_id}' not found.", 422)
+        parent_id: Optional[str] = parent.category_id
+    else:
+        parent_id = None
+    cid = (req.category_id.strip().upper() if req.category_id else None) or next_entity_id(
+        db, Category, Category.category_id, "category", start_seq=50
+    )
+    cat = Category(
+        category_id=cid,
+        slug=slug,
+        name=req.name.strip(),
+        parent_id=parent_id,
+        display_order=req.display_order,
+    )
+    db.add(cat)
+    record_audit(
+        db,
+        actor,
+        "category",
+        cid,
+        "create_category",
+        {"slug": slug, "name": cat.name, "parent_id": parent_id},
+        "admin_vocabulary_update",
+    )
+    db.commit()
+    return {
+        "category_id": cat.category_id,
+        "slug": cat.slug,
+        "name": cat.name,
+        "parent_id": cat.parent_id,
+        "display_order": cat.display_order,
+    }
+
+
+def create_catalog_department(db: Session, actor: ActorContext, req: DepartmentCreateRequest) -> Dict[str, Any]:
+    code = req.code.strip().upper()
+    if not re.match(r"^[A-Z][A-Z0-9_]{1,15}$", code):
+        raise AppError("invalid_department_code", "Department code must be 2–16 uppercase letters/digits.", 422)
+    dept = db.get(Department, code)
+    if dept is None:
+        dept = Department(code=code, name=req.name.strip(), display_order=req.display_order, is_active=True)
+        db.add(dept)
+    else:
+        dept.name = req.name.strip()
+        dept.display_order = req.display_order
+        dept.is_active = True
+    record_audit(
+        db,
+        actor,
+        "department",
+        code,
+        "upsert_department",
+        {"code": code, "name": dept.name},
+        "admin_vocabulary_update",
+    )
+    db.commit()
+    invalidate_config_cache()
+    return {"code": dept.code, "name": dept.name, "display_order": dept.display_order, "is_active": dept.is_active}

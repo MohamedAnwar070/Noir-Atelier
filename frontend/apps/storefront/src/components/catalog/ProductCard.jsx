@@ -4,15 +4,16 @@ import React, { useState } from "react";
 import { useStore } from "@/store/StoreProvider";
 import { Icon } from "@/components/ui/Icon";
 import { StarRating } from "@/components/ui/Controls";
+import { LIMITS } from "@/config/ui.config";
 import { formatInr, getProductImage } from "@noir/utils/formatters.js";
 
 export function ProductCard({ product, onSelect }) {
   const { addToBag, toggleWishlist, isWishlisted, taxRules } = useStore();
 
   const stock = Number(product.stock_quantity ?? product.stock ?? 0);
-  const availableSizes = product.sizes_available;
+  const availableSizes = product.sizes_available || [];
 
-  const [selectedSize, setSelectedSize] = useState(availableSizes[0] || "M");
+  const [selectedSize, setSelectedSize] = useState(availableSizes[0] || "");
   // Until the shopper picks a size, a product with size-based pricing shows "From ₹…".
   const [sizeChosen, setSizeChosen] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
@@ -23,9 +24,9 @@ export function ProductCard({ product, onSelect }) {
   const img = getProductImage(product);
   const wishlisted = isWishlisted(product.product_id);
   const outOfStock = stock <= 0;
-  const lowStock = stock > 0 && stock <= 3;
+  const lowStock = stock > 0 && stock <= (LIMITS.lowStockThreshold ?? 5);
 
-  const gstRate = taxRules.rateFor(price); // slab rule from business config
+  const gstRate = taxRules.rateFor(price);
 
   const handleQuickAdd = async (e) => {
     e.stopPropagation();
@@ -127,11 +128,24 @@ export function ProductCard({ product, onSelect }) {
       {/* Product Information */}
       <div className="product-card-body">
         <div className="product-card-meta">
-          <span className="product-dept-tag">{product.department}</span>
+          <span className="product-dept-tag" style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+            <span>
+              {product.department}
+              {product.categoryName ? ` · ${product.categoryName}` : ""}
+            </span>
+            {product.colorHex && (
+              <span
+                className="color-swatch-dot"
+                style={{ backgroundColor: product.colorHex }}
+                title={product.color || undefined}
+                aria-hidden="true"
+              />
+            )}
+          </span>
           <div className="product-card-rating">
             <StarRating
               rating={product.average_rating || 5}
-              count={product.review_count || 1}
+              count={product.review_count || 0}
             />
           </div>
         </div>
@@ -146,7 +160,7 @@ export function ProductCard({ product, onSelect }) {
             <span className="product-gst-caption">
               {showFromPrice
                 ? "Price varies by size · incl. GST"
-                : `Size ${selectedSize} · incl. ${gstRate}% GST`}
+                : `${selectedSize ? `Size ${selectedSize} · ` : ""}incl. ${gstRate}% GST`}
             </span>
           </div>
 
@@ -155,7 +169,7 @@ export function ProductCard({ product, onSelect }) {
             className={`btn-pill btn-sm card-add-btn ${isAdding ? "loading" : ""}`}
             onClick={handleQuickAdd}
             disabled={outOfStock || isAdding}
-            aria-label={`Add ${product.name} (Size ${selectedSize}) to bag`}
+            aria-label={`Add ${product.name}${selectedSize ? ` (Size ${selectedSize})` : ""} to bag`}
           >
             {outOfStock ? (
               "Sold Out"

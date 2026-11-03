@@ -74,12 +74,19 @@ export function normalizeProduct(p) {
     : { min: fromPrice, max: fromPrice };
   const sizes = variants.length
     ? variants.map((v) => v.size)
-    : Array.isArray(p.sizes_available) && p.sizes_available.length
+    : Array.isArray(p.sizes_available)
     ? p.sizes_available
-    : ["S", "M", "L", "XL"];
+    : [];
   const rating = toNumber(p.average_rating ?? p.rating, 5);
-  const reviewCount = toNumber(p.review_count ?? p.reviews?.length, 1);
-  const accentTag = p.accent_tag || (p.department ? `100% Tailored ${p.department}` : "Atelier Edition");
+  const reviewCount = toNumber(p.review_count ?? p.reviews?.length, 0);
+  const materials = Array.isArray(p.materials) ? p.materials : [];
+  const compositionLabel = materials.length
+    ? materials
+        .map((m) => (m.percentage != null ? `${m.percentage}% ${m.name}` : m.name))
+        .join(" · ")
+    : p.accent_tag || "";
+  const category = p.category || null;
+  const accentTag = p.accent_tag || compositionLabel || category?.name || "";
 
   return {
     ...p,
@@ -98,6 +105,14 @@ export function normalizeProduct(p) {
     average_rating: rating,
     rating,
     review_count: reviewCount,
+    category,
+    categoryName: category?.name || null,
+    categorySlug: category?.slug || null,
+    color: p.color || null,
+    colorFamily: p.color_family || null,
+    colorHex: p.color_hex || null,
+    materials,
+    compositionLabel,
     accent_tag: accentTag,
   };
 }
@@ -149,34 +164,16 @@ export function normalizePaymentMethod(m) {
 /* Orders                                                                      */
 /* -------------------------------------------------------------------------- */
 
-/** Customer-facing wording for every status the order service can emit. */
-export const ORDER_STATUS_LABEL = {
-  pending: "Awaiting payment",
-  paid: "Paid",
-  confirmed: "Confirmed",
-  shipped: "Shipped",
-  picked_up: "Collected",
-  delivered: "Delivered",
-  needs_review: "Under review",
-  pending_return: "Return in progress",
-  returned: "Returned",
-  refunded: "Refunded",
-  cancelled: "Cancelled",
-  expired: "Hold expired",
-};
-
-// Mirrors order_service.cancel_order: anything not yet shipped/closed can be cancelled.
-const CANCELLABLE_STATUSES = new Set(["pending", "paid", "confirmed"]);
-// Returns are raised once the customer has the garment.
-const RETURNABLE_STATUSES = new Set(["delivered", "picked_up"]);
-
 /**
- * Order API → view model. The API sends order_date, grand_total_inr,
- * total_gst_inr and per-line unit_sale_value_inr (price after discount).
+ * Order API → view model. Status labels, tones, and cancellation/return
+ * eligibility are resolved directly from the database (`order_statuses` table)
+ * via server serialization (`status_label`, `status_tone`, `can_cancel`, `can_return`)
+ * or `orderStatusMap` from `GET /api/catalog/meta`.
  */
-export function normalizeOrder(raw) {
+export function normalizeOrder(raw, orderStatusMap = {}) {
   if (!raw) return raw;
   const status = String(raw.status || "pending").toLowerCase();
+  const statusMeta = orderStatusMap[status] || null;
   const items = (raw.items || []).map((line) => {
     const quantity = toNumber(line.quantity, 1);
     const unitPrice = toNumber(line.unit_sale_value_inr ?? line.unit_mrp_inr);
@@ -194,7 +191,8 @@ export function normalizeOrder(raw) {
   return {
     ...raw,
     status,
-    statusLabel: ORDER_STATUS_LABEL[status] || status.replace(/_/g, " "),
+    statusLabel: raw.status_label || statusMeta?.label || status.replace(/_/g, " "),
+    statusTone: raw.status_tone || statusMeta?.ui_tone || "neutral",
     placedAt: placedAt && !Number.isNaN(placedAt.getTime()) ? placedAt : null,
     items,
     subtotal: toNumber(raw.subtotal_mrp_inr),
@@ -203,7 +201,7 @@ export function normalizeOrder(raw) {
     gstTotal: toNumber(raw.total_gst_inr),
     grandTotal: toNumber(raw.grand_total_inr),
     paymentStatus: raw.payment_status || null,
-    canCancel: CANCELLABLE_STATUSES.has(status),
-    canReturn: RETURNABLE_STATUSES.has(status),
+    canCancel: Boolean(raw.can_cancel ?? statusMeta?.is_cancellable),
+    canReturn: Boolean(raw.can_return ?? statusMeta?.is_returnable),
   };
 }

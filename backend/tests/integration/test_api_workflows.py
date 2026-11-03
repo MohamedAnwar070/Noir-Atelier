@@ -52,15 +52,21 @@ class TestSharedApiWorkflows(unittest.TestCase):
 
         categories = self.client.get("/api/categories")
         self.assertEqual(categories.status_code, 200)
-        cat_ids = {c["category_id"] for c in categories.json()}
-        self.assertEqual(cat_ids, {"CAT-MEN", "CAT-WMN", "CAT-KID"})
+        cat_slugs = {c["slug"] for c in categories.json()}
+        self.assertEqual(cat_slugs, {"tops", "shirt", "t-shirt", "outerwear", "overshirt", "dress", "knitwear"})
+
+        ui_meta = self.client.get("/api/catalog/meta", headers=self._headers("demo_CUS-001"))
+        agent_meta = self.client.get("/api/catalog/meta", headers=self._headers("svc-catalog"))
+        self.assertEqual(ui_meta.status_code, 200)
+        self.assertEqual(agent_meta.status_code, 200)
+        self.assertEqual(ui_meta.json(), agent_meta.json())
 
         ui_search = self.client.get(
-            "/api/products/search?category=CAT-MEN&max_price=3000",
+            "/api/products/search?department=MEN&max_price=3000",
             headers=self._headers("demo_CUS-001"),
         )
         agent_search = self.client.get(
-            "/api/products/search?category=CAT-MEN&max_price=3000",
+            "/api/products/search?department=MEN&max_price=3000",
             headers=self._headers("svc-catalog"),
         )
         self.assertEqual(ui_search.status_code, 200)

@@ -53,12 +53,29 @@ const state = {
   latestReturnEscalation: null,
 
   businessConfig: {},
+  staffRoles: [],
+  catalogMeta: {
+    departments: [],
+    categories: [],
+    colors: [],
+    color_families: [],
+    materials: [],
+    material_families: [],
+    sort_options: [],
+    price_tiers: [],
+    order_statuses: [],
+    refund_statuses: [],
+    return_reasons: [],
+    fit_feedback_options: [],
+  },
   policies: [],
   paymentMethods: [],
   availableCoupons: [],
   shippingZones: [],
   categories: [],
   products: [],
+  catalogTotal: 0,
+  searchInterpretation: null,
   cardSizeSelection: {},
   recommendations: [],
   wishlistIds: new Set(),
@@ -66,6 +83,10 @@ const state = {
 
   searchQuery: "",
   selectedDepartment: "ALL",
+  selectedCategory: "",
+  selectedColor: "",
+  selectedMaterial: "",
+  minPrice: "",
   maxPrice: "",
   sortBy: "featured",
 
@@ -75,7 +96,7 @@ const state = {
   couponResult: null,
 
   orders: [],
-  returnForm: { orderId: "", reasonNotes: "", tagIntact: true, qcPassed: true },
+  returnForm: { orderId: "", reasonCategory: "", reasonNotes: "", tagIntact: true, qcPassed: true },
   returnValidationErrors: {},
 
   agentRegistry: [],
@@ -145,6 +166,14 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+function isActorStaff(actor = state.actor) {
+  return Boolean(
+    actor?.is_staff ||
+      actor?.actor_type === "admin" ||
+      (state.staffRoles || []).includes(actor?.role)
+  );
+}
+
 async function bootstrapData() {
   state.isLoading = true;
   state.apiError = null;
@@ -152,13 +181,18 @@ async function bootstrapData() {
   renderApp();
 
   try {
-    const [cfgPayload, categories, products, cart, orders, registry] = await Promise.all([
+    const [cfgPayload, catalogMeta, searchRes, cart, orders, registry] = await Promise.all([
       api.getPoliciesAndConfig(),
-      api.listCategories(),
-      api.searchProducts({
+      api.getCatalogMeta(),
+      api.searchCatalog({
         q: state.searchQuery,
         department: state.selectedDepartment,
+        category: state.selectedCategory,
+        color: state.selectedColor,
+        material: state.selectedMaterial,
+        minPrice: state.minPrice || null,
         maxPrice: state.maxPrice || null,
+        sort: state.sortBy,
       }),
       api.getCart().catch(() => null),
       api.listOrders().catch(() => []),
@@ -166,6 +200,7 @@ async function bootstrapData() {
     ]);
 
     state.businessConfig = cfgPayload.business_config || {};
+    state.staffRoles = cfgPayload.staff_roles || [];
     state.policies = cfgPayload.policies || [];
     state.paymentMethods = cfgPayload.payment_methods || [];
     state.availableCoupons = cfgPayload.coupons || [];
@@ -175,11 +210,22 @@ async function bootstrapData() {
       const matched = cfgPayload.actors.find((a) => a.token === state.actor.token) || cfgPayload.actors[0];
       state.actor = matched;
     }
-    state.categories = Array.isArray(categories) ? categories : [];
-    state.products = Array.isArray(products) ? products : [];
+    state.catalogMeta = { ...state.catalogMeta, ...(catalogMeta || {}) };
+    state.categories = Array.isArray(state.catalogMeta.categories) ? state.catalogMeta.categories : [];
+    const items = Array.isArray(searchRes) ? searchRes : searchRes?.items || [];
+    state.products = items;
+    state.catalogTotal = typeof searchRes?.total === "number" ? searchRes.total : items.length;
+    state.searchInterpretation = searchRes?.interpretation || null;
     state.cart = cart;
     state.orders = Array.isArray(orders) ? orders : [];
     state.agentRegistry = Array.isArray(registry) ? registry : [];
+
+    if (!state.returnForm.reasonCategory && state.catalogMeta.return_reasons?.length > 0) {
+      state.returnForm.reasonCategory = state.catalogMeta.return_reasons[0].code;
+    }
+    if (state.paymentMethods.length > 0 && !state.checkoutForm.paymentMethod) {
+      state.checkoutForm.paymentMethod = state.paymentMethods[0].method_id || state.paymentMethods[0].method_code || "";
+    }
 
     if (state.businessConfig?.shipping) {
       state.policyConfigForm.freeShippingThresholdInr =
@@ -191,7 +237,7 @@ async function bootstrapData() {
     state.products.forEach((p) => {
       if (!state.cardSizeSelection[p.product_id]) {
         const sizes = p.sizes_available || [];
-        state.cardSizeSelection[p.product_id] = sizes.includes("M") ? "M" : sizes[0] || "M";
+        state.cardSizeSelection[p.product_id] = sizes[0] || "";
       }
     });
 
@@ -222,15 +268,24 @@ async function refreshProductsFromDb() {
   state.apiError = null;
   renderApp();
   try {
-    state.products = await api.searchProducts({
+    const searchRes = await api.searchCatalog({
       q: state.searchQuery,
       department: state.selectedDepartment,
+      category: state.selectedCategory,
+      color: state.selectedColor,
+      material: state.selectedMaterial,
+      minPrice: state.minPrice || null,
       maxPrice: state.maxPrice || null,
+      sort: state.sortBy,
     });
+    const items = Array.isArray(searchRes) ? searchRes : searchRes?.items || [];
+    state.products = items;
+    state.catalogTotal = typeof searchRes?.total === "number" ? searchRes.total : items.length;
+    state.searchInterpretation = searchRes?.interpretation || null;
     state.products.forEach((p) => {
       if (!state.cardSizeSelection[p.product_id]) {
         const sizes = p.sizes_available || [];
-        state.cardSizeSelection[p.product_id] = sizes.includes("M") ? "M" : sizes[0] || "M";
+        state.cardSizeSelection[p.product_id] = sizes[0] || "";
       }
     });
     state.isLoading = false;
@@ -299,20 +354,13 @@ async function loadAdminDataFromDb() {
 }
 
 function getSortedProducts() {
-  const list = [...state.products];
-  if (state.sortBy === "price_asc") {
-    list.sort((a, b) => Number(a.mrp_inr) - Number(b.mrp_inr));
-  } else if (state.sortBy === "price_desc") {
-    list.sort((a, b) => Number(b.mrp_inr) - Number(a.mrp_inr));
-  } else if (state.sortBy === "rating") {
-    list.sort((a, b) => Number(b.average_rating || 5) - Number(a.average_rating || 5));
-  }
-  return list;
+  return [...state.products];
 }
 
 function renderHeader() {
   const storeName = state.businessConfig?.store?.name || "Noir Atelier";
   const cartCount = (state.cart?.items || []).reduce((acc, i) => acc + Number(i.quantity || 0), 0);
+  const departments = state.catalogMeta?.departments || [];
 
   return `
     <a href="#main-content" class="skip-link">Skip to main garment collection</a>
@@ -329,15 +377,15 @@ function renderHeader() {
             >
               The Edit
             </button>
-            ${state.categories
+            ${departments
               .map(
-                (cat) => `
+                (dept) => `
                 <button
-                  class="nav-link ${state.activePage === "shop" && state.selectedDepartment === cat.department ? "active" : ""}"
+                  class="nav-link ${state.activePage === "shop" && state.selectedDepartment === dept.code ? "active" : ""}"
                   data-action="nav-dept"
-                  data-department="${cat.department}"
+                  data-department="${dept.code}"
                 >
-                  ${cat.department.charAt(0) + cat.department.slice(1).toLowerCase()}
+                  ${dept.name}
                 </button>
               `
               )
@@ -438,15 +486,15 @@ function renderHeader() {
           >
             The Edit (All)
           </button>
-          ${state.categories
+          ${departments
             .map(
-              (cat) => `
+              (dept) => `
               <button
-                class="chip-pill ${state.activePage === "shop" && state.selectedDepartment === cat.department ? "active" : ""}"
+                class="chip-pill ${state.activePage === "shop" && state.selectedDepartment === dept.code ? "active" : ""}"
                 data-action="nav-dept"
-                data-department="${cat.department}"
+                data-department="${dept.code}"
               >
-                ${cat.name}
+                ${dept.name}
               </button>
             `
             )
@@ -586,13 +634,20 @@ function renderHeroSection() {
 }
 
 function renderShopPage() {
+  const departments = state.catalogMeta?.departments || [];
   const deptPills = [
     { code: "ALL", label: "All Garments" },
-    ...state.categories.map((c) => ({
-      code: c.department,
-      label: c.name,
+    ...departments.map((d) => ({
+      code: d.code,
+      label: d.name,
     })),
   ];
+  const sortOptions = state.catalogMeta?.sort_options || [];
+  const categories = (state.catalogMeta?.categories || []).filter((c) => (c.product_count ?? 0) > 0);
+  const colorFamilies = state.catalogMeta?.color_families || [];
+  const materialFamilies = state.catalogMeta?.material_families || [];
+  const slabThreshold = state.businessConfig?.tax?.garment_slab_threshold_inr ?? 2500;
+  const lowGstPct = Math.round(Number(state.businessConfig?.tax?.rate_upto_threshold ?? 0.05) * 100);
 
   let catalogBody = "";
 
@@ -608,7 +663,7 @@ function renderShopPage() {
   } else if (state.apiError || state.activeUiPrinciple === "error") {
     const err = state.apiError || {
       code: "catalog_fetch_error",
-      message: "Could not load catalog from /api/products/search.",
+      message: "Could not load catalog from /api/catalog/search.",
       trace_id: "TRC-502910",
     };
     catalogBody = renderErrorState({
@@ -619,7 +674,7 @@ function renderShopPage() {
   } else if (state.activeUiPrinciple === "empty") {
     catalogBody = renderEmptyState({
       title: "Collection Currently Empty",
-      description: "No active garments in this view. Click below to reload all Men, Women, and Kids garments from the database.",
+      description: "No active garments in this view. Click below to reload all garments from the database.",
       actionLabel: "Reload Catalog",
       actionAttr: 'data-action="clear-filters"',
     });
@@ -650,11 +705,16 @@ function renderShopPage() {
         <div class="catalog-heading-group">
           <h2>Trending Now</h2>
           <span style="font-size:var(--text-xs);color:var(--text-secondary);">
-            ${state.products.length} tailored pieces available
+            ${state.catalogTotal || state.products.length} tailored pieces available
           </span>
         </div>
         ${
-          state.searchQuery || state.selectedDepartment !== "ALL" || state.maxPrice
+          state.searchQuery ||
+          state.selectedDepartment !== "ALL" ||
+          state.selectedCategory ||
+          state.selectedColor ||
+          state.selectedMaterial ||
+          state.maxPrice
             ? `<button class="section-link" data-action="clear-filters">
                 <span>Reset all filters</span>
                 ${renderIcon("close", "xs")}
@@ -681,20 +741,61 @@ function renderShopPage() {
             )
             .join("")}
           <button
-            class="chip-pill ${Number(state.maxPrice) === 2500 ? "active" : ""}"
+            class="chip-pill ${Number(state.maxPrice) === Number(slabThreshold) ? "active" : ""}"
             data-action="quick-price-slab"
-            data-max-price="2500"
+            data-max-price="${slabThreshold}"
           >
-            Under ₹2,500 (5% GST Slab)
+            Up to ${formatInr(slabThreshold)} (${lowGstPct}% GST Slab)
           </button>
         </div>
 
-        <div class="filter-controls">
+        <div class="filter-controls" style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+          ${
+            categories.length > 0
+              ? `<select class="header-pill-select" data-action="change-category" aria-label="Filter garment type">
+                  <option value="">All Types</option>
+                  ${categories
+                    .map(
+                      (c) =>
+                        `<option value="${c.slug}" ${state.selectedCategory === c.slug ? "selected" : ""}>${c.name}</option>`
+                    )
+                    .join("")}
+                </select>`
+              : ""
+          }
+          ${
+            colorFamilies.length > 0
+              ? `<select class="header-pill-select" data-action="change-color" aria-label="Filter colour family">
+                  <option value="">All Colours</option>
+                  ${colorFamilies
+                    .map(
+                      (cf) =>
+                        `<option value="${cf.family}" ${state.selectedColor === cf.family ? "selected" : ""}>${cf.label}</option>`
+                    )
+                    .join("")}
+                </select>`
+              : ""
+          }
+          ${
+            materialFamilies.length > 0
+              ? `<select class="header-pill-select" data-action="change-material" aria-label="Filter fiber">
+                  <option value="">All Fibers</option>
+                  ${materialFamilies
+                    .map(
+                      (mf) =>
+                        `<option value="${mf.family}" ${state.selectedMaterial === mf.family ? "selected" : ""}>${mf.label}</option>`
+                    )
+                    .join("")}
+                </select>`
+              : ""
+          }
           <select class="header-pill-select" data-action="change-sort" aria-label="Sort garments">
-            <option value="featured" ${state.sortBy === "featured" ? "selected" : ""}>Sort: Featured</option>
-            <option value="price_asc" ${state.sortBy === "price_asc" ? "selected" : ""}>Price: Low to High</option>
-            <option value="price_desc" ${state.sortBy === "price_desc" ? "selected" : ""}>Price: High to Low</option>
-            <option value="rating" ${state.sortBy === "rating" ? "selected" : ""}>Highest Rated</option>
+            ${sortOptions
+              .map(
+                (opt) =>
+                  `<option value="${opt.id}" ${state.sortBy === opt.id ? "selected" : ""}>${opt.label}</option>`
+              )
+              .join("")}
           </select>
         </div>
       </div>
@@ -928,6 +1029,11 @@ function renderProductDetailModal() {
                   <option value="4">★ 4/5</option>
                   <option value="3">★ 3/5</option>
                 </select>
+                <select id="review-fit-input" class="field-input" style="width:130px;padding:0.35rem 0.5rem;font-size:11px;">
+                  ${(state.catalogMeta?.fit_feedback_options || [])
+                    .map((opt) => `<option value="${opt.code}">${opt.label}</option>`)
+                    .join("")}
+                </select>
                 <input
                   id="review-comment-input"
                   class="field-input"
@@ -1007,7 +1113,7 @@ function renderOrdersAndReturnsPage() {
                           </span>
                         </div>
                         <div style="display:flex;gap:0.4rem;align-items:center;">
-                          <span class="meta-tag">Status: ${o.status}</span>
+                          <span class="meta-tag">Status: ${o.status_label || o.status}</span>
                           <span class="meta-tag">Payment: ${o.payment_status}</span>
                         </div>
                       </div>
@@ -1034,7 +1140,7 @@ function renderOrdersAndReturnsPage() {
                             Initiate Return
                           </button>
                           ${
-                            o.status === "confirmed" || o.status === "processing"
+                            o.can_cancel
                               ? `<button
                                   class="chip-pill"
                                   style="color:var(--state-error-text);border-color:var(--state-error-border);"
@@ -1079,6 +1185,18 @@ function renderOrdersAndReturnsPage() {
                 placeholder="ORD-1001"
               />
               ${retErrors.orderId ? `<span id="err-return-order-id" class="field-error">${retErrors.orderId}</span>` : ""}
+            </div>
+
+            <div class="field-group">
+              <label class="field-label" for="return-reason-category">Return Reason *</label>
+              <select id="return-reason-category" class="field-input" style="font-size:12px;">
+                ${(state.catalogMeta?.return_reasons || [])
+                  .map(
+                    (rr) =>
+                      `<option value="${rr.code}" ${state.returnForm.reasonCategory === rr.code ? "selected" : ""}>${rr.label}</option>`
+                  )
+                  .join("")}
+              </select>
             </div>
 
             <div class="field-group">
@@ -1197,7 +1315,7 @@ function renderPoliciesPage() {
 }
 
 function renderAdminConsolePage() {
-  if (state.permissionDeniedInfo || state.actor.role === "customer") {
+  if (state.permissionDeniedInfo || !isActorStaff()) {
     return renderPermissionDeniedState({
       actorId: `${state.actor.id} (${state.actor.role})`,
       requiredRole: "Store Manager (MGR-001) or Finance Admin (FIN-001)",
@@ -1264,7 +1382,7 @@ function renderAdminConsolePage() {
                       <div style="padding:0.9rem;border-radius:16px;background:var(--bg-page);border:1px solid var(--border-subtle);font-size:12px;">
                         <div style="display:flex;justify-content:space-between;font-weight:600;margin-bottom:0.25rem;">
                           <span>${r.refund_id} · Order ${r.order_id} · ${formatInr(r.amount_inr)}</span>
-                          <span class="meta-tag">Tier ${r.approval_tier} · ${r.status}</span>
+                          <span class="meta-tag">Tier ${r.approval_tier} · ${r.status_label || r.status}</span>
                         </div>
                         <div style="font-size:11px;color:var(--text-secondary);margin-bottom:0.55rem;">
                           Primary Approver: ${r.approved_by || "Pending"} ${
@@ -1273,7 +1391,7 @@ function renderAdminConsolePage() {
                         </div>
                         <div style="display:flex;gap:0.45rem;">
                           ${
-                            r.status === "pending_approval" || r.status === "awaiting_secondary_approval"
+                            r.awaiting_approval
                               ? `<button
                                   class="btn-pill"
                                   style="padding:0.38rem 0.9rem;font-size:11px;min-height:34px;"
@@ -1608,10 +1726,11 @@ function renderShoppingBagDrawer() {
                     <label class="field-label" for="checkout-payment-method">Payment Method (Database Enabled)</label>
                     <select id="checkout-payment-method" class="field-input" style="font-size:12px;">
                       ${state.paymentMethods
-                        .map(
-                          (pm) =>
-                            `<option value="${pm.method_code}" ${state.checkoutForm.paymentMethod === pm.method_code ? "selected" : ""}>${pm.display_name}</option>`
-                        )
+                        .map((pm) => {
+                          const code = pm.method_id || pm.method_code;
+                          const label = pm.name || pm.display_name || code;
+                          return `<option value="${code}" ${state.checkoutForm.paymentMethod === code ? "selected" : ""}>${label}</option>`;
+                        })
                         .join("")}
                     </select>
                   </div>
@@ -1692,17 +1811,9 @@ function renderAiConciergeDrawer() {
                 : state.agentMessages
                     .map((m) => {
                       const friendlyAgentTitle =
-                        {
-                          catalog_agent: "Personal Stylist",
-                          cart_agent: "Shopping Bag Concierge",
-                          order_agent: "Order & Checkout Concierge",
-                          fulfillment_agent: "Delivery Concierge",
-                          returns_agent: "Returns & Refund Specialist",
-                          support_agent: "Client Care Concierge",
-                          inventory_agent: "Stock Specialist",
-                          analytics_agent: "Store Insights Assistant",
-                          config_agent: "Atelier Policy Guide",
-                        }[m.routed_agent] || "Atelier Assistant";
+                        state.agentRegistry.find((a) => a.agent_name === m.routed_agent)?.persona ||
+                        m.routed_agent ||
+                        "Atelier Assistant";
 
                       const statusBadgeLabel =
                         {
@@ -2092,7 +2203,12 @@ document.addEventListener("click", async (e) => {
   if (action === "clear-filters" || action === "reset-view" || action === "retry-load") {
     state.searchQuery = "";
     state.selectedDepartment = "ALL";
+    state.selectedCategory = "";
+    state.selectedColor = "";
+    state.selectedMaterial = "";
+    state.minPrice = "";
     state.maxPrice = "";
+    state.sortBy = "featured";
     state.activeUiPrinciple = "normal";
     state.apiError = null;
     state.permissionDeniedInfo = null;
@@ -2261,7 +2377,16 @@ document.addEventListener("change", async (e) => {
     renderApp();
   } else if (action === "change-sort") {
     state.sortBy = e.target.value;
-    renderApp();
+    await refreshProductsFromDb();
+  } else if (action === "change-category") {
+    state.selectedCategory = e.target.value;
+    await refreshProductsFromDb();
+  } else if (action === "change-color") {
+    state.selectedColor = e.target.value;
+    await refreshProductsFromDb();
+  } else if (action === "change-material") {
+    state.selectedMaterial = e.target.value;
+    await refreshProductsFromDb();
   } else if (action === "change-actor") {
     const tok = e.target.value;
     const found = state.actors.find((a) => a.token === tok) || state.actors[0] || state.actor;
@@ -2286,9 +2411,13 @@ document.addEventListener("submit", async (e) => {
   if (formType === "review-form") {
     const pid = e.target.getAttribute("data-product-id");
     const rating = Number(document.getElementById("review-rating-input")?.value || 5);
+    const fitFeedback =
+      document.getElementById("review-fit-input")?.value ||
+      state.catalogMeta?.fit_feedback_options?.[0]?.code ||
+      "true_to_size";
     const comment = (document.getElementById("review-comment-input")?.value || "").trim();
     if (!comment || !pid) return;
-    await api.addProductReview(pid, { rating, fitFeedback: "true_to_size", comment });
+    await api.addProductReview(pid, { rating, fitFeedback, comment });
     state.detailModalProduct = await api.getProductDetails(pid);
     await refreshProductsFromDb();
     state.toastSuccess = {
@@ -2347,6 +2476,10 @@ document.addEventListener("submit", async (e) => {
 
   if (formType === "return-form") {
     state.returnForm.orderId = (document.getElementById("return-order-id")?.value || "").trim().toUpperCase();
+    state.returnForm.reasonCategory =
+      document.getElementById("return-reason-category")?.value ||
+      state.catalogMeta?.return_reasons?.[0]?.code ||
+      "";
     state.returnForm.reasonNotes = document.getElementById("return-notes")?.value || "";
     state.returnForm.tagIntact = Boolean(document.getElementById("return-tag-intact")?.checked);
 
@@ -2357,13 +2490,18 @@ document.addEventListener("submit", async (e) => {
       return;
     }
 
+    const reasonRow = (state.catalogMeta?.return_reasons || []).find(
+      (r) => r.code === state.returnForm.reasonCategory
+    );
+
     try {
       const res = await api.initiateReturn({
         orderId: state.returnForm.orderId,
-        reasonCategory: "size_mismatch",
+        reasonCategory: state.returnForm.reasonCategory,
         customerNotes: state.returnForm.reasonNotes,
         tagIntact: state.returnForm.tagIntact,
         qcPassed: true,
+        isDefectiveClaim: Boolean(reasonRow?.is_defect_claim),
       });
       state.orders = await api.listOrders();
       if (Number(res.approval_tier) >= 2) {
@@ -2460,18 +2598,25 @@ async function sendAgentChatMessage(message) {
       steps_taken: res.steps_taken ?? 1,
       step_budget_max: res.step_budget_max ?? 10,
     });
-    const [updatedProds, updatedCart, updatedOrders] = await Promise.all([
+    const [searchRes, updatedCart, updatedOrders] = await Promise.all([
       api
-        .searchProducts({
+        .searchCatalog({
           q: state.searchQuery,
           department: state.selectedDepartment === "ALL" ? "" : state.selectedDepartment,
-          maxPrice: state.maxPrice,
+          category: state.selectedCategory,
+          color: state.selectedColor,
+          material: state.selectedMaterial,
+          minPrice: state.minPrice || null,
+          maxPrice: state.maxPrice || null,
+          sort: state.sortBy,
         })
-        .catch(() => state.products),
+        .catch(() => ({ items: state.products, total: state.catalogTotal, interpretation: state.searchInterpretation })),
       api.getCart().catch(() => state.cart),
       api.listOrders().catch(() => state.orders),
     ]);
-    state.products = updatedProds;
+    state.products = Array.isArray(searchRes) ? searchRes : searchRes?.items || state.products;
+    state.catalogTotal = typeof searchRes?.total === "number" ? searchRes.total : state.products.length;
+    state.searchInterpretation = searchRes?.interpretation || state.searchInterpretation;
     state.cart = updatedCart;
     state.orders = updatedOrders;
     const fb = res.data?.action_feedback;

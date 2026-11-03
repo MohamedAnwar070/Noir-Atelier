@@ -2,15 +2,13 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { useStore } from "@/store/StoreProvider";
-import { useAssistant } from "@/hooks/useAssistant";
 import { Icon } from "@/components/ui/Icon";
 import { formatInr, formatPriceRange, getProductImage } from "@noir/utils/formatters.js";
 
 export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
-  const { currentActor, catalog, addToBag, openDrawer, navigateTo } = useStore();
+  const { currentActor, assistant, addToBag, openDrawer, navigateTo } = useStore();
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
-  const [showTrace, setShowTrace] = useState(false);
 
   const {
     messages,
@@ -18,14 +16,7 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
     sendMessage,
     clearHistory,
     quickPrompts,
-  } = useAssistant({
-    actor: currentActor,
-    onActionCompleted: (action) => {
-      if (action.type === "added_to_cart") {
-        // Automatically sync or notify
-      }
-    },
-  });
+  } = assistant;
 
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
@@ -120,19 +111,21 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
             </header>
 
             {/* Quick Prompts Bar */}
-            <div className="ai-prompts-scroller" role="region" aria-label="Suggested questions">
-              {quickPrompts.slice(0, 4).map((p, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  className="ai-prompt-chip"
-                  onClick={() => handlePromptClick(p)}
-                  disabled={isThinking}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
+            {quickPrompts.length > 0 && (
+              <div className="ai-prompts-scroller" role="region" aria-label="Suggested questions">
+                {quickPrompts.slice(0, 4).map((p, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    className="ai-prompt-chip"
+                    onClick={() => handlePromptClick(p)}
+                    disabled={isThinking}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Message Thread */}
             <div className="ai-thread" ref={scrollRef}>
@@ -148,6 +141,11 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
                   )}
 
                   <div className={`ai-bubble ${msg.role === "user" ? "user-bubble" : "assistant-bubble"}`}>
+                    {msg.role === "assistant" && msg.persona && (
+                      <div style={{ fontSize: "10.5px", fontWeight: 600, color: "var(--text-muted)", marginBottom: "0.2rem" }}>
+                        {msg.persona}
+                      </div>
+                    )}
                     <div className="ai-bubble-text">{msg.content}</div>
 
                     {/* Action Feedback Card: Item Added */}
@@ -283,8 +281,8 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
                         <div className="ai-trace-content">
                           {msg.reactSteps.map((step, idx) => (
                             <div key={idx} className="ai-trace-step">
-                              <span className="step-tag">{step.tag || `STEP ${idx + 1}`}</span>
-                              <span className="step-body">{step.content || step.detail}</span>
+                              <span className="step-tag">{step.tag || step.layer || `STEP ${idx + 1}`}</span>
+                              <span className="step-body">{step.content || step.thought || step.detail}</span>
                             </div>
                           ))}
                         </div>

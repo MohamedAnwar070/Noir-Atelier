@@ -12,6 +12,8 @@ from ..models import (
     Customer,
     Order,
     Refund,
+    RefundStatus,
+    ReturnReason,
     ReturnRequest,
     Shipment,
     SupportTicket,
@@ -57,6 +59,25 @@ def initiate_return(db: Session, actor: ActorContext, req: ReturnCreateRequest) 
         raise AppError("order_not_found", f"Order '{req.order_id}' was not found.", 404)
     _assert_order_access(actor, order)
 
+    reason_code = req.reason_category.strip().lower()
+    reason_row = db.scalar(
+        select(ReturnReason).where(ReturnReason.code == reason_code, ReturnReason.is_active.is_(True))
+    )
+    if reason_row is None:
+        available = [
+            r.code
+            for r in db.scalars(
+                select(ReturnReason).where(ReturnReason.is_active.is_(True)).order_by(ReturnReason.display_order)
+            ).all()
+        ]
+        raise AppError(
+            "invalid_return_reason",
+            f"Unsupported return reason '{req.reason_category}'.",
+            422,
+            details={"available_reasons": available},
+        )
+    is_defective_claim = bool(reason_row.is_defect_claim or req.is_defective_claim)
+
     cfg = get_business_config_map(db)["returns_and_refunds"]
     window_days = int(cfg.get("return_window_days", 7))
     tiers_cfg = cfg.get("tiers", {})
@@ -65,7 +86,7 @@ def initiate_return(db: Session, actor: ActorContext, req: ReturnCreateRequest) 
     is_vip_gold = bool(customer and customer.loyalty_tier == "VIP_GOLD")
     has_final_sale = any(i.final_sale for i in order.items)
 
-    if has_final_sale and not is_vip_gold and not req.is_defective_claim:
+    if has_final_sale and not is_vip_gold and not is_defective_claim:
         raise AppError(
             "final_sale_non_returnable",
             "Items marked Final Sale are strictly non-returnable under policy POL-RET-02.",
@@ -80,7 +101,7 @@ def initiate_return(db: Session, actor: ActorContext, req: ReturnCreateRequest) 
     effective_window = 14 if is_vip_gold else window_days
     outside_window = days_elapsed > effective_window
 
-    if outside_window and not req.is_defective_claim:
+    if outside_window and not is_defective_claim:
         raise AppError(
             "return_window_expired",
             f"Return window of {effective_window} days from delivery has expired ({days_elapsed} days elapsed).",
@@ -99,7 +120,7 @@ def initiate_return(db: Session, actor: ActorContext, req: ReturnCreateRequest) 
         has_final_sale=has_final_sale,
         is_vip_gold=is_vip_gold,
         outside_window=outside_window,
-        is_defective_claim=req.is_defective_claim,
+        is_defective_claim=is_defective_claim,
         tiers_cfg=tiers_cfg,
     )
 
@@ -122,7 +143,7 @@ def initiate_return(db: Session, actor: ActorContext, req: ReturnCreateRequest) 
     ret_row = ReturnRequest(
         return_id=ret_id,
         order_id=order.order_id,
-        reason_category=req.reason_category,
+        reason_category=reason_row.code,
         customer_notes=req.customer_notes,
         status="qc_passed" if tier == 1 else "pending_approval",
         tag_intact=req.tag_intact,
@@ -141,7 +162,7 @@ def initiate_return(db: Session, actor: ActorContext, req: ReturnCreateRequest) 
         amount_inr=order.grand_total_inr,
         approval_tier=tier,
         status=rfd_status,
-        reason=req.reason_category,
+        reason=reason_row.code,
         approved_by="svc-returns" if tier == 1 else None,
         approved_date=datetime.now(timezone.utc) if tier == 1 else None,
     )
@@ -200,6 +221,7 @@ def initiate_return(db: Session, actor: ActorContext, req: ReturnCreateRequest) 
         "return_id": ret_id,
         "order_id": order.order_id,
         "reason_category": ret_row.reason_category,
+        "reason_label": reason_row.label,
         "status": ret_row.status,
         "tag_intact": ret_row.tag_intact,
         "qc_passed": ret_row.qc_passed,
@@ -291,7 +313,7 @@ def approve_refund(
         req.reason,
     )
     db.commit()
-    return _serialize_refund(rfd)
+    return _serialize_refund(rfd, db)
 
 
 def process_refund_payout(db: Session, actor: ActorContext, refund_id: str) -> Dict[str, Any]:
@@ -299,7 +321,7 @@ def process_refund_payout(db: Session, actor: ActorContext, refund_id: str) -> D
     if rfd is None:
         raise AppError("refund_not_found", f"Refund '{refund_id}' was not found.", 404)
     if rfd.status == "processed":
-        return _serialize_refund(rfd)
+        return _serialize_refund(rfd, db)
     if rfd.status != "approved":
         raise AppError(
             "refund_not_approved",
@@ -334,7 +356,7 @@ def process_refund_payout(db: Session, actor: ActorContext, refund_id: str) -> D
         "refund_disbursed_and_restocked",
     )
     db.commit()
-    return _serialize_refund(rfd)
+    return _serialize_refund(rfd, db)
 
 
 def list_refunds(db: Session, order_id: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -342,10 +364,17 @@ def list_refunds(db: Session, order_id: Optional[str] = None) -> List[Dict[str, 
     if order_id:
         stmt = stmt.where(Refund.order_id == order_id.strip().upper())
     rows = db.scalars(stmt).all()
-    return [_serialize_refund(r) for r in rows]
+    status_map = {s.code: s for s in db.scalars(select(RefundStatus)).all()}
+    return [_serialize_refund(r, db, status_map=status_map) for r in rows]
 
 
-def _serialize_refund(rfd: Refund) -> Dict[str, Any]:
+def _serialize_refund(
+    rfd: Refund,
+    db: Optional[Session] = None,
+    *,
+    status_map: Optional[Dict[str, RefundStatus]] = None,
+) -> Dict[str, Any]:
+    srow = status_map.get(rfd.status) if status_map is not None else (db.get(RefundStatus, rfd.status) if db else None)
     return {
         "refund_id": rfd.refund_id,
         "return_id": rfd.return_id,
@@ -353,6 +382,9 @@ def _serialize_refund(rfd: Refund) -> Dict[str, Any]:
         "amount_inr": float(rfd.amount_inr),
         "approval_tier": rfd.approval_tier,
         "status": rfd.status,
+        "status_label": srow.label if srow else rfd.status,
+        "status_tone": srow.tone if srow else "neutral",
+        "awaiting_approval": bool(srow.awaiting_approval) if srow else False,
         "reason": rfd.reason,
         "approved_by": rfd.approved_by,
         "secondary_approved_by": rfd.secondary_approved_by,

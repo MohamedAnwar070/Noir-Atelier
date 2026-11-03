@@ -169,6 +169,49 @@ class TestFrontendAndDbDrivenArchitecture(unittest.TestCase):
         self.assertGreaterEqual(len(cfg.get("coupons", [])), 2)
         self.assertGreaterEqual(len(cfg.get("shipping_zones", [])), 2)
         self.assertGreaterEqual(len(cfg.get("actors", [])), 4)
+        self.assertIn("staff_roles", cfg)
+
+    def test_06_zero_hardcoded_domain_maps_across_frontend_and_backend(self) -> None:
+        sf_src = PROJECT_ROOT / "frontend" / "apps" / "storefront" / "src"
+
+        prod_service = (PROJECT_ROOT / "backend" / "app" / "services" / "product_service.py").read_text(encoding="utf-8")
+        self.assertNotIn("SYNONYM_MAP", prod_service)
+
+        ui_cfg = (sf_src / "config" / "ui.config.js").read_text(encoding="utf-8")
+        for forbidden in (
+            "STAFF_ROLES",
+            "ORDER_STATUS",
+            "CANCELLABLE_STATUSES",
+            "RETURNABLE_STATUSES",
+            "RETURN_REASONS",
+            "personas:",
+        ):
+            self.assertNotIn(forbidden, ui_cfg)
+
+        normalizers = (sf_src / "store" / "normalizers.js").read_text(encoding="utf-8")
+        for forbidden in ("ORDER_STATUS_LABEL", "CANCELLABLE_STATUSES", "RETURNABLE_STATUSES", '["S", "M", "L", "XL"]'):
+            self.assertNotIn(forbidden, normalizers)
+
+        catalog_sec = (sf_src / "components" / "catalog" / "CatalogSection.jsx").read_text(encoding="utf-8")
+        for forbidden in ("LUXURY_FROM_INR", "SORT_OPTIONS", '["ALL", "MEN", "WOMEN", "KIDS"]'):
+            self.assertNotIn(forbidden, catalog_sec)
+
+        chrome = (sf_src / "components" / "layout" / "Chrome.jsx").read_text(encoding="utf-8")
+        self.assertNotIn('["MEN", "WOMEN", "KIDS"]', chrome)
+
+        orders_view = (sf_src / "components" / "orders" / "OrdersView.jsx").read_text(encoding="utf-8")
+        for forbidden in ("size_fit", "damaged_transit", "const RETURN_REASONS"):
+            self.assertNotIn(forbidden, orders_view)
+
+        admin_view = (sf_src / "components" / "admin" / "AdminView.jsx").read_text(encoding="utf-8")
+        for forbidden in ("PENDING_REFUND_STATUSES", "REFUND_STATUS_LABEL", "148900"):
+            self.assertNotIn(forbidden, admin_view)
+
+        assistant_hook = (sf_src / "hooks" / "useAssistant.js").read_text(encoding="utf-8")
+        self.assertNotIn("DEFAULT_PROMPTS", assistant_hook)
+
+        theme_js = (PROJECT_ROOT / "frontend" / "packages" / "ui" / "theme.js").read_text(encoding="utf-8")
+        self.assertNotIn("DEPT_GRADIENT_TOKENS", theme_js)
 
 
 if __name__ == "__main__":

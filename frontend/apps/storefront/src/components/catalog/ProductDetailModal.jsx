@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useStore } from "@/store/StoreProvider";
 import { normalizeProduct } from "@/store/normalizers";
 import { Modal } from "@/components/ui/Overlay";
@@ -8,7 +8,7 @@ import { Icon } from "@/components/ui/Icon";
 import { StarRating, QuantityStepper, Button } from "@/components/ui/Controls";
 import { formatInr, formatPriceRange, getProductImage, validateReviewForm } from "@noir/utils/formatters.js";
 
-export function ProductDetailModal({ product, isOpen, onClose }) {
+export function ProductDetailModal({ product: initialProduct, isOpen, onClose }) {
   const {
     apiClient,
     currentActor,
@@ -16,9 +16,26 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
     openDrawer,
     notify,
     taxRules,
+    business,
+    catalogMeta,
+    refreshCatalog,
   } = useStore();
 
-  const [selectedSize, setSelectedSize] = useState("M");
+  const [detailProduct, setDetailProduct] = useState(null);
+  const product = detailProduct || initialProduct;
+
+  const fitOptions = catalogMeta?.fit_feedback_options || [];
+  const fitLabelByCode = useMemo(() => {
+    const map = {};
+    for (const opt of fitOptions) {
+      map[opt.code] = opt.label;
+    }
+    return map;
+  }, [fitOptions]);
+
+  const defaultFitCode = fitOptions[0]?.code || "true_to_size";
+
+  const [selectedSize, setSelectedSize] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [isAdding, setIsAdding] = useState(false);
 
@@ -33,47 +50,56 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
   // Review Form state
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [reviewRating, setReviewRating] = useState(5);
-  const [fitFeedback, setFitFeedback] = useState("true_to_size");
+  const [fitFeedback, setFitFeedback] = useState(defaultFitCode);
   const [reviewComment, setReviewComment] = useState("");
   const [formErrors, setFormErrors] = useState({});
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
   useEffect(() => {
-    if (product?.product_id && isOpen) {
-      setSelectedSize(product.sizes_available?.[0] || "M");
+    if (initialProduct?.product_id && isOpen) {
+      const normalizedInit = normalizeProduct(initialProduct);
+      setDetailProduct(normalizedInit);
+      setSelectedSize(normalizedInit.sizes_available?.[0] || "");
       setQuantity(1);
-      setReviews(product.reviews || []);
-      setReviewCount(product.review_count || (product.reviews?.length ?? 0));
-      setAvgRating(product.average_rating || 5.0);
+      setReviews(normalizedInit.reviews || []);
+      setReviewCount(normalizedInit.review_count || (normalizedInit.reviews?.length ?? 0));
+      setAvgRating(normalizedInit.average_rating || 5.0);
+      setFitFeedback(defaultFitCode);
       setShowReviewForm(false);
       setFormErrors({});
 
-      // "Complete the look" — optional, so a failure just hides the section.
-      // Ignore late responses if the user has already switched product.
       let cancelled = false;
       setRecommendations([]);
-      apiClient
-        .getRecommendations(product.product_id)
-        .then((recs) => {
-          if (!cancelled) setRecommendations((Array.isArray(recs) ? recs : []).map(normalizeProduct));
-        })
-        .catch(() => {
-          if (!cancelled) setRecommendations([]);
-        });
+
+      Promise.all([
+        apiClient.getProductDetails(initialProduct.product_id).catch(() => null),
+        apiClient.getRecommendations(initialProduct.product_id).catch(() => []),
+      ]).then(([freshDetail, recs]) => {
+        if (cancelled) return;
+        if (freshDetail) {
+          const normalizedFresh = normalizeProduct(freshDetail);
+          setDetailProduct(normalizedFresh);
+          setReviews(normalizedFresh.reviews || []);
+          setReviewCount(normalizedFresh.review_count || (normalizedFresh.reviews?.length ?? 0));
+          setAvgRating(normalizedFresh.average_rating || 5.0);
+        }
+        setRecommendations((Array.isArray(recs) ? recs : []).map(normalizeProduct));
+      });
+
       return () => {
         cancelled = true;
       };
     }
     return undefined;
-  }, [product, isOpen, apiClient]);
+  }, [initialProduct, isOpen, apiClient, defaultFitCode]);
 
   if (!product) return null;
 
   const stock = Number(product.stock_quantity ?? product.stock ?? 0);
-  const availableSizes = product.sizes_available;
-  // Each size has its own price, so GST is resolved for the selected size too.
+  const availableSizes = product.sizes_available || [];
   const price = product.priceFor(selectedSize);
   const gstRate = taxRules.rateFor(price);
+  const returnWindowDays = business?.returns_and_refunds?.return_window_days ?? 7;
 
   const img = getProductImage(product);
   const outOfStock = stock <= 0;
@@ -91,48 +117,43 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
   };
 
   const handleBuyNow = async () => {
-    if (!(await handleAddToBag())) return; // stay on the product if the add failed
+    if (!(await handleAddToBag())) return;
     onClose();
     openDrawer("bag");
   };
 
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
-    const errors = validateReviewForm({
+    const { valid, errors } = validateReviewForm({
       rating: reviewRating,
       comment: reviewComment,
       fit_feedback: fitFeedback,
     });
-    if (Object.keys(errors).length > 0) {
+    if (!valid) {
       setFormErrors(errors);
       return;
     }
     setFormErrors({});
     setIsSubmittingReview(true);
     try {
-      const res = await apiClient.addProductReview(product.product_id, {
+      const updatedRaw = await apiClient.addProductReview(product.product_id, {
         rating: reviewRating,
         fitFeedback,
         comment: reviewComment.trim(),
       });
+      const updated = normalizeProduct(updatedRaw);
+      setDetailProduct(updated);
+      setReviews(updated.reviews || []);
+      setReviewCount(updated.review_count || (updated.reviews?.length ?? 0));
+      setAvgRating(updated.average_rating || 5.0);
+      setReviewComment("");
+      setShowReviewForm(false);
+      refreshCatalog?.();
       notify({
         type: "success",
         title: "Review submitted",
         description: "Thank you for your verified fit feedback.",
       });
-      // Append review
-      const newReview = {
-        review_id: res?.review_id || `REV-${Date.now()}`,
-        author_name: currentActor.label?.split(" ")[0] || "Verified Customer",
-        rating: reviewRating,
-        fit_feedback: fitFeedback,
-        comment: reviewComment.trim(),
-        created_at: new Date().toISOString(),
-      };
-      setReviews((prev) => [newReview, ...prev]);
-      setReviewCount((prev) => prev + 1);
-      setReviewComment("");
-      setShowReviewForm(false);
     } catch (err) {
       notify({
         type: "error",
@@ -168,8 +189,11 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
         {/* Right Details Column */}
         <div className="product-detail-info">
           <div className="detail-header-meta">
-            <span className="detail-dept-badge">{product.department}</span>
-            <span className="detail-sku-badge">REF: {product.product_id}</span>
+            <span className="detail-dept-badge">
+              {product.department}
+              {product.categoryName ? ` · ${product.categoryName}` : ""}
+            </span>
+            <span className="detail-sku-badge">REF: {product.sku || product.product_id}</span>
           </div>
 
           <h2 className="detail-product-title">{product.name}</h2>
@@ -194,7 +218,7 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
             <div className="detail-price-main" aria-live="polite">{formatInr(price)}</div>
             <div className="detail-gst-explainer">
               <span className="gst-tag">{gstRate}% GST Applicable</span>
-              <span className="hsn-tag">HSN {product.hsn_code || "6203"}</span>
+              {product.hsn_code && <span className="hsn-tag">HSN {product.hsn_code}</span>}
             </div>
             <p className="detail-tax-note">
               {product.hasSizePricing
@@ -208,7 +232,7 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
           <div className="detail-size-section">
             <div className="size-label-row">
               <span className="control-label">Select Tailored Size</span>
-              <span className="size-fit-tip">Fits true to size</span>
+              {product.fit_guide && <span className="size-fit-tip">{product.fit_guide}</span>}
             </div>
             <div className="size-options-grid" role="radiogroup" aria-label="Select size">
               {availableSizes.map((s) => (
@@ -269,24 +293,41 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
             </div>
           </div>
 
-          {/* Fabric & Care Specs */}
+          {/* Database-Driven Garment Attributes, Composition & Care */}
           <div className="detail-fabric-specs">
+            {product.color && (
+              <div className="spec-item">
+                <span className="spec-label">Atelier Colourway:</span>
+                <span className="spec-val" style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
+                  {product.colorHex && (
+                    <span
+                      className="color-swatch-dot"
+                      style={{ backgroundColor: product.colorHex }}
+                      aria-hidden="true"
+                    />
+                  )}
+                  <span>{product.color}</span>
+                </span>
+              </div>
+            )}
             <div className="spec-item">
-              <span className="spec-label">Material & Weave:</span>
+              <span className="spec-label">Material &amp; Composition:</span>
               <span className="spec-val">
-                {product.accent_tag || "Premium Certified Natural Fiber"}
+                {product.compositionLabel || product.accent_tag || product.description}
               </span>
             </div>
-            <div className="spec-item">
-              <span className="spec-label">Garment Care:</span>
-              <span className="spec-val">
-                Hand wash cold with gentle detergent or eco dry clean.
-              </span>
-            </div>
+            {product.fabric_and_care && (
+              <div className="spec-item">
+                <span className="spec-label">Garment Care:</span>
+                <span className="spec-val">{product.fabric_and_care}</span>
+              </div>
+            )}
             <div className="spec-item">
               <span className="spec-label">Atelier Guarantee:</span>
               <span className="spec-val">
-                Complimentary returns within 7 days if unworn with tags attached.
+                {product.final_sale
+                  ? "Final Sale archive piece — eligible for return only on verified manufacturing defects."
+                  : `Complimentary returns within ${returnWindowDays} days if unworn with security ribbon attached.`}
               </span>
             </div>
           </div>
@@ -298,7 +339,7 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
         <section className="detail-recommendations-section">
           <h3 className="section-subheading">Complete the Look</h3>
           <p className="section-subcaption">
-            Stylist-curated pieces from the same collection that pair seamlessly.
+            Stylist-curated pieces from the collection that pair seamlessly.
           </p>
           <div className="recs-grid">
             {recommendations.map((rec) => {
@@ -375,21 +416,25 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
                 </div>
               </div>
 
-              <div>
-                <label className="field-label" htmlFor="fit-feedback-select">
-                  Fit Feedback
-                </label>
-                <select
-                  id="fit-feedback-select"
-                  className="select-control"
-                  value={fitFeedback}
-                  onChange={(e) => setFitFeedback(e.target.value)}
-                >
-                  <option value="runs_small">Runs Small</option>
-                  <option value="true_to_size">True to Size</option>
-                  <option value="runs_large">Runs Large / Oversized</option>
-                </select>
-              </div>
+              {fitOptions.length > 0 && (
+                <div>
+                  <label className="field-label" htmlFor="fit-feedback-select">
+                    Fit Feedback
+                  </label>
+                  <select
+                    id="fit-feedback-select"
+                    className="select-control"
+                    value={fitFeedback}
+                    onChange={(e) => setFitFeedback(e.target.value)}
+                  >
+                    {fitOptions.map((opt) => (
+                      <option key={opt.code} value={opt.code}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             <div className="composer-comment-box">
@@ -443,7 +488,7 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
                 <div className="review-item-header">
                   <div className="reviewer-info">
                     <span className="reviewer-name">
-                      {rev.author_name || "Verified Client"}
+                      {rev.author_name || rev.customer_id || "Verified Client"}
                     </span>
                     <span className="verified-badge">
                       <Icon name="check" size={12} /> Verified Purchase
@@ -457,7 +502,7 @@ export function ProductDetailModal({ product, isOpen, onClose }) {
                   <StarRating rating={rev.rating || 5} />
                   {rev.fit_feedback && (
                     <span className="fit-pill">
-                      Fit: {rev.fit_feedback.replace("_", " ")}
+                      Fit: {fitLabelByCode[rev.fit_feedback] || rev.fit_feedback.replace(/_/g, " ")}
                     </span>
                   )}
                 </div>

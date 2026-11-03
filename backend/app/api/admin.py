@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -8,10 +8,26 @@ from ..auth import ActorContext, require_admin, require_agent_or_admin
 from ..database import get_db
 from ..models import SupportTicket
 from ..schemas.config_schema import ConfigUpdateRequest
+from ..schemas.product_schema import (
+    CategoryCreateRequest,
+    ColorCreateRequest,
+    DepartmentCreateRequest,
+    MaterialCreateRequest,
+    SynonymCreateRequest,
+)
 from ..services.config_service import update_business_config
 from ..services.customer_service import get_customers_analytics
 from ..services.order_service import get_orders_analytics
-from ..services.product_service import list_inventory
+from ..services.product_service import (
+    create_catalog_category,
+    create_catalog_color,
+    create_catalog_department,
+    create_catalog_material,
+    create_search_synonym,
+    delete_search_synonym,
+    list_inventory,
+    list_search_synonyms,
+)
 from ..services.returns_service import list_refunds
 
 router = APIRouter()
@@ -60,3 +76,65 @@ def api_admin_inventory_sync(
 ) -> Dict[str, Any]:
     items = list_inventory(db, low_stock_only=False)
     return {"status": "synced", "synced_skus": len(items)}
+
+
+@router.get("/api/admin/catalog/synonyms")
+def api_list_catalog_synonyms(
+    db: Session = Depends(get_db),
+    _actor: ActorContext = Depends(require_admin),
+) -> List[Dict[str, Any]]:
+    return list_search_synonyms(db)
+
+
+@router.post("/api/admin/catalog/synonyms", status_code=201)
+def api_create_catalog_synonym(
+    req: SynonymCreateRequest,
+    db: Session = Depends(get_db),
+    actor: ActorContext = Depends(require_admin),
+) -> Dict[str, Any]:
+    return create_search_synonym(db, actor, req)
+
+
+@router.delete("/api/admin/catalog/synonyms/{synonym_id}")
+def api_delete_catalog_synonym(
+    synonym_id: int,
+    db: Session = Depends(get_db),
+    actor: ActorContext = Depends(require_admin),
+) -> Dict[str, Any]:
+    return delete_search_synonym(db, actor, synonym_id)
+
+
+@router.post("/api/admin/catalog/colors", status_code=201)
+def api_create_catalog_color(
+    req: ColorCreateRequest,
+    db: Session = Depends(get_db),
+    actor: ActorContext = Depends(require_admin),
+) -> Dict[str, Any]:
+    return create_catalog_color(db, actor, req)
+
+
+@router.post("/api/admin/catalog/materials", status_code=201)
+def api_create_catalog_material(
+    req: MaterialCreateRequest,
+    db: Session = Depends(get_db),
+    actor: ActorContext = Depends(require_admin),
+) -> Dict[str, Any]:
+    return create_catalog_material(db, actor, req)
+
+
+@router.post("/api/admin/catalog/categories", status_code=201)
+def api_create_catalog_category(
+    req: CategoryCreateRequest,
+    db: Session = Depends(get_db),
+    actor: ActorContext = Depends(require_admin),
+) -> Dict[str, Any]:
+    return create_catalog_category(db, actor, req)
+
+
+@router.post("/api/admin/catalog/departments", status_code=201)
+def api_create_catalog_department(
+    req: DepartmentCreateRequest,
+    db: Session = Depends(get_db),
+    actor: ActorContext = Depends(require_admin),
+) -> Dict[str, Any]:
+    return create_catalog_department(db, actor, req)

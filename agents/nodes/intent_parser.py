@@ -134,8 +134,6 @@ def resolve_product_from_message(
 ) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, Any]]]:
     cat_tools = CatalogTools(client)
     scratch_traces: list = []
-    code, catalog = cat_tools.search_products(trace_id="TRC-RESOLVE", traces=scratch_traces)
-    all_products: List[Dict[str, Any]] = catalog if (code == 200 and isinstance(catalog, list)) else []
 
     explicit_id = context.get("product_id")
     if not explicit_id:
@@ -144,32 +142,51 @@ def resolve_product_from_message(
             explicit_id = pm.group(1).upper()
 
     if explicit_id:
-        for p in all_products:
-            if p.get("product_id", "").upper() == str(explicit_id).upper():
-                return p, all_products
-        return {"product_id": str(explicit_id).upper(), "name": str(explicit_id).upper(), "sizes_available": ["M"]}, all_products
+        code, detail = cat_tools.get_product_details(str(explicit_id).upper(), trace_id="TRC-RESOLVE", traces=scratch_traces)
+        if code == 200 and isinstance(detail, dict):
+            return detail, [detail]
+        return {"product_id": str(explicit_id).upper(), "name": str(explicit_id).upper(), "sizes_available": ["M"]}, []
 
-    msg_clean = re.sub(r"[^a-z0-9\s]", " ", msg.lower())
-    msg_tokens = [t for t in msg_clean.split() if len(t) > 2 and t not in STOP_WORDS]
+    # Strip explicit size callouts ("size M", "(XL)") so the database search engine focuses on the garment.
+    query_for_search = re.sub(
+        r"(?:\bsize\s+|\bin\s+size\s+|\bsize:\s*)(?:XXS|XS|S|M|L|XL|XXL|3XL|2Y|4Y|6Y|8Y|10Y|12Y|14Y)\b",
+        " ",
+        msg,
+        flags=re.IGNORECASE,
+    )
+    query_for_search = re.sub(r"\b(?:XXS|XS|XL|XXL|3XL|2Y|4Y|6Y|8Y|10Y|12Y|14Y)\b", " ", query_for_search, flags=re.IGNORECASE)
+
+    code, matches = cat_tools.search_products(
+        q=query_for_search,
+        department=context.get("department"),
+        trace_id="TRC-RESOLVE",
+        traces=scratch_traces,
+    )
+    candidates: List[Dict[str, Any]] = matches if (code == 200 and isinstance(matches, list)) else []
+    if len(candidates) == 1:
+        return candidates[0], candidates
+
+    msg_lower = msg.lower()
+    msg_tokens = [t for t in re.sub(r"[^a-z0-9\s]", " ", msg_lower).split() if len(t) > 2 and t not in STOP_WORDS]
 
     best_prod: Optional[Dict[str, Any]] = None
     best_score = 0
-
-    for p in all_products:
+    for p in candidates:
         name_lower = str(p.get("name", "")).lower()
-        if name_lower and name_lower in msg.lower():
-            return p, all_products
-        prod_text = f"{p.get('name', '')} {p.get('color', '')} {p.get('department', '')}".lower()
+        if name_lower and name_lower in msg_lower:
+            return p, candidates
+        mat_names = " ".join(m.get("name", "") for m in (p.get("materials") or []))
+        prod_text = f"{p.get('name', '')} {p.get('color', '')} {p.get('category', {}).get('name', '')} {mat_names}".lower()
         prod_tokens = set(re.sub(r"[^a-z0-9\s]", " ", prod_text).split())
         score = sum(2 if tok in name_lower else (1 if tok in prod_tokens else 0) for tok in msg_tokens)
         if score > best_score:
             best_score = score
             best_prod = p
 
-    if best_score >= 2 and best_prod is not None:
-        return best_prod, all_products
+    if best_prod is not None and (best_score >= 2 or candidates):
+        return best_prod, candidates
 
-    return None, all_products
+    return None, candidates
 
 
 def is_generic_browse_query(msg: str) -> bool:

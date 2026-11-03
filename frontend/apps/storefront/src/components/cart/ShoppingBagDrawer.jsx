@@ -13,12 +13,6 @@ import {
   validateCouponCode,
 } from "@noir/utils/formatters.js";
 
-/** Used only if the config endpoint returned no methods. IDs match the backend's PaymentMethod.method_id. */
-const FALLBACK_PAYMENT_METHODS = [
-  { id: "upi", label: "UPI (Instant)", minOrder: 0 },
-  { id: "card", label: "Credit / Debit Card", minOrder: 0 },
-];
-
 export function ShoppingBagDrawer({ isOpen, onClose }) {
   const {
     cart,
@@ -33,6 +27,7 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
     paymentMethods,
     placeOrder,
     freeShippingMin,
+    business,
     taxRules,
     notify,
     navigateTo,
@@ -42,23 +37,22 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
   const [couponError, setCouponError] = useState("");
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
 
-  // Explicit user choices; until one is made, fall back to the first loaded option
-  // (addresses/methods load asynchronously, so a default can't be captured in useState).
   const [chosenAddressId, setSelectedAddressId] = useState(null);
   const [chosenPaymentMethod, setSelectedPaymentMethod] = useState(null);
-  const methods = paymentMethods.length ? paymentMethods : FALLBACK_PAYMENT_METHODS;
+  const methods = paymentMethods || [];
   const selectedAddressId = chosenAddressId ?? customerAddresses?.[0]?.address_id ?? null;
-  const selectedPaymentMethod = chosenPaymentMethod ?? methods[0]?.id ?? "upi";
+  const selectedPaymentMethod = chosenPaymentMethod ?? methods[0]?.id ?? "";
 
-  // New Address Modal state
+  const returnDays = business?.returns_and_refunds?.return_window_days ?? 7;
+
+  // New Address Modal state (aligned with backend AddressCreateRequest)
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [addrForm, setAddrForm] = useState({
+    label: "Home",
     street: "",
-    city: "Mumbai",
-    state: "Maharashtra",
-    postal_code: "",
-    phone: "",
-    landmark: "",
+    city: "",
+    state: "Tamil Nadu",
+    pin_code: "",
   });
   const [addrErrors, setAddrErrors] = useState({});
   const [isSavingAddr, setIsSavingAddr] = useState(false);
@@ -68,7 +62,7 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
   const [checkoutError, setCheckoutError] = useState(null);
 
   const subtotal = cartTotals.subtotal || 0;
-  const freeShippingProgress = Math.min(100, (subtotal / freeShippingMin) * 100);
+  const freeShippingProgress = Math.min(100, (subtotal / Math.max(freeShippingMin, 1)) * 100);
   const remainingForFreeShipping = Math.max(0, freeShippingMin - subtotal);
 
   const handleApplyCoupon = async (e) => {
@@ -94,8 +88,8 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
 
   const handleSaveAddress = async (e) => {
     e.preventDefault();
-    const errors = validateAddressForm(addrForm);
-    if (Object.keys(errors).length > 0) {
+    const { valid, errors } = validateAddressForm(addrForm);
+    if (!valid) {
       setAddrErrors(errors);
       return;
     }
@@ -105,7 +99,7 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
       const added = await addCustomerAddress(addrForm);
       setSelectedAddressId(added.address_id);
       setShowAddressModal(false);
-      setAddrForm({ street: "", city: "Mumbai", state: "Maharashtra", postal_code: "", phone: "" });
+      setAddrForm({ label: "Home", street: "", city: "", state: "Tamil Nadu", pin_code: "" });
       notify({
         type: "success",
         title: "Address saved",
@@ -123,13 +117,11 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
   };
 
   const handlePlaceOrder = async () => {
-    if (cart.length === 0 || isPlacingOrder) return;
+    if (cart.length === 0 || isPlacingOrder || !selectedPaymentMethod) return;
     setCheckoutError(null);
     setIsPlacingOrder(true);
 
     try {
-      // The server checks out its own copy of the cart (hold → pay, idempotent);
-      // we only send the shopper's choices.
       const order = await placeOrder({
         addressId: selectedAddressId,
         paymentMethod: selectedPaymentMethod,
@@ -322,7 +314,7 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
                     <div className="address-card-body">
                       <div className="address-street">{addr.street}</div>
                       <div className="address-city-state">
-                        {addr.city}, {addr.state} — {addr.postal_code}
+                        {addr.city}, {addr.state} — {addr.pin_code || addr.postal_code}
                       </div>
                     </div>
                     {selectedAddressId === addr.address_id && (
@@ -335,12 +327,11 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
               </div>
             </div>
 
-            {/* Payment Method Selector */}
+            {/* Payment Method Selector (Database-Driven) */}
             <div className="bag-checkout-section">
               <span className="control-label">Payment Method</span>
               <div className="payment-options-grid" role="radiogroup" aria-label="Payment method">
                 {methods.map((pm) => {
-                  // e.g. EMI has a minimum order value enforced by the backend
                   const belowMinimum = cartTotals.grandTotal < (pm.minOrder || 0);
                   return (
                     <button
@@ -374,7 +365,6 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
                 </div>
               )}
 
-              {/* Prices are GST-inclusive: these lines show the tax inside the subtotal */}
               {cartTotals.gstLines.map(({ rate, amount }) => (
                 <div key={rate} className="summary-line tax">
                   <span>
@@ -410,12 +400,13 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
                 size="lg"
                 onClick={handlePlaceOrder}
                 isLoading={isPlacingOrder}
+                disabled={!selectedPaymentMethod}
                 style={{ width: "100%" }}
               >
-                Confirm & Place Order · {formatInr(cartTotals.grandTotal)}
+                Confirm &amp; Place Order · {formatInr(cartTotals.grandTotal)}
               </Button>
               <p className="checkout-guarantee-note">
-                <Icon name="lock" size={12} /> 256-bit Secure Encryption · 7-Day Guarantee
+                <Icon name="lock" size={12} /> 256-bit Secure Encryption · {returnDays}-Day Guarantee
               </p>
             </div>
           </div>
@@ -445,6 +436,7 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
               value={addrForm.city}
               onChange={(e) => setAddrForm({ ...addrForm, city: e.target.value })}
               error={addrErrors.city}
+              placeholder="e.g. Mumbai"
               required
             />
             <TextField
@@ -458,20 +450,18 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
 
           <div className="form-two-col">
             <TextField
-              label="Postal / PIN Code"
-              value={addrForm.postal_code}
-              onChange={(e) => setAddrForm({ ...addrForm, postal_code: e.target.value })}
-              error={addrErrors.postal_code}
+              label="6-Digit PIN Code"
+              value={addrForm.pin_code}
+              onChange={(e) => setAddrForm({ ...addrForm, pin_code: e.target.value })}
+              error={addrErrors.pinCode}
               placeholder="e.g. 400005"
               required
             />
             <TextField
-              label="Contact Phone"
-              value={addrForm.phone}
-              onChange={(e) => setAddrForm({ ...addrForm, phone: e.target.value })}
-              error={addrErrors.phone}
-              placeholder="e.g. 9820012345"
-              required
+              label="Address Label"
+              value={addrForm.label}
+              onChange={(e) => setAddrForm({ ...addrForm, label: e.target.value })}
+              placeholder="Home / Studio"
             />
           </div>
 

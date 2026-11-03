@@ -28,7 +28,7 @@ class Cart(Base, TimestampMixin):
     )
     session_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     product_id: Mapped[str] = mapped_column(
-        String(16), ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False
+        String(16), ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False, index=True
     )
     sku: Mapped[str] = mapped_column(String(32), nullable=False)
     size: Mapped[str] = mapped_column(String(16), nullable=False)
@@ -61,12 +61,14 @@ class Order(Base, TimestampMixin):
         String(16), ForeignKey("customers.customer_id", ondelete="RESTRICT"), nullable=False
     )
     shipping_address_id: Mapped[Optional[str]] = mapped_column(
-        String(16), ForeignKey("customer_addresses.address_id", ondelete="SET NULL"), nullable=True
+        String(16), ForeignKey("customer_addresses.address_id", ondelete="SET NULL"), nullable=True, index=True
     )
     order_date: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False
     )
-    status: Mapped[str] = mapped_column(String(32), default="pending_payment", nullable=False, index=True)
+    status: Mapped[str] = mapped_column(
+        String(32), ForeignKey("order_statuses.code", ondelete="RESTRICT"), default="pending", nullable=False, index=True
+    )
     subtotal_mrp_inr: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     discount_inr: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"), nullable=False)
     taxable_value_inr: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
@@ -105,7 +107,7 @@ class OrderItem(Base, TimestampMixin):
         String(16), ForeignKey("orders.order_id", ondelete="CASCADE"), nullable=False, index=True
     )
     product_id: Mapped[str] = mapped_column(
-        String(16), ForeignKey("products.product_id", ondelete="RESTRICT"), nullable=False
+        String(16), ForeignKey("products.product_id", ondelete="RESTRICT"), nullable=False, index=True
     )
     sku: Mapped[str] = mapped_column(String(32), nullable=False)
     product_name: Mapped[str] = mapped_column(String(160), nullable=False)
@@ -126,7 +128,7 @@ class CouponUsage(Base, TimestampMixin):
 
     usage_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     coupon_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("coupons.coupon_id", ondelete="RESTRICT"), nullable=False
+        Integer, ForeignKey("coupons.coupon_id", ondelete="RESTRICT"), nullable=False, index=True
     )
     order_id: Mapped[str] = mapped_column(
         String(16), ForeignKey("orders.order_id", ondelete="CASCADE"), nullable=False, unique=True

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NoirApiClient } from "@noir/api/client.js";
 import { ASSISTANT, LIMITS } from "@/config/ui.config";
 import { friendlyErrorMessage } from "@noir/ui/states.js";
@@ -23,20 +23,20 @@ function resolveSessionId() {
 let messageCounter = 0;
 const nextId = () => `m-${Date.now()}-${messageCounter++}`;
 
-const DEFAULT_PROMPTS = [
-  "Men's tailored linen under ₹3,000",
-  "Women's mulberry silk dresses",
-  "7-Day Return & GST Policy",
-  "Atelier GMV & Analytics Report",
-];
-
-export function useAssistant({ api, actor, onAfterAction, onActionCompleted } = {}) {
+export function useAssistant({
+  api,
+  actor,
+  businessConfig,
+  agentRegistry = [],
+  isStaff = false,
+  onAfterAction,
+  onActionCompleted,
+} = {}) {
   const [messages, setMessages] = useState([
     {
       id: "welcome-msg",
       role: "assistant",
-      content:
-        "Welcome to the Noir Atelier AI Concierge. I can assist you with fabric origins, tailored fit recommendations, instant orders, and GST compliance.",
+      content: ASSISTANT.welcome,
       timestamp: Date.now(),
     },
   ]);
@@ -53,6 +53,28 @@ export function useAssistant({ api, actor, onAfterAction, onActionCompleted } = 
       clientRef.current.setToken(actor.token);
     }
   }, [actor?.token]);
+
+  const personaByAgent = useMemo(() => {
+    const map = {};
+    for (const entry of agentRegistry || []) {
+      if (entry?.agent_name) {
+        map[entry.agent_name] = entry.persona || entry.agent_name;
+      }
+    }
+    return map;
+  }, [agentRegistry]);
+
+  const quickPrompts = useMemo(() => {
+    const rawPrompts = businessConfig?.storefront_ui?.ai_quick_prompts || [];
+    return rawPrompts
+      .filter((item) => {
+        if (!item) return false;
+        if (typeof item === "string") return true;
+        if (item.audience === "staff" && !isStaff) return false;
+        return Boolean(item.prompt || item.label);
+      })
+      .map((item) => (typeof item === "string" ? item : item.prompt || item.label));
+  }, [businessConfig, isStaff]);
 
   const send = useCallback(
     async (rawText) => {
@@ -87,7 +109,6 @@ export function useAssistant({ api, actor, onAfterAction, onActionCompleted } = 
             actionCard = {
               type: "order_placed",
               orderId: feedback.details?.order_id || res.data?.order?.order_id || "ORD-NEW",
-              // API money fields are suffixed _inr
               grandTotal: feedback.details?.grand_total_inr ?? res.data?.order?.grand_total_inr ?? feedback.details?.grand_total,
             };
           } else if (feedback.action === "cart_updated" || res.routed_agent === "cart_agent") {
@@ -111,7 +132,7 @@ export function useAssistant({ api, actor, onAfterAction, onActionCompleted } = 
           role: "assistant",
           content: res.reply || "I have coordinated with our atelier agents.",
           status: res.status,
-          persona: ASSISTANT?.personas?.[res.routed_agent] || "Noir Atelier Stylist",
+          persona: personaByAgent[res.routed_agent] || ASSISTANT.name,
           actionCard,
           // Normalized like catalog products so tiles show the same per-size price range
           productCards: Array.isArray(res.data?.products) ? res.data.products.slice(0, 4).map(normalizeProduct) : [],
@@ -138,7 +159,7 @@ export function useAssistant({ api, actor, onAfterAction, onActionCompleted } = 
         setBusy(false);
       }
     },
-    [api, actor, onAfterAction, onActionCompleted]
+    [api, actor, personaByAgent, onAfterAction, onActionCompleted]
   );
 
   const reset = useCallback(() => {
@@ -146,8 +167,7 @@ export function useAssistant({ api, actor, onAfterAction, onActionCompleted } = 
       {
         id: "welcome-msg",
         role: "assistant",
-        content:
-          "Welcome to the Noir Atelier AI Concierge. I can assist you with fabric origins, tailored fit recommendations, instant orders, and GST compliance.",
+        content: ASSISTANT.welcome,
         timestamp: Date.now(),
       },
     ]);
@@ -162,6 +182,6 @@ export function useAssistant({ api, actor, onAfterAction, onActionCompleted } = 
     reset,
     clear: reset,
     clearHistory: reset,
-    quickPrompts: DEFAULT_PROMPTS,
+    quickPrompts,
   };
 }

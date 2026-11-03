@@ -101,6 +101,7 @@ export const SVG_PATHS = {
   home: `<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>`,
   package: `<path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>`,
   user: `<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>`,
+  file: `<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/>`,
 };
 
 export function renderIcon(name, size = "sm") {
@@ -109,25 +110,28 @@ export function renderIcon(name, size = "sm") {
   return `<span class="ui-icon" aria-hidden="true"><svg width="${px}" height="${px}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round">${inner}</svg></span>`;
 }
 
-const DEPT_GRADIENT_TOKENS = {
-  MEN: "linear-gradient(165deg, #d8d3c8 0%, #eae6df 100%)",
-  WOMEN: "linear-gradient(165deg, #d9d0c5 0%, #efeae2 100%)",
-  KIDS: "linear-gradient(165deg, #ced6df 0%, #e8ecf0 100%)",
-};
+function buildSoftColorBackdrop(hexCode) {
+  const clean = String(hexCode || "").replace("#", "");
+  if (!/^[0-9a-fA-F]{6}$/.test(clean)) {
+    return "linear-gradient(165deg, #dcd8cf 0%, #f0ede6 100%)";
+  }
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(clean.substring(i, i + 2), 16));
+  // Blend garment hex softly (16%) into editorial stone (#e2ded6 / #f2efe9)
+  const mix = (channel, base, weight) => Math.round(channel * weight + base * (1 - weight));
+  const top = `rgb(${mix(r, 220, 0.16)}, ${mix(g, 216, 0.16)}, ${mix(b, 207, 0.16)})`;
+  const bottom = `rgb(${mix(r, 240, 0.1)}, ${mix(g, 237, 0.1)}, ${mix(b, 230, 0.1)})`;
+  return `linear-gradient(165deg, ${top} 0%, ${bottom} 100%)`;
+}
 
 export function getProductEditorialVisual(product = {}) {
-  const dbImgUrl =
-    product.image_gallery?.[0]?.url ||
-    product.images?.[0] ||
-    "";
+  const dbImgUrl = product.image_gallery?.[0]?.url || product.images?.[0] || "";
   const dbAccentTag =
     product.accent_tag ||
+    product.category?.name ||
     product.image_gallery?.[0]?.alt_text ||
     product.department ||
     "Atelier Edition";
-  const bgGradient =
-    DEPT_GRADIENT_TOKENS[product.department] ||
-    "linear-gradient(165deg, #dcd8cf 0%, #f0ede6 100%)";
+  const bgGradient = buildSoftColorBackdrop(product.color_hex);
 
   return {
     photoUrl: dbImgUrl,

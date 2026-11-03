@@ -243,6 +243,19 @@ class NoirAtelierMultiAgentOrchestrator:
         )
 
 
+AGENT_PERSONA_LABELS: Dict[str, str] = {
+    AgentRole.CATALOG.value: "Stylist",
+    AgentRole.CART.value: "Shopping Bag",
+    AgentRole.ORDER.value: "Order Desk",
+    AgentRole.FULFILLMENT.value: "Shipping Desk",
+    AgentRole.SUPPORT.value: "Concierge",
+    AgentRole.RETURNS.value: "Returns",
+    AgentRole.INVENTORY.value: "Stock Desk",
+    AgentRole.ANALYTICS.value: "Insights",
+    AgentRole.CONFIG.value: "Store Rules",
+}
+
+
 def get_agent_registry_metadata() -> List[Dict[str, Any]]:
     registry: List[Dict[str, Any]] = []
     for role in AgentRole:
@@ -251,6 +264,7 @@ def get_agent_registry_metadata() -> List[Dict[str, Any]]:
         registry.append(
             {
                 "agent_name": role_val,
+                "persona": AGENT_PERSONA_LABELS.get(role_val, "Concierge"),
                 "service_account": AGENT_SERVICE_ACCOUNT_MAP[role_val],
                 "prompt_version": PROMPT_VERSION,
                 "system_prompt": get_agent_prompt(role_val),

@@ -19,6 +19,7 @@ from ..services.product_service import (
     add_product_review,
     create_product,
     discontinue_product,
+    get_catalog_meta,
     get_product_by_id_or_sku,
     get_product_recommendations,
     list_categories,
@@ -29,8 +30,49 @@ from ..services.product_service import (
     update_product,
     update_variant,
 )
+from ..services.search_service import search_catalog
 
 router = APIRouter()
+
+
+@router.get("/api/catalog/meta")
+def api_get_catalog_meta(
+    db: Session = Depends(get_db),
+    _actor: ActorContext = Depends(resolve_actor),
+) -> Dict[str, Any]:
+    return get_catalog_meta(db)
+
+
+@router.get("/api/catalog/search")
+def api_search_catalog(
+    q: Optional[str] = Query(default=None),
+    category: Optional[str] = Query(default=None),
+    department: Optional[str] = Query(default=None),
+    color: Optional[str] = Query(default=None),
+    material: Optional[str] = Query(default=None),
+    min_price: Optional[Decimal] = Query(default=None),
+    max_price: Optional[Decimal] = Query(default=None),
+    in_stock_only: bool = Query(default=False),
+    sort: str = Query(default="featured"),
+    limit: int = Query(default=24, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    _actor: ActorContext = Depends(resolve_actor),
+) -> Dict[str, Any]:
+    return search_catalog(
+        db=db,
+        q=q,
+        department=department,
+        category=category,
+        color=color,
+        material=material,
+        min_price=min_price,
+        max_price=max_price,
+        in_stock_only=in_stock_only,
+        sort=sort,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/api/products/search")
@@ -38,9 +80,14 @@ def api_search_products(
     q: Optional[str] = Query(default=None),
     category: Optional[str] = Query(default=None),
     department: Optional[str] = Query(default=None),
+    color: Optional[str] = Query(default=None),
+    material: Optional[str] = Query(default=None),
+    min_price: Optional[Decimal] = Query(default=None),
     max_price: Optional[Decimal] = Query(default=None),
     in_stock_only: bool = Query(default=False),
+    sort: str = Query(default="featured"),
     limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     _actor: ActorContext = Depends(resolve_actor),
 ) -> List[Dict[str, Any]]:
@@ -49,9 +96,14 @@ def api_search_products(
         q=q,
         category=category,
         department=department,
+        color=color,
+        material=material,
+        min_price=min_price,
         max_price=max_price,
         in_stock_only=in_stock_only,
+        sort=sort,
         limit=limit,
+        offset=offset,
     )
 
 

@@ -24,6 +24,7 @@ from ..models import (
     Invoice,
     Order,
     OrderItem,
+    OrderStatus,
     Payment,
     Product,
     Refund,
@@ -135,6 +136,7 @@ def serialize_order(db: Session, order: Order) -> Dict[str, Any]:
     payment = db.scalar(select(Payment).where(Payment.order_id == order.order_id).order_by(Payment.created_at.desc()))
     invoice = db.scalar(select(Invoice).where(Invoice.order_id == order.order_id))
     shipment = db.scalar(select(Shipment).where(Shipment.order_id == order.order_id).order_by(Shipment.created_at.desc()))
+    status_row = db.get(OrderStatus, order.status)
 
     now = datetime.now(timezone.utc)
     hold_exp = _ensure_utc(order.hold_expires_at)
@@ -149,6 +151,10 @@ def serialize_order(db: Session, order: Order) -> Dict[str, Any]:
         "order_id": order.order_id,
         "customer_id": order.customer_id,
         "status": order.status,
+        "status_label": status_row.label if status_row else order.status,
+        "status_tone": status_row.tone if status_row else "neutral",
+        "can_cancel": bool(status_row.is_cancellable) if status_row else False,
+        "can_return": bool(status_row.is_returnable) if status_row else False,
         "order_date": order.order_date.isoformat(),
         "items": [
             {
@@ -586,7 +592,8 @@ def cancel_order(
             details={"status": order.status},
         )
 
-    if order.status in ("shipped", "delivered", "returned", "refunded", "picked_up", "needs_review"):
+    status_row = db.get(OrderStatus, order.status)
+    if not (status_row and status_row.is_cancellable):
         raise AppError(
             "cancel_not_eligible",
             f"Order '{order.order_id}' is in '{order.status}' status and cannot be cancelled pre-shipment (per POL-CAN-01).",

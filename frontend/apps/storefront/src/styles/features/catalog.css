@@ -1,7 +1,7 @@
 /*
- * Catalog — <CatalogSection>: editorial hero, department/price toolbar,
- * and the product grid. The grid adapts to its own width via the
- * `catalog` container on .catalog-grid-area.
+ * Catalog — <CatalogSection>: editorial hero, department/facet/price toolbar,
+ * search interpretation bar, and the product grid. The grid adapts to its own
+ * width via the `catalog` container on .catalog-grid-area.
  */
 
 .catalog-section {
@@ -80,11 +80,11 @@
   font-size: 11.5px;
 }
 
-/* ==== Toolbar: department tabs over price/sort controls ==== */
+/* ==== Toolbar: department tabs, structured facets, price/sort controls ==== */
 .catalog-toolbar {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1.1rem;
   margin-bottom: 2rem;
 }
 
@@ -125,6 +125,54 @@
   color: var(--text-on-dark);
 }
 
+.catalog-facets-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--bg-surface);
+}
+
+.facet-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.facet-label {
+  min-width: 56px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.facet-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.color-chip-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.color-swatch-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.22);
+  flex-shrink: 0;
+}
+
 .catalog-sub-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -150,6 +198,48 @@
   color: var(--text-muted);
   font-size: var(--text-xs);
   white-space: nowrap;
+}
+
+.search-interpretation-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.95rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+  font-size: var(--text-xs);
+}
+
+.interpretation-lead {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.interpretation-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.interpretation-chip {
+  padding: 0.18rem 0.6rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 11px;
+}
+
+.interpretation-relaxed {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: italic;
 }
 
 /* ==== Product grid ==== */

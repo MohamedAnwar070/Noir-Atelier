@@ -36,7 +36,7 @@ export function validateAddressForm(fields = {}) {
   const errors = {};
   const street = String(fields.street || "").trim();
   const city = String(fields.city || "").trim();
-  const pin = String(fields.pinCode || "").trim();
+  const pin = String(fields.pinCode ?? fields.pin_code ?? fields.postal_code ?? "").trim();
 
   if (street.length < 6) errors.street = "Enter your full street address (at least 6 characters).";
   if (city.length < 2) errors.city = "Enter your city.";
@@ -47,6 +47,18 @@ export function validateAddressForm(fields = {}) {
 
 export function validateCheckoutForm(fields = {}) {
   const errors = {};
+  if ("street" in fields || "pinCode" in fields) {
+    const street = String(fields.street || "").trim();
+    const pin = String(fields.pinCode || "").trim();
+    const coupon = String(fields.couponCode || "").trim();
+    if (street.length < 6) errors.street = "Enter your delivery street address (at least 6 characters).";
+    if (!/^[1-9][0-9]{5}$/.test(pin)) errors.pinCode = "Enter a valid 6-digit PIN code.";
+    if (coupon && !/^[A-Z0-9]{4,16}$/i.test(coupon)) {
+      errors.couponCode = "Promo codes are 4–16 letters or numbers.";
+    }
+    return { valid: Object.keys(errors).length === 0, errors };
+  }
+
   if (!fields.addressId) errors.addressId = "Choose where we should deliver your order.";
   if (!fields.paymentMethod) errors.paymentMethod = "Choose a payment method.";
   return { valid: Object.keys(errors).length === 0, errors };
@@ -70,10 +82,16 @@ export function validateReviewForm(fields = {}) {
 
 export function validateReturnForm(fields = {}) {
   const errors = {};
-  const reason = String(fields.reasonNotes || "").trim();
+  const orderId = fields.orderId || fields.order_id;
+  const reason = String(fields.reasonNotes ?? fields.customer_note ?? "").trim();
 
-  if (!fields.orderId) errors.orderId = "Select the order you'd like to return.";
-  if (reason.length < 5) errors.reasonNotes = "Please tell us why you're returning this (at least 5 characters).";
+  if (!orderId) errors.orderId = "Select the order you'd like to return.";
+  if (fields.reasonCategory !== undefined && !fields.reasonCategory) {
+    errors.reasonCategory = "Select a return reason.";
+  }
+  if (!fields.optionalNotes && reason.length < 5) {
+    errors.reasonNotes = "Please tell us why you're returning this (at least 5 characters).";
+  }
   if (fields.tagIntact === false) {
     errors.tagIntact = "Returns need the security ribbon to be intact. Please contact concierge for damaged items.";
   }
@@ -109,4 +127,3 @@ export function getProductImage(product = {}) {
     alt: product.image_gallery?.[0]?.alt_text || product.name || "Noir Atelier garment",
   };
 }
-

@@ -19,13 +19,13 @@ function parseValidationDetail(detail) {
 }
 
 export class NoirApiClient {
-  constructor({ baseUrl = "", slowThresholdMs = 1200, onNetworkEvent = null } = {}) {
+  constructor({ baseUrl = "", token = "demo_CUS-001", slowThresholdMs = 1200, onNetworkEvent = null } = {}) {
     this.baseUrl =
       baseUrl ||
       (typeof window !== "undefined" && window.NOIR_API_BASE) ||
       (typeof process !== "undefined" && process.env && process.env.NEXT_PUBLIC_API_BASE_URL) ||
       (typeof window !== "undefined" && window.location?.origin ? window.location.origin : "http://127.0.0.1:8000");
-    this.token = "demo_CUS-001";
+    this.token = token || "demo_CUS-001";
     this.slowThresholdMs = slowThresholdMs;
     this.onNetworkEvent = onNetworkEvent;
   }
@@ -120,20 +120,58 @@ export class NoirApiClient {
     return data;
   }
 
+  async getCatalogMeta() {
+    const { data } = await this.request("GET", "/api/catalog/meta");
+    return data;
+  }
+
   async listCategories() {
     const { data } = await this.request("GET", "/api/categories");
     return data;
   }
 
-  async searchProducts({ q = "", category = "", department = "", maxPrice = null, inStockOnly = false } = {}) {
+  _buildCatalogQueryParams({
+    q = "",
+    category = "",
+    department = "",
+    color = "",
+    material = "",
+    minPrice = null,
+    maxPrice = null,
+    inStockOnly = false,
+    sort = "",
+    limit = null,
+    offset = null,
+  } = {}) {
+    return {
+      q: q || undefined,
+      category: category && category !== "all" ? category : undefined,
+      department: department && department !== "ALL" ? department : undefined,
+      color: color && color !== "all" ? color : undefined,
+      material: material && material !== "all" ? material : undefined,
+      min_price: minPrice != null && minPrice !== "" ? minPrice : undefined,
+      max_price: maxPrice != null && maxPrice !== "" ? maxPrice : undefined,
+      in_stock_only: inStockOnly ? true : undefined,
+      sort: sort || undefined,
+      limit: limit != null ? limit : undefined,
+      offset: offset != null ? offset : undefined,
+    };
+  }
+
+  /**
+   * Database-driven catalogue search returning items, total count, and
+   * natural-language query interpretation metadata.
+   */
+  async searchCatalog(filters = {}) {
+    const { data } = await this.request("GET", "/api/catalog/search", {
+      params: this._buildCatalogQueryParams(filters),
+    });
+    return data;
+  }
+
+  async searchProducts(filters = {}) {
     const { data } = await this.request("GET", "/api/products/search", {
-      params: {
-        q: q || undefined,
-        category: category || undefined,
-        department: department && department !== "ALL" ? department : undefined,
-        max_price: maxPrice || undefined,
-        in_stock_only: inStockOnly || undefined,
-      },
+      params: this._buildCatalogQueryParams(filters),
     });
     return data;
   }
@@ -390,6 +428,91 @@ export class NoirApiClient {
   async updateBusinessConfig(configKey, configValue, reason, tokenOverride = null) {
     const { data } = await this.request("PUT", "/api/admin/config/policies", {
       body: { config_key: configKey, config_value: configValue, reason },
+      tokenOverride: tokenOverride || this.token,
+    });
+    return data;
+  }
+
+  async listCatalogSynonyms({ dimension = null } = {}, tokenOverride = null) {
+    const { data } = await this.request("GET", "/api/admin/catalog/synonyms", {
+      params: { dimension: dimension || undefined },
+      tokenOverride: tokenOverride || this.token,
+    });
+    return data;
+  }
+
+  async createCatalogSynonym({ term, dimension, value, target }, tokenOverride = null) {
+    const { data } = await this.request("POST", "/api/admin/catalog/synonyms", {
+      body: { term, dimension, value: value ?? target },
+      tokenOverride: tokenOverride || this.token,
+    });
+    return data;
+  }
+
+  async deleteCatalogSynonym(synonymId, tokenOverride = null) {
+    const { data } = await this.request("DELETE", `/api/admin/catalog/synonyms/${synonymId}`, {
+      tokenOverride: tokenOverride || this.token,
+    });
+    return data;
+  }
+
+  async createCatalogColor({ colorId = null, name, family, hexCode, displayOrder = 0 }, tokenOverride = null) {
+    const { data } = await this.request("POST", "/api/admin/catalog/colors", {
+      body: {
+        color_id: colorId || undefined,
+        name,
+        family,
+        hex_code: hexCode,
+        display_order: Number(displayOrder),
+      },
+      tokenOverride: tokenOverride || this.token,
+    });
+    return data;
+  }
+
+  async createCatalogMaterial(
+    { materialId = null, name, family, hsnDefault = "62", isNaturalFiber = true },
+    tokenOverride = null
+  ) {
+    const { data } = await this.request("POST", "/api/admin/catalog/materials", {
+      body: {
+        material_id: materialId || undefined,
+        name,
+        family,
+        hsn_default: hsnDefault,
+        is_natural_fiber: Boolean(isNaturalFiber),
+      },
+      tokenOverride: tokenOverride || this.token,
+    });
+    return data;
+  }
+
+  async createCatalogCategory(
+    { categoryId = null, slug, name, parentId = null, description = "", displayOrder = 0 },
+    tokenOverride = null
+  ) {
+    const { data } = await this.request("POST", "/api/admin/catalog/categories", {
+      body: {
+        category_id: categoryId || undefined,
+        slug,
+        name,
+        parent_id: parentId || null,
+        description,
+        display_order: Number(displayOrder),
+      },
+      tokenOverride: tokenOverride || this.token,
+    });
+    return data;
+  }
+
+  async createCatalogDepartment({ code, name, description = "", displayOrder = 0 }, tokenOverride = null) {
+    const { data } = await this.request("POST", "/api/admin/catalog/departments", {
+      body: {
+        code,
+        name,
+        description,
+        display_order: Number(displayOrder),
+      },
       tokenOverride: tokenOverride || this.token,
     });
     return data;

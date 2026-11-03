@@ -10,6 +10,20 @@ RETURN_ID_RE = re.compile(r"\b(RET-\d{4})\b", re.IGNORECASE)
 REFUND_ID_RE = re.compile(r"\b(RFD-\d{4})\b", re.IGNORECASE)
 
 
+def _infer_return_reason(msg_lower: str) -> str:
+    if "damaged" in msg_lower or "transit" in msg_lower:
+        return "damaged_in_transit"
+    if any(k in msg_lower for k in ("defect", "stitch", "tear", "hole", "rip")):
+        return "fabric_defect"
+    if any(k in msg_lower for k in ("not as described", "different", "wrong item")):
+        return "not_as_described"
+    if any(k in msg_lower for k in ("style", "silhouette", "look")):
+        return "style_preference"
+    if "mind" in msg_lower:
+        return "changed_mind"
+    return "size_mismatch"
+
+
 def run_returns_node(state: AgentGraphState, client: PlatformApiClient) -> AgentGraphState:
     tools = ReturnsTools(client)
     msg = state.request.message
@@ -119,7 +133,7 @@ def run_returns_node(state: AgentGraphState, client: PlatformApiClient) -> Agent
     tag_intact = bool(state.request.context.get("tag_intact", "tag removed" not in msg_lower and "cut tag" not in msg_lower))
     qc_passed = bool(state.request.context.get("qc_passed", "worn" not in msg_lower and "stained" not in msg_lower))
     is_defective = bool(state.request.context.get("is_defective_claim", "defect" in msg_lower or "damaged" in msg_lower))
-    reason_cat = state.request.context.get("reason_category", "defective_garment" if is_defective else "size_mismatch")
+    reason_cat = state.request.context.get("reason_category") or _infer_return_reason(msg_lower)
 
     code, payload = tools.initiate_return(
         order_id,

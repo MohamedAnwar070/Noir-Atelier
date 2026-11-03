@@ -55,7 +55,9 @@ class ReturnRequest(Base, TimestampMixin):
     order_id: Mapped[str] = mapped_column(
         String(16), ForeignKey("orders.order_id", ondelete="RESTRICT"), nullable=False
     )
-    reason_category: Mapped[str] = mapped_column(String(40), nullable=False)
+    reason_category: Mapped[str] = mapped_column(
+        String(40), ForeignKey("return_reasons.code", ondelete="RESTRICT"), nullable=False, index=True
+    )
     customer_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     initiated_date: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False
@@ -82,7 +84,9 @@ class Refund(Base, TimestampMixin):
     )
     amount_inr: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     approval_tier: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
-    status: Mapped[str] = mapped_column(String(32), default="pending_qc", nullable=False, index=True)
+    status: Mapped[str] = mapped_column(
+        String(32), ForeignKey("refund_statuses.code", ondelete="RESTRICT"), default="pending_approval", nullable=False, index=True
+    )
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     approved_by: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     secondary_approved_by: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)

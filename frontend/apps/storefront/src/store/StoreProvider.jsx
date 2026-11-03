@@ -4,7 +4,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { NoirApiClient } from "@noir/api/client.js";
 import { applyFontScale, applyTheme, getInitialFontScale, getInitialTheme } from "@noir/ui/theme.js";
 import { classifyApiError, friendlyErrorMessage } from "@noir/ui/states.js";
-import { LIMITS, STAFF_ROLES } from "@/config/ui.config";
+import { LIMITS } from "@/config/ui.config";
 import { useAssistant } from "@/hooks/useAssistant";
 import {
   buildTaxRules,
@@ -18,7 +18,34 @@ const StoreContext = createContext(null);
 
 const ACTOR_STORAGE_KEY = "noir_actor_token";
 const WISHLIST_STORAGE_KEY = "noir_wishlist";
-const DEFAULT_FILTERS = { q: "", department: "ALL", maxPrice: null, inStockOnly: false, sort: "featured" };
+
+const EMPTY_CATALOG_META = {
+  departments: [],
+  categories: [],
+  colors: [],
+  color_families: [],
+  materials: [],
+  material_families: [],
+  sort_options: [],
+  price_tiers: [],
+  order_statuses: [],
+  refund_statuses: [],
+  return_reasons: [],
+  fit_feedback_options: [],
+};
+
+const DEFAULT_FILTERS = {
+  q: "",
+  department: "ALL",
+  category: "",
+  color: "",
+  material: "",
+  priceTier: "ALL",
+  minPrice: null,
+  maxPrice: null,
+  inStockOnly: false,
+  sort: "featured",
+};
 
 function readJson(key, fallback) {
   try {
@@ -37,23 +64,31 @@ function writeJson(key, value) {
   }
 }
 
-function sortProducts(items, sort) {
-  const list = (items || []).map(normalizeProduct);
-  if (sort === "price_asc") list.sort((a, b) => Number(a.price) - Number(b.price));
-  else if (sort === "price_desc") list.sort((a, b) => Number(b.price) - Number(a.price));
-  else if (sort === "rating") list.sort((a, b) => Number(b.average_rating || 0) - Number(a.average_rating || 0));
-  return list;
-}
-
 export function StoreProvider({ children, initialPage = "shop" }) {
   const [system, setSystem] = useState({ offline: false, unreachable: false, slow: false, sessionExpired: false });
   const [boot, setBoot] = useState({ status: "loading", error: null });
-  const [config, setConfig] = useState({ business: {}, policies: [], paymentMethods: [], coupons: [], zones: [], demoMode: false });
+  const [config, setConfig] = useState({
+    business: {},
+    policies: [],
+    paymentMethods: [],
+    coupons: [],
+    zones: [],
+    staffRoles: [],
+    demoMode: false,
+  });
+  const [catalogMeta, setCatalogMeta] = useState(EMPTY_CATALOG_META);
+  const [agentRegistry, setAgentRegistry] = useState([]);
   const [actors, setActors] = useState([]);
   const [actor, setActor] = useState(null);
   const [categories, setCategories] = useState([]);
   const [allProducts, setAllProducts] = useState([]);
-  const [catalog, setCatalog] = useState({ status: "loading", items: [], error: null });
+  const [catalog, setCatalog] = useState({
+    status: "loading",
+    items: [],
+    total: 0,
+    interpretation: null,
+    error: null,
+  });
   const [filters, setFiltersState] = useState(DEFAULT_FILTERS);
   const [cart, setCart] = useState(null);
   // Applied coupon code. Mirrored in a ref so async cart loaders always use the latest value.
@@ -69,7 +104,15 @@ export function StoreProvider({ children, initialPage = "shop" }) {
   const [toasts, setToasts] = useState([]);
   const [theme, setThemeState] = useState("light");
   const [fontScale, setFontScaleState] = useState("default");
-  const [ui, setUi] = useState({ cartOpen: false, productId: null, menuOpen: false, accountOpen: false, chatOpen: false, returnOrderId: null, page: initialPage });
+  const [ui, setUi] = useState({
+    cartOpen: false,
+    productId: null,
+    menuOpen: false,
+    accountOpen: false,
+    chatOpen: false,
+    returnOrderId: null,
+    page: initialPage,
+  });
   const [productDetail, setProductDetail] = useState({ status: "idle", product: null, recommendations: [], error: null });
   const [busyKey, setBusyKey] = useState(null);
 
@@ -100,7 +143,19 @@ export function StoreProvider({ children, initialPage = "shop" }) {
   filtersRef.current = filters;
   const actorRef = useRef(actor);
   actorRef.current = actor;
+  const catalogMetaRef = useRef(catalogMeta);
+  catalogMetaRef.current = catalogMeta;
   const toastTimers = useRef(new Map());
+
+  const orderStatusMap = useMemo(() => {
+    const map = {};
+    for (const row of catalogMeta.order_statuses || []) {
+      map[row.code] = row;
+    }
+    return map;
+  }, [catalogMeta.order_statuses]);
+  const orderStatusMapRef = useRef(orderStatusMap);
+  orderStatusMapRef.current = orderStatusMap;
 
   const dismissToast = useCallback((id) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -110,9 +165,11 @@ export function StoreProvider({ children, initialPage = "shop" }) {
   }, []);
 
   const notify = useCallback(
-    ({ tone = "success", title, message, action }) => {
+    ({ tone = "success", type, title, message, description, action }) => {
+      const resolvedTone = type || tone || "success";
+      const resolvedMessage = message || description || "";
       const id = `t-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      setToasts((prev) => [...prev.slice(-2), { id, tone, title, message, action }]);
+      setToasts((prev) => [...prev.slice(-2), { id, tone: resolvedTone, title, message: resolvedMessage, action }]);
       toastTimers.current.set(id, setTimeout(() => dismissToast(id), LIMITS.toastDurationMs));
       return id;
     },
@@ -120,28 +177,76 @@ export function StoreProvider({ children, initialPage = "shop" }) {
   );
 
   const isCustomer = actor?.role === "customer";
-  const isStaff = STAFF_ROLES.includes(actor?.role);
+  const isStaff = Boolean(
+    actor?.is_staff ||
+      actor?.actor_type === "admin" ||
+      (config.staffRoles || []).includes(actor?.role)
+  );
+
+  const resolvePriceBounds = useCallback((nextFilters, meta = catalogMetaRef.current) => {
+    let minPrice = nextFilters.minPrice;
+    let maxPrice = nextFilters.maxPrice;
+    if (nextFilters.priceTier && nextFilters.priceTier.toUpperCase() !== "ALL") {
+      const tier = (meta?.price_tiers || []).find((t) => t.id === nextFilters.priceTier);
+      if (tier) {
+        if (minPrice == null) minPrice = tier.min_price ?? null;
+        if (maxPrice == null) maxPrice = tier.max_price ?? null;
+      }
+    }
+    return { minPrice, maxPrice };
+  }, []);
 
   const fetchProducts = useCallback(
     async (nextFilters = filtersRef.current, { silent = false } = {}) => {
-      if (!silent) setCatalog((prev) => ({ ...prev, status: prev.items.length ? "refreshing" : "loading", error: null }));
+      if (!silent) {
+        setCatalog((prev) => ({
+          ...prev,
+          status: prev.items.length ? "refreshing" : "loading",
+          error: null,
+        }));
+      }
       try {
-        const items = await api.searchProducts({
+        const { minPrice, maxPrice } = resolvePriceBounds(nextFilters);
+        const res = await api.searchCatalog({
           q: nextFilters.q,
+          category: nextFilters.category,
           department: nextFilters.department,
-          maxPrice: nextFilters.maxPrice,
+          color: nextFilters.color,
+          material: nextFilters.material,
+          minPrice,
+          maxPrice,
           inStockOnly: nextFilters.inStockOnly,
+          sort: nextFilters.sort || "featured",
         });
-        const normalized = (Array.isArray(items) ? items : []).map(normalizeProduct);
-        setCatalog({ status: "ready", items: normalized, error: null });
+        const rawItems = Array.isArray(res) ? res : res?.items || [];
+        const normalized = rawItems.map(normalizeProduct);
+        setCatalog({
+          status: "ready",
+          items: normalized,
+          total: typeof res?.total === "number" ? res.total : normalized.length,
+          interpretation: res?.interpretation || null,
+          error: null,
+        });
         return normalized;
       } catch (error) {
         setCatalog((prev) => ({ ...prev, status: "error", error }));
         return null;
       }
     },
-    [api]
+    [api, resolvePriceBounds]
   );
+
+  const refreshCatalogMeta = useCallback(async () => {
+    try {
+      const meta = await api.getCatalogMeta();
+      const merged = { ...EMPTY_CATALOG_META, ...(meta || {}) };
+      setCatalogMeta(merged);
+      setCategories(Array.isArray(merged.categories) ? merged.categories : []);
+      return merged;
+    } catch {
+      return catalogMetaRef.current;
+    }
+  }, [api]);
 
   const loadCart = useCallback(async () => {
     if (actorRef.current?.role !== "customer") return null;
@@ -176,7 +281,12 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     setOrders((prev) => ({ ...prev, status: prev.items.length ? "refreshing" : "loading", error: null }));
     try {
       const items = await api.listOrders();
-      setOrders({ status: "ready", items: (Array.isArray(items) ? items : []).map(normalizeOrder), error: null });
+      const map = orderStatusMapRef.current;
+      setOrders({
+        status: "ready",
+        items: (Array.isArray(items) ? items : []).map((raw) => normalizeOrder(raw, map)),
+        error: null,
+      });
       return items;
     } catch (error) {
       setOrders((prev) => ({ ...prev, status: "error", error }));
@@ -207,21 +317,32 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     setBoot({ status: "loading", error: null });
     setCatalog((prev) => ({ ...prev, status: "loading", error: null }));
     try {
-      const [cfg, cats, products, health] = await Promise.all([
+      const [cfg, meta, searchRes, registry, health] = await Promise.all([
         api.getPoliciesAndConfig(),
-        api.listCategories(),
-        api.searchProducts({}),
+        api.getCatalogMeta(),
+        api.searchCatalog({ sort: DEFAULT_FILTERS.sort }),
+        api.getAgentsRegistry().catch(() => []),
         api.getHealth().catch(() => ({})),
       ]);
 
       const actorList = cfg.actors || [];
       const savedToken = typeof window !== "undefined" ? window.localStorage.getItem(ACTOR_STORAGE_KEY) : null;
-      const resolved = actorList.find((a) => a.token === savedToken) || actorList.find((a) => a.role === "customer") || actorList[0] || null;
+      const resolved =
+        actorList.find((a) => a.token === savedToken) ||
+        actorList.find((a) => a.role === "customer") ||
+        actorList[0] ||
+        null;
 
       if (resolved) {
         api.setToken(resolved.token);
         actorRef.current = resolved;
       }
+
+      const mergedMeta = { ...EMPTY_CATALOG_META, ...(meta || {}) };
+      catalogMetaRef.current = mergedMeta;
+      setCatalogMeta(mergedMeta);
+      setCategories(Array.isArray(mergedMeta.categories) ? mergedMeta.categories : []);
+      setAgentRegistry(Array.isArray(registry) ? registry : []);
 
       setConfig({
         business: cfg.business_config || {},
@@ -229,14 +350,22 @@ export function StoreProvider({ children, initialPage = "shop" }) {
         paymentMethods: (cfg.payment_methods || []).map(normalizePaymentMethod),
         coupons: cfg.coupons || [],
         zones: cfg.shipping_zones || [],
+        staffRoles: cfg.staff_roles || [],
         demoMode: Boolean(health?.demo_mode),
       });
       setActors(actorList);
       setActor(resolved);
-      setCategories(Array.isArray(cats) ? cats : []);
-      const normalizedProducts = (Array.isArray(products) ? products : []).map(normalizeProduct);
+
+      const rawProducts = Array.isArray(searchRes) ? searchRes : searchRes?.items || [];
+      const normalizedProducts = rawProducts.map(normalizeProduct);
       setAllProducts(normalizedProducts);
-      setCatalog({ status: "ready", items: normalizedProducts, error: null });
+      setCatalog({
+        status: "ready",
+        items: normalizedProducts,
+        total: typeof searchRes?.total === "number" ? searchRes.total : normalizedProducts.length,
+        interpretation: searchRes?.interpretation || null,
+        error: null,
+      });
       setBoot({ status: "ready", error: null });
       await loadAccountData();
     } catch (error) {
@@ -279,12 +408,35 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     }
     const timer = setTimeout(() => fetchProducts(filters), LIMITS.searchDebounceMs);
     return () => clearTimeout(timer);
-  }, [filters.q, filters.department, filters.maxPrice, filters.inStockOnly, boot.status, fetchProducts]);
+  }, [
+    filters.q,
+    filters.department,
+    filters.category,
+    filters.color,
+    filters.material,
+    filters.priceTier,
+    filters.minPrice,
+    filters.maxPrice,
+    filters.inStockOnly,
+    filters.sort,
+    boot.status,
+    fetchProducts,
+  ]);
 
   const setFilters = useCallback((patch) => setFiltersState((prev) => ({ ...prev, ...patch })), []);
-  const resetFilters = useCallback(() => setFiltersState((prev) => ({ ...DEFAULT_FILTERS, sort: prev.sort })), []);
-  const hasActiveFilters = Boolean(filters.q || filters.department !== "ALL" || filters.maxPrice || filters.inStockOnly);
-  const visibleProducts = useMemo(() => sortProducts(catalog.items, filters.sort), [catalog.items, filters.sort]);
+  const resetFilters = useCallback(() => setFiltersState({ ...DEFAULT_FILTERS }), []);
+  const hasActiveFilters = Boolean(
+    filters.q ||
+      filters.department !== "ALL" ||
+      filters.category ||
+      filters.color ||
+      filters.material ||
+      filters.priceTier !== "ALL" ||
+      filters.minPrice != null ||
+      filters.maxPrice != null ||
+      filters.inStockOnly
+  );
+  const visibleProducts = catalog.items;
 
   const setOverlay = useCallback((patch) => setUi((prev) => ({ ...prev, ...patch })), []);
 
@@ -298,16 +450,13 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     applyFontScale(next);
   }, []);
 
-  const toggleWishlist = useCallback(
-    (productId) => {
-      setWishlist((prev) => {
-        const next = prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId];
-        writeJson(WISHLIST_STORAGE_KEY, next);
-        return next;
-      });
-    },
-    []
-  );
+  const toggleWishlist = useCallback((productId) => {
+    setWishlist((prev) => {
+      const next = prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId];
+      writeJson(WISHLIST_STORAGE_KEY, next);
+      return next;
+    });
+  }, []);
 
   const switchActor = useCallback(
     async (token) => {
@@ -345,7 +494,12 @@ export function StoreProvider({ children, initialPage = "shop" }) {
           api.getProductDetails(productId),
           api.getRecommendations(productId).catch(() => []),
         ]);
-        setProductDetail({ status: "ready", product, recommendations: Array.isArray(recommendations) ? recommendations : [], error: null });
+        setProductDetail({
+          status: "ready",
+          product: normalizeProduct(product),
+          recommendations: (Array.isArray(recommendations) ? recommendations : []).map(normalizeProduct),
+          error: null,
+        });
       } catch (error) {
         setProductDetail({ status: "error", product: null, recommendations: [], error });
       }
@@ -360,7 +514,7 @@ export function StoreProvider({ children, initialPage = "shop" }) {
 
   const submitReview = useCallback(
     async (productId, review) => {
-      const updated = await api.addProductReview(productId, review);
+      const updated = normalizeProduct(await api.addProductReview(productId, review));
       setProductDetail((prev) => ({ ...prev, product: updated }));
       fetchProducts(filtersRef.current, { silent: true });
       notify({ title: "Thanks for your review", message: "Your feedback helps other customers choose with confidence." });
@@ -528,7 +682,9 @@ export function StoreProvider({ children, initialPage = "shop" }) {
         await Promise.all([loadOrders(), fetchProducts(filtersRef.current, { silent: true })]);
         notify({
           title: `Order ${orderId} cancelled`,
-          message: result.refund_id ? "Your full refund has been issued to your original payment method." : "Your reserved items have been released.",
+          message: result.refund_id
+            ? "Your full refund has been issued to your original payment method."
+            : "Your reserved items have been released.",
         });
       } catch (error) {
         notify({ tone: "error", title: "Couldn't cancel this order", message: friendlyErrorMessage(error) });
@@ -549,10 +705,17 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     [fetchProducts, loadCart, loadOrders, notify]
   );
 
-  const assistant = useAssistant({ api, actor, onAfterAction: refreshAfterAssistant });
-
   // Business rules come from the backend config — never hard-coded in views.
   const business = config.business || {};
+  const assistant = useAssistant({
+    api,
+    actor,
+    businessConfig: business,
+    agentRegistry,
+    isStaff,
+    onAfterAction: refreshAfterAssistant,
+  });
+
   const taxRules = useMemo(() => buildTaxRules(business.tax), [business.tax]);
   const freeShippingMin = Number(business.shipping?.free_shipping_threshold_inr ?? 1999);
   const defaultShippingFee = Number(business.shipping?.default_shipping_fee_inr ?? 99);
@@ -570,7 +733,7 @@ export function StoreProvider({ children, initialPage = "shop" }) {
   const cartTotals = {
     subtotal: cartSubtotal,
     discount: cartDiscount,
-    gstLines: cart?.gstLines || [], // [{ rate, amount }] — whatever slabs the API actually applied
+    gstLines: cart?.gstLines || [],
     gstTotal: Number(cart?.total_gst_inr ?? 0),
     shipping: cartShipping,
     grandTotal: cartGrandTotal,
@@ -581,6 +744,8 @@ export function StoreProvider({ children, initialPage = "shop" }) {
   catalogArray.items = visibleProducts;
   catalogArray.status = catalog.status;
   catalogArray.error = catalog.error;
+  catalogArray.total = catalog.total;
+  catalogArray.interpretation = catalog.interpretation;
 
   // Dual-compatible cart
   const cartArray = [...cartItems];
@@ -604,26 +769,26 @@ export function StoreProvider({ children, initialPage = "shop" }) {
 
   const addCustomerAddress = async (addr) => {
     const custId = currentActor.id || currentActor.customerId || "CUS-001";
-    const res = await api.addCustomerAddress(custId, addr);
+    const payload = {
+      label: addr.label || "Home",
+      street: addr.street,
+      city: addr.city,
+      state: addr.state || "Tamil Nadu",
+      pin_code: addr.pin_code || addr.postal_code || addr.pinCode || "",
+      is_primary: Boolean(addr.is_primary),
+    };
+    const res = await api.addCustomerAddress(custId, payload);
     setAddresses((prev) => [...prev, res]);
     return res;
   };
 
-  /*
-   * Product-oriented cart API used by views and the assistant:
-   *   addToBag(product, size, qty)        → addToCart({ productId, … })
-   *   removeFromBag / updateQuantity       → resolve (productId, size) to its cart line first,
-   *                                          because the cart endpoints are keyed by cart_id.
-   * addToBag resolves to the updated cart, or null if the add failed (the store already
-   * showed an error toast), so callers can branch on success.
-   */
   const findCartLine = (productId, size) =>
     cartItems.find((i) => i.product_id === productId && i.size === size) || null;
 
   const addToBag = (product, size, qty = 1, { openCart = false } = {}) =>
     addToCart({
       productId: product.product_id,
-      size: size || product.sizes_available?.[0], // never guess: the backend validates sizes
+      size: size || product.sizes_available?.[0],
       quantity: qty,
       productName: product.name,
       openCart,
@@ -653,6 +818,9 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     storefrontConfig: business?.storefront_ui || {},
     freeShippingMin,
     taxRules,
+    catalogMeta,
+    refreshCatalogMeta,
+    agentRegistry,
     actors,
     actorsList: actors,
     actor,
@@ -664,6 +832,8 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     categories,
     allProducts,
     catalog: catalogArray,
+    catalogTotal: catalog.total,
+    searchInterpretation: catalog.interpretation,
     isLoadingCatalog: catalog.status === "loading",
     catalogError: catalog.error?.message || null,
     refreshCatalog: () => fetchProducts(filtersRef.current),
