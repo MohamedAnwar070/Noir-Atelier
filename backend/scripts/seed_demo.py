@@ -24,6 +24,8 @@ from backend.app.models import (
     Policy,
     Product,
     ProductImage,
+    ProductReview,
+    Recommendation,
     ShippingZone,
 )
 from backend.app.storage.object_store import LocalObjectStore
@@ -228,6 +230,58 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
             ),
         ]
         session.add_all(addresses)
+
+        session.add_all(
+            [
+                ProductReview(
+                    product_id="PRD-001",
+                    customer_id="CUS-001",
+                    rating=5,
+                    fit_feedback="true_to_size",
+                    comment="Exceptional European flax linen drape and breathable weave.",
+                ),
+                ProductReview(
+                    product_id="PRD-002",
+                    customer_id="CUS-001",
+                    rating=5,
+                    fit_feedback="true_to_size",
+                    comment="Architectural tailoring with horn buttons.",
+                ),
+                ProductReview(
+                    product_id="PRD-003",
+                    customer_id="CUS-002",
+                    rating=5,
+                    fit_feedback="true_to_size",
+                    comment="22-Momme mulberry silk crepe feels extraordinary.",
+                ),
+                ProductReview(
+                    product_id="PRD-004",
+                    customer_id="CUS-002",
+                    rating=5,
+                    fit_feedback="true_to_size",
+                    comment="Crisp Peruvian Pima cotton jersey.",
+                ),
+                ProductReview(
+                    product_id="PRD-005",
+                    customer_id="CUS-001",
+                    rating=5,
+                    fit_feedback="true_to_size",
+                    comment="Superfine itch-free ZQ merino knit for kids.",
+                ),
+                Recommendation(
+                    source_product_id="PRD-001",
+                    recommended_product_id="PRD-002",
+                    relation_type="complete_the_look",
+                    score=Decimal("0.9600"),
+                ),
+                Recommendation(
+                    source_product_id="PRD-003",
+                    recommended_product_id="PRD-004",
+                    relation_type="complete_the_look",
+                    score=Decimal("0.9400"),
+                ),
+            ]
+        )
 
         session.add_all(
             [

@@ -69,7 +69,7 @@ def api_get_product(
     _actor: ActorContext = Depends(resolve_actor),
 ) -> Dict[str, Any]:
     prod = get_product_by_id_or_sku(db, product_id)
-    return serialize_product(prod)
+    return serialize_product(prod, db)
 
 
 @router.get("/api/products/{product_id}/recommendations")
