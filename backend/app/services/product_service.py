@@ -398,17 +398,21 @@ def get_catalog_meta(db: Session) -> Dict[str, Any]:
         )
         mfam["product_count"] += cnt
 
-    price_tiers = [
-        {"id": "ALL", "label": "Any price", "min_price": None, "max_price": None},
-        {"id": "ESSENTIAL", "label": f"Up to \u20b9{slab_threshold:,}", "min_price": None, "max_price": slab_threshold},
-        {
-            "id": "SIGNATURE",
-            "label": f"\u20b9{slab_threshold + 1:,} \u2013 \u20b9{luxury_min - 1:,}",
-            "min_price": slab_threshold + 1,
-            "max_price": luxury_min - 1,
-        },
-        {"id": "ATELIER", "label": f"\u20b9{luxury_min:,}+", "min_price": luxury_min, "max_price": None},
-    ]
+    custom_tiers = cfg.get("catalog", {}).get("custom_price_tiers")
+    if isinstance(custom_tiers, list) and custom_tiers:
+        price_tiers = [dict(t) for t in custom_tiers]
+    else:
+        price_tiers = [
+            {"id": "ALL", "label": "Any price", "min_price": None, "max_price": None},
+            {"id": "ESSENTIAL", "label": f"Up to \u20b9{slab_threshold:,}", "min_price": None, "max_price": slab_threshold},
+            {
+                "id": "SIGNATURE",
+                "label": f"\u20b9{slab_threshold + 1:,} \u2013 \u20b9{luxury_min - 1:,}",
+                "min_price": slab_threshold + 1,
+                "max_price": luxury_min - 1,
+            },
+            {"id": "ATELIER", "label": f"\u20b9{luxury_min:,}+", "min_price": luxury_min, "max_price": None},
+        ]
 
     order_statuses = [
         {

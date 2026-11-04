@@ -104,9 +104,9 @@ textarea.input,
 .sort-select {
   width: auto;
   min-width: 190px;
-  min-height: 38px;
-  padding-block: 0.45rem;
-  border-radius: var(--radius-pill);
+  min-height: 36px;
+  padding-block: 0.4rem;
+  border-radius: var(--radius-sm);
   font-size: var(--text-xs);
   font-weight: 500;
 }

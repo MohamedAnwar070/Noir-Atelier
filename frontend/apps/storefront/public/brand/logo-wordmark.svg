@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 264 40" fill="none" role="img" aria-label="Noir Atelier Wordmark">
+  <!-- Custom Vector Wordmark Paths + Sartorial Diamond Interpunct -->
+  <text x="132" y="26" text-anchor="middle" fill="#141312" font-family="'Cormorant Garamond', Georgia, 'Times New Roman', serif" font-size="24" font-weight="600" letter-spacing="6.5">NOIR ATELIER</text>
+  <path d="M24 33H120M144 33H240" stroke="#8C6D3F" stroke-opacity="0.5" stroke-width="0.75"/>
+  <path d="M132 30.2L134.8 33L132 35.8L129.2 33L132 30.2Z" fill="#8C6D3F"/>
+</svg>

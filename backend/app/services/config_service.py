@@ -99,9 +99,17 @@ def get_business_config_map(db: Session) -> Dict[str, Dict[str, Any]]:
         "catalog",
         {
             "luxury_tier_min_inr": 7000,
+            "high_value_tier_min_inr": 50000,
+            "couture_tier_min_inr": 100000,
+            "curated_collection_target": 100,
             "fit_feedback_options": [dict(opt) for opt in FIT_FEEDBACK_OPTIONS],
         },
     )
+    cfg_map["catalog"].setdefault("luxury_tier_min_inr", 7000)
+    cfg_map["catalog"].setdefault("high_value_tier_min_inr", 50000)
+    cfg_map["catalog"].setdefault("couture_tier_min_inr", 100000)
+    cfg_map["catalog"].setdefault("curated_collection_target", 100)
+    cfg_map["catalog"].setdefault("fit_feedback_options", [dict(opt) for opt in FIT_FEEDBACK_OPTIONS])
 
     _config_cache["business_config"] = cfg_map
     return cfg_map

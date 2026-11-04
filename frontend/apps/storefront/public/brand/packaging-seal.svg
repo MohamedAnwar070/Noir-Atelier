@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none" role="img" aria-label="Noir Atelier Security Ribbon Seal">
+  <!-- Silk Security Ribbon Cord -->
+  <path d="M60 0V22" stroke="#8C6D3F" stroke-width="2"/>
+  <circle cx="60" cy="22" r="3.5" fill="#FAF8F4" stroke="#8C6D3F" stroke-width="1.5"/>
+  <!-- Octagonal Tamper-Evident Atelier Seal -->
+  <path d="M38 24H82L98 40V84L82 100H38L22 84V40L38 24Z" fill="#141312" stroke="#C5A572" stroke-width="1.5"/>
+  <path d="M40.5 28H79.5L94 42.5V81.5L79.5 96H40.5L26 81.5V42.5L40.5 28Z" stroke="#C5A572" stroke-opacity="0.45" stroke-width="0.75"/>
+  <!-- Inner Monogram -->
+  <g transform="translate(36, 36) scale(0.75)">
+    <path d="M20.5 19V45M43.5 19V45M20.5 19L43.5 45" stroke="#F5F2EB" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter"/>
+    <path d="M18 19H23M18 45H23M41 19H46M41 45H46" stroke="#F5F2EB" stroke-width="1.35" stroke-linecap="square"/>
+    <path d="M24.5 45L32 16.5L39.5 45" stroke="#C5A572" stroke-width="1.55" stroke-linecap="square" stroke-linejoin="miter"/>
+    <path d="M27 36.5H37" stroke="#C5A572" stroke-width="1.35"/>
+    <path d="M32 11.5L34.2 15L32 18.5L29.8 15L32 11.5Z" fill="#C5A572"/>
+  </g>
+  <text x="60" y="90" text-anchor="middle" fill="#C5A572" font-family="'JetBrains Mono', monospace" font-size="6.2" letter-spacing="1.8">SEALED ARCHIVE</text>
+</svg>

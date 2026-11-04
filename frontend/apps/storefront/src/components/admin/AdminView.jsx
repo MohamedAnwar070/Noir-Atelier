@@ -22,12 +22,14 @@ export function AdminView() {
     apiClient,
     notify,
     catalog,
+    allProducts,
     catalogMeta,
     refreshCatalogMeta,
     refreshCatalog,
   } = useStore();
 
   const [activeTab, setActiveTab] = useState("kpis");
+  const [inventoryQuery, setInventoryQuery] = useState("");
   const [dashboardData, setDashboardData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
@@ -434,7 +436,20 @@ export function AdminView() {
       {/* Inventory Vault */}
       {!isLoading && !authError && activeTab === "inventory" && (
         <div className="admin-inventory-section">
-          <h3 className="section-subheading">Atelier Inventory &amp; Stock Levels</h3>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", marginBottom: "1rem" }}>
+            <h3 className="section-subheading" style={{ margin: 0 }}>
+              Atelier Archive Inventory ({(allProducts?.length ? allProducts : catalog).length} SKUs)
+            </h3>
+            <input
+              type="search"
+              className="input"
+              style={{ maxWidth: "280px", minHeight: "36px", padding: "0.35rem 0.75rem", fontSize: "var(--text-xs)" }}
+              placeholder="Filter SKU, name, or department…"
+              value={inventoryQuery}
+              onChange={(e) => setInventoryQuery(e.target.value)}
+              aria-label="Filter inventory vault"
+            />
+          </div>
           <div className="admin-table-wrap">
             <table className="admin-table">
               <thead>
@@ -448,7 +463,18 @@ export function AdminView() {
                 </tr>
               </thead>
               <tbody>
-                {catalog.map((prod) => (
+                {(allProducts?.length ? allProducts : catalog)
+                  .filter((prod) => {
+                    const q = inventoryQuery.trim().toLowerCase();
+                    if (!q) return true;
+                    return (
+                      String(prod.sku || "").toLowerCase().includes(q) ||
+                      String(prod.product_id || "").toLowerCase().includes(q) ||
+                      String(prod.name || "").toLowerCase().includes(q) ||
+                      String(prod.department || "").toLowerCase().includes(q)
+                    );
+                  })
+                  .map((prod) => (
                   <tr key={prod.product_id}>
                     <td><code>{prod.sku || prod.product_id}</code></td>
                     <td>{prod.name}</td>

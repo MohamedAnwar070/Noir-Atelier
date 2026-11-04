@@ -1,9 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { useStore } from "@/store/StoreProvider";
 import { ProductCard } from "@/components/catalog/ProductCard";
 import { ProductGridSkeleton, StatePanel } from "@/components/ui/StatePanel";
+import { BrandMonogram } from "@/components/ui/BrandLogo";
 import { Icon } from "@/components/ui/Icon";
 import { formatInr } from "@noir/utils/formatters.js";
 
@@ -11,6 +12,9 @@ export function CatalogSection({ onSelectProduct }) {
   const {
     catalog,
     catalogTotal,
+    hasMoreProducts,
+    isLoadingMore,
+    loadMoreProducts,
     searchInterpretation,
     isLoadingCatalog,
     catalogError,
@@ -24,7 +28,10 @@ export function CatalogSection({ onSelectProduct }) {
     business,
     taxRules,
     freeShippingMin,
+    askStylist,
   } = useStore();
+
+  const [facetsOpen, setFacetsOpen] = useState(false);
 
   const departments = catalogMeta?.departments || [];
   const categories = (catalogMeta?.categories || []).filter((c) => (c.product_count ?? 0) > 0);
@@ -33,7 +40,27 @@ export function CatalogSection({ onSelectProduct }) {
   const priceTiers = catalogMeta?.price_tiers || [];
   const sortOptions = catalogMeta?.sort_options || [];
   const returnDays = business?.returns_and_refunds?.return_window_days ?? 7;
+  const signatureMin = Number(business?.shipping?.signature_required_above_inr ?? 15000);
   const hsnChapters = (taxRules?.hsnChapters || ["61", "62"]).join("/");
+  const heroImageUrl = storefrontConfig?.hero_image_url || "";
+  const heroImageAlt = storefrontConfig?.hero_image_alt || "Noir Atelier Curated Archive";
+
+  // Highest price tier from DB config for the hero's direct "Explore Haute Archive" action
+  const flagshipTier =
+    priceTiers.length > 1 ? priceTiers[priceTiers.length - 1] : null;
+
+  const activeFacetCount = [
+    filters.category,
+    filters.color,
+    filters.material,
+    filters.priceTier && filters.priceTier !== "ALL" ? filters.priceTier : "",
+    filters.inStockOnly ? "stock" : "",
+  ].filter(Boolean).length;
+
+  const activeCategoryObj = categories.find((c) => c.slug === filters.category);
+  const activeColorObj = colorFamilies.find((cf) => cf.family === filters.color);
+  const activeMaterialObj = materialFamilies.find((mf) => mf.family === filters.material);
+  const activeTierObj = priceTiers.find((t) => t.id === filters.priceTier && t.id !== "ALL");
 
   const recognizedTokens = searchInterpretation?.recognized || [];
   const priceCaption =
@@ -49,79 +76,210 @@ export function CatalogSection({ onSelectProduct }) {
     Boolean(filters.q) &&
     (recognizedTokens.length > 0 || Boolean(priceCaption) || Boolean(searchInterpretation?.relaxed));
 
+  const totalCount = catalogTotal || catalog.length;
+
   return (
     <section className="catalog-section" aria-label="Garment Collection">
-      {/* Editorial Hero Header */}
-      <div className="catalog-hero-editorial">
+      {/* Asymmetric Editorial Maison Hero */}
+      <div className={`catalog-hero-editorial ${heroImageUrl ? "has-media" : ""}`}>
         <div className="hero-content-stack">
-          <span className="hero-eyebrow">
-            {storefrontConfig.hero_eyebrow || "Noir Atelier Autumn / Winter Collection"}
-          </span>
+          <div className="hero-eyebrow-row">
+            <BrandMonogram size={22} />
+            <span className="hero-eyebrow">
+              {storefrontConfig.hero_eyebrow || "Maison de Haute Confection · Curated Archive"}
+            </span>
+          </div>
+
           <h1 className="hero-headline">
             {storefrontConfig.hero_title || "The New Edit"}
           </h1>
+
           <p className="hero-description">
             {storefrontConfig.hero_subtitle ||
               "Handcrafted tailored linen, mulberry silk dresses, and fine merino garments with real-time GST slab intelligence."}
           </p>
 
-          <div className="hero-guarantees-row">
+          <div className="hero-cta-row">
+            {flagshipTier && (
+              <button
+                type="button"
+                className="btn-pill"
+                onClick={() =>
+                  setFilters({
+                    priceTier: flagshipTier.id,
+                    minPrice: flagshipTier.min_price ?? null,
+                    maxPrice: flagshipTier.max_price ?? null,
+                  })
+                }
+              >
+                <Icon name="award" size={14} />
+                <span>Explore {flagshipTier.label.split("·")[0].trim()}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn-pill btn-pill-outline"
+              onClick={() =>
+                askStylist("Recommend standout pieces from the collection based on natural fiber craftsmanship.")
+              }
+            >
+              <BrandMonogram size={14} />
+              <span>Consult Personal Stylist</span>
+            </button>
+          </div>
+
+          <div className="hero-guarantees-row" aria-label="Maison guarantees">
             <span className="guarantee-pill">
               <Icon name="shield" size={13} />
-              <span>HSN {hsnChapters} Tax Certified</span>
+              <span>POL-RET-01 Security Seal</span>
             </span>
             <span className="guarantee-pill">
               <Icon name="truck" size={13} />
-              <span>Free delivery from {formatInr(freeShippingMin)}</span>
+              <span>Insured Courier over {formatInr(signatureMin)}</span>
             </span>
             <span className="guarantee-pill">
               <Icon name="refresh" size={13} />
-              <span>{returnDays}-Day Return Guarantee</span>
+              <span>{returnDays}-Day Return Charter</span>
+            </span>
+            <span className="guarantee-pill">
+              <Icon name="check" size={13} />
+              <span>CBIC HSN {hsnChapters} Certified · Free Shipping {formatInr(freeShippingMin)}+</span>
             </span>
           </div>
         </div>
+
+        {heroImageUrl && (
+          <figure className="hero-portrait-frame">
+            <img
+              src={heroImageUrl}
+              alt={heroImageAlt}
+              className="hero-portrait-img"
+            />
+            <figcaption className="hero-portrait-caption">
+              <span>Noir Atelier Archive</span>
+              <span>Certified Natural Fibers</span>
+            </figcaption>
+          </figure>
+        )}
       </div>
 
-      {/* Database-Driven Filter and Facet Bar */}
+      {/* Sartorial Collection Bar */}
       <div className="catalog-toolbar">
-        {/* Department Selection (from `departments` table) */}
-        <div className="department-tabs" role="tablist" aria-label="Department selection">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={filters.department === "ALL"}
-            className={`dept-tab-btn ${filters.department === "ALL" ? "active" : ""}`}
-            onClick={() => setFilters({ department: "ALL" })}
-          >
-            All Pieces
-          </button>
-          {departments.map((dept) => (
+        <div className="catalog-primary-bar">
+          {/* Department Selection (from `departments` table) */}
+          <div className="department-tabs" role="tablist" aria-label="Department selection">
             <button
-              key={dept.code}
               type="button"
               role="tab"
-              aria-selected={filters.department === dept.code}
-              className={`dept-tab-btn ${filters.department === dept.code ? "active" : ""}`}
-              onClick={() => setFilters({ department: dept.code })}
+              aria-selected={filters.department === "ALL"}
+              className={`dept-tab-btn ${filters.department === "ALL" ? "active" : ""}`}
+              onClick={() => setFilters({ department: "ALL" })}
             >
-              {dept.name}
+              All Pieces
             </button>
-          ))}
+            {departments.map((dept) => (
+              <button
+                key={dept.code}
+                type="button"
+                role="tab"
+                aria-selected={filters.department === dept.code}
+                className={`dept-tab-btn ${filters.department === dept.code ? "active" : ""}`}
+                onClick={() => setFilters({ department: dept.code })}
+              >
+                {dept.name}
+              </button>
+            ))}
+          </div>
+
+          {/* Right-side Tailor, Sort & Piece Counter */}
+          <div className="catalog-meta-controls">
+            <button
+              type="button"
+              className={`filter-toggle-btn ${facetsOpen || activeFacetCount > 0 ? "active" : ""}`}
+              onClick={() => setFacetsOpen((prev) => !prev)}
+              aria-expanded={facetsOpen}
+              aria-controls="atelier-facets-panel"
+            >
+              <Icon name="sliders" size={14} />
+              <span>Filter &amp; Tailor</span>
+              {activeFacetCount > 0 && (
+                <span className="filter-count-badge">{activeFacetCount}</span>
+              )}
+            </button>
+
+            {sortOptions.length > 0 && (
+              <select
+                className="select-control sort-select"
+                value={filters.sort}
+                onChange={(e) => setFilters({ sort: e.target.value })}
+                aria-label="Sort garments"
+              >
+                {sortOptions.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <span className="catalog-counter" aria-live="polite">
+              {totalCount} {totalCount === 1 ? "piece" : "pieces"}
+            </span>
+          </div>
         </div>
 
-        {/* Structured Attribute Facets (Categories, Colours, Materials) */}
-        {(categories.length > 0 || colorFamilies.length > 0 || materialFamilies.length > 0) && (
-          <div className="catalog-facets-bar" aria-label="Garment attribute filters">
+        {/* Edition / Price Tier Strip (Always accessible, quiet horizontal bar) */}
+        {priceTiers.length > 0 && (
+          <div className="catalog-sub-toolbar">
+            <div className="price-tier-pills" role="radiogroup" aria-label="Edition and price tiers">
+              {priceTiers.map((tier) => (
+                <button
+                  key={tier.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={filters.priceTier === tier.id}
+                  className={`chip-pill ${filters.priceTier === tier.id ? "active" : ""}`}
+                  onClick={() =>
+                    setFilters({
+                      priceTier: tier.id,
+                      minPrice: tier.min_price ?? null,
+                      maxPrice: tier.max_price ?? null,
+                    })
+                  }
+                >
+                  {tier.label}
+                </button>
+              ))}
+
+              <button
+                type="button"
+                aria-pressed={filters.inStockOnly}
+                className={`chip-pill ${filters.inStockOnly ? "active" : ""}`}
+                onClick={() => setFilters({ inStockOnly: !filters.inStockOnly })}
+              >
+                In Vault Now
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Collapsible Structured Attribute Atelier Panel */}
+        {facetsOpen && (categories.length > 0 || colorFamilies.length > 0 || materialFamilies.length > 0) && (
+          <div
+            id="atelier-facets-panel"
+            className="catalog-facets-bar"
+            aria-label="Garment attribute filters"
+          >
             {categories.length > 0 && (
-              <div className="facet-group" role="group" aria-label="Garment type">
-                <span className="facet-label">Type</span>
+              <div className="facet-group" role="group" aria-label="Garment silhouette">
+                <span className="facet-label">Silhouette</span>
                 <div className="facet-pills">
                   <button
                     type="button"
                     className={`chip-pill ${!filters.category ? "active" : ""}`}
                     onClick={() => setFilters({ category: "" })}
                   >
-                    All Types
+                    All Silhouettes
                   </button>
                   {categories.map((cat) => (
                     <button
@@ -175,7 +333,7 @@ export function CatalogSection({ onSelectProduct }) {
 
             {materialFamilies.length > 0 && (
               <div className="facet-group" role="group" aria-label="Natural fiber">
-                <span className="facet-label">Fiber</span>
+                <span className="facet-label">Natural Fiber</span>
                 <div className="facet-pills">
                   <button
                     type="button"
@@ -202,77 +360,82 @@ export function CatalogSection({ onSelectProduct }) {
           </div>
         )}
 
-        {/* Secondary controls: Price tiers (from DB tax/catalog config), In-stock toggle, Sort, Counter */}
-        <div className="catalog-sub-toolbar">
-          <div className="price-tier-pills" role="radiogroup" aria-label="Price filters">
-            {priceTiers.map((tier) => (
+        {/* Active Filter Summary Chips */}
+        {hasActiveFilters && (
+          <div className="active-filters-strip" aria-label="Active collection filters">
+            <span className="active-filters-label">Tailored by:</span>
+            {filters.q && (
               <button
-                key={tier.id}
                 type="button"
-                role="radio"
-                aria-checked={filters.priceTier === tier.id}
-                className={`chip-pill ${filters.priceTier === tier.id ? "active" : ""}`}
-                onClick={() =>
-                  setFilters({
-                    priceTier: tier.id,
-                    minPrice: tier.min_price ?? null,
-                    maxPrice: tier.max_price ?? null,
-                  })
-                }
+                className="active-filter-chip"
+                onClick={() => setFilters({ q: "" })}
               >
-                {tier.label}
+                <span>&ldquo;{filters.q}&rdquo;</span>
+                <Icon name="close" size={11} />
               </button>
-            ))}
-
-            <button
-              type="button"
-              aria-pressed={filters.inStockOnly}
-              className={`chip-pill ${filters.inStockOnly ? "active" : ""}`}
-              onClick={() => setFilters({ inStockOnly: !filters.inStockOnly })}
-            >
-              In Stock Only
+            )}
+            {activeCategoryObj && (
+              <button
+                type="button"
+                className="active-filter-chip"
+                onClick={() => setFilters({ category: "" })}
+              >
+                <span>{activeCategoryObj.name}</span>
+                <Icon name="close" size={11} />
+              </button>
+            )}
+            {activeColorObj && (
+              <button
+                type="button"
+                className="active-filter-chip"
+                onClick={() => setFilters({ color: "" })}
+              >
+                <span>{activeColorObj.label}</span>
+                <Icon name="close" size={11} />
+              </button>
+            )}
+            {activeMaterialObj && (
+              <button
+                type="button"
+                className="active-filter-chip"
+                onClick={() => setFilters({ material: "" })}
+              >
+                <span>{activeMaterialObj.label}</span>
+                <Icon name="close" size={11} />
+              </button>
+            )}
+            {activeTierObj && (
+              <button
+                type="button"
+                className="active-filter-chip"
+                onClick={() => setFilters({ priceTier: "ALL", minPrice: null, maxPrice: null })}
+              >
+                <span>{activeTierObj.label}</span>
+                <Icon name="close" size={11} />
+              </button>
+            )}
+            {filters.inStockOnly && (
+              <button
+                type="button"
+                className="active-filter-chip"
+                onClick={() => setFilters({ inStockOnly: false })}
+              >
+                <span>In Vault Now</span>
+                <Icon name="close" size={11} />
+              </button>
+            )}
+            <button type="button" className="link-subtle" onClick={resetFilters}>
+              Reset archive view
             </button>
           </div>
-
-          <div className="catalog-meta-controls">
-            {hasActiveFilters && (
-              <button
-                type="button"
-                className="link-subtle"
-                onClick={resetFilters}
-                style={{ fontSize: "var(--text-xs)" }}
-              >
-                Reset filters
-              </button>
-            )}
-
-            {sortOptions.length > 0 && (
-              <select
-                className="select-control sort-select"
-                value={filters.sort}
-                onChange={(e) => setFilters({ sort: e.target.value })}
-                aria-label="Sort garments"
-              >
-                {sortOptions.map((opt) => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            <span className="catalog-counter" aria-live="polite">
-              {catalogTotal || catalog.length} {(catalogTotal || catalog.length) === 1 ? "piece" : "pieces"}
-            </span>
-          </div>
-        </div>
+        )}
 
         {/* Natural-Language Search Interpretation Strip */}
         {showInterpretation && (
           <div className="search-interpretation-bar" role="status" aria-live="polite">
             <span className="interpretation-lead">
               <Icon name="sparkles" size={13} />
-              <span>Matched facets:</span>
+              <span>Interpreted attributes:</span>
             </span>
             <div className="interpretation-chips">
               {recognizedTokens.map((tok, idx) => (
@@ -287,7 +450,7 @@ export function CatalogSection({ onSelectProduct }) {
               )}
               {searchInterpretation?.relaxed && (
                 <span className="interpretation-relaxed">
-                  Showing closest matches using structured filters
+                  Showing closest matches from the curated archive
                 </span>
               )}
             </div>
@@ -297,46 +460,67 @@ export function CatalogSection({ onSelectProduct }) {
 
       {/* Main Content Area: State-Driven Rendering */}
       <div className="catalog-grid-area">
-        {/* Principle 2: Loading State */}
-        {isLoadingCatalog && <ProductGridSkeleton count={6} />}
+        {isLoadingCatalog && <ProductGridSkeleton count={8} />}
 
-        {/* Principle 3: Error State */}
         {!isLoadingCatalog && catalogError && (
           <StatePanel
             type="error"
-            title="Unable to load catalog"
+            title="Unable to load archive"
             description={catalogError}
             actionLabel="Try again"
             onAction={refreshCatalog}
           />
         )}
 
-        {/* Principle 6: No Search Results */}
         {!isLoadingCatalog && !catalogError && catalog.length === 0 && (
           <StatePanel
             type="no_results"
-            title="No garments found"
+            title="No garments match this selection"
             description={
               filters.q
-                ? `No pieces matched "${filters.q}". Try broadening your search or clearing active filters.`
-                : "No pieces match the selected department, attribute, and price filters."
+                ? `No archive pieces matched "${filters.q}". Try broadening your phrasing or resetting active facets.`
+                : "No pieces match the selected department, fiber, and edition filters."
             }
-            actionLabel="Clear all filters"
+            actionLabel="Reset archive filters"
             onAction={resetFilters}
           />
         )}
 
-        {/* Grid of Products */}
         {!isLoadingCatalog && !catalogError && catalog.length > 0 && (
-          <div className="product-grid" role="list">
-            {catalog.map((prod) => (
-              <ProductCard
-                key={prod.product_id}
-                product={prod}
-                onSelect={onSelectProduct}
-              />
-            ))}
-          </div>
+          <>
+            <div className="product-grid" role="list">
+              {catalog.map((prod) => (
+                <ProductCard
+                  key={prod.product_id}
+                  product={prod}
+                  onSelect={onSelectProduct}
+                />
+              ))}
+            </div>
+
+            {/* Curated Archive Pagination Footer */}
+            <div className="catalog-pagination-footer">
+              <p className="catalog-pagination-summary">
+                Showing <strong>{catalog.length}</strong> of <strong>{totalCount}</strong> curated pieces
+              </p>
+              <div className="catalog-pagination-track" aria-hidden="true">
+                <div
+                  className="catalog-pagination-fill"
+                  style={{ width: `${Math.min(100, Math.round((catalog.length / Math.max(1, totalCount)) * 100))}%` }}
+                />
+              </div>
+              {hasMoreProducts && (
+                <button
+                  type="button"
+                  className="btn-pill btn-pill-outline catalog-load-more-btn"
+                  onClick={loadMoreProducts}
+                  disabled={isLoadingMore}
+                >
+                  {isLoadingMore ? "Unveiling Archive Pieces…" : "Explore More Pieces"}
+                </button>
+              )}
+            </div>
+          </>
         )}
       </div>
     </section>

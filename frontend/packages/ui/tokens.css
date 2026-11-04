@@ -1,47 +1,92 @@
-/*
- * @noir/ui design tokens — the single source of truth for colour, type,
- * spacing, radius, elevation, motion and z-index.
- *
- * Contents: custom-property blocks, plus two global accessibility guarantees
- * every Noir app inherits (visible focus ring, reduced motion) at the end of
- * this file. Element resets and components belong to each app, not here.
- */
+/* ==========================================================================
+   @noir/ui — Design Tokens (Primitives, Semantic Themes, Fluid Scales, A11y)
+   Maison Direction: Warm Archival Alabaster, Obsidian Tailor's Ink & Brushed Bronze
+   ========================================================================== */
 
-:root,
-[data-theme="light"] {
-  --primitive-stone-50: #faf8f5;
-  --primitive-stone-100: #f6f4ef;
-  --primitive-stone-200: #efece6;
-  --primitive-stone-300: #dedad2;
-  --primitive-stone-400: #b8b2a6;
-  --primitive-stone-500: #8c8881;
-  --primitive-stone-600: #5c5954;
-  --primitive-stone-800: #2d2c2a;
-  --primitive-stone-900: #181817;
-  --primitive-stone-950: #10100f;
+:root {
+  /* ------------------------------------------------------------------------
+     1. PRIMITIVES (Archival Paper, Obsidian Ink & Brushed Metals)
+     ------------------------------------------------------------------------ */
+  --primitive-stone-25: #fdfcfa;
+  --primitive-stone-50: #faf8f4;
+  --primitive-stone-100: #f2efe9;
+  --primitive-stone-200: #e6e1d8;
+  --primitive-stone-300: #c9c2b6;
+  --primitive-stone-400: #948d80;
+  --primitive-stone-500: #6e6961;
+  --primitive-stone-600: #54504a;
+  --primitive-stone-700: #3a3733;
+  --primitive-stone-800: #24221f;
+  --primitive-stone-850: #1a1917;
+  --primitive-stone-900: #141312;
+  --primitive-stone-950: #0e0e0d;
 
-  --primitive-sky-400: #6d96be;
-  --primitive-sky-500: #4a78a6;
-  --primitive-sky-600: #3c6997;
-  --primitive-sand-200: #e2d8c9;
-  --primitive-gold-500: #b8945f;
-  --primitive-gold-600: #9a7846;
+  --primitive-white: #ffffff;
+  --primitive-gold-300: #d6bc90;
+  --primitive-gold-400: #c5a572;
+  --primitive-gold-500: #a68553;
+  --primitive-gold-600: #8c6d3f;
+  --primitive-gold-700: #70552e;
 
-  --font-serif: "Cormorant Garamond", "Playfair Display", Georgia, serif;
-  --font-sans: "Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+  --primitive-emerald-50: #f1f6f3;
+  --primitive-emerald-500: #276749;
+  --primitive-emerald-700: #1b4d36;
+  --primitive-emerald-950: #0d261b;
+
+  --primitive-amber-50: #faf5eb;
+  --primitive-amber-500: #9c6821;
+  --primitive-amber-800: #6e4712;
+  --primitive-amber-950: #2b1c07;
+
+  --primitive-rose-50: #fbf2f2;
+  --primitive-rose-500: #9e2a2b;
+  --primitive-rose-700: #7c1d1f;
+  --primitive-rose-950: #300c0d;
+
+  --primitive-sky-50: #f2f5f8;
+  --primitive-sky-500: #335c81;
+  --primitive-sky-700: #1f3d5a;
+  --primitive-sky-950: #0f1e2e;
+
+  /* ------------------------------------------------------------------------
+     2. TYPOGRAPHY & ACCESSIBLE FONT SCALING
+     ------------------------------------------------------------------------ */
+  --font-serif: var(--font-editorial-serif, "Cormorant Garamond"), "Playfair Display", Georgia, serif;
+  --font-sans: var(--font-clean-sans, "Plus Jakarta Sans"), "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: var(--font-code-mono, "JetBrains Mono"), ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --font-scale: 1;
-  --text-2xs: calc(clamp(0.68rem, 0.65rem + 0.15vw, 0.72rem) * var(--font-scale));
-  --text-xs: calc(clamp(0.75rem, 0.7rem + 0.25vw, 0.84rem) * var(--font-scale));
-  --text-sm: calc(clamp(0.875rem, 0.82rem + 0.3vw, 0.96rem) * var(--font-scale));
-  --text-base: calc(clamp(0.95rem, 0.9rem + 0.35vw, 1.0625rem) * var(--font-scale));
-  --text-lg: calc(clamp(1.08rem, 1rem + 0.45vw, 1.22rem) * var(--font-scale));
-  --text-xl: calc(clamp(1.22rem, 1.08rem + 0.75vw, 1.42rem) * var(--font-scale));
-  --text-2xl: calc(clamp(1.42rem, 1.2rem + 1.1vw, 1.8rem) * var(--font-scale));
-  --text-3xl: calc(clamp(1.72rem, 1.4rem + 1.6vw, 2.3rem) * var(--font-scale));
-  --text-4xl: calc(clamp(2.05rem, 1.65rem + 2.2vw, 3rem) * var(--font-scale));
 
+  --text-2xs: calc(0.6875rem * var(--font-scale)); /* 11px */
+  --text-xs: calc(0.765rem * var(--font-scale));   /* ~12.2px */
+  --text-sm: calc(0.875rem * var(--font-scale));   /* 14px */
+  --text-base: calc(0.96875rem * var(--font-scale)); /* 15.5px */
+  --text-lg: calc(1.125rem * var(--font-scale));   /* 18px */
+  --text-xl: calc(1.3125rem * var(--font-scale));  /* 21px */
+  --text-2xl: clamp(calc(1.5rem * var(--font-scale)), 2.2vw, calc(1.95rem * var(--font-scale)));
+  --text-3xl: clamp(calc(1.9rem * var(--font-scale)), 3.2vw, calc(2.75rem * var(--font-scale)));
+  --text-display: clamp(calc(2.35rem * var(--font-scale)), 4.6vw, calc(3.85rem * var(--font-scale)));
+
+  /* ------------------------------------------------------------------------
+     3. SPACING SCALE (4px Base Grid + Generous Editorial Gutters)
+     ------------------------------------------------------------------------ */
+  --space-1: 0.25rem;  /* 4px */
+  --space-2: 0.5rem;   /* 8px */
+  --space-3: 0.75rem;  /* 12px */
+  --space-4: 1rem;     /* 16px */
+  --space-5: 1.25rem;  /* 20px */
+  --space-6: 1.5rem;   /* 24px */
+  --space-8: 2rem;     /* 32px */
+  --space-10: 2.5rem;  /* 40px */
+  --space-12: 3rem;    /* 48px */
+  --space-16: 4rem;    /* 64px */
+  --space-fluid-sm: clamp(0.75rem, 1.5vw, 1.25rem);
+  --space-fluid-md: clamp(1.15rem, 2.8vw, 2.5rem);
+  --space-fluid-lg: clamp(1.75rem, 4vw, 3.75rem);
+
+  /* ------------------------------------------------------------------------
+     4. BREAKPOINTS, RADII (Sartorial Tailoring), MOTION & Z-INDEX
+     ------------------------------------------------------------------------ */
   --bp-xs: 360px;
   --bp-sm: 640px;
   --bp-md: 768px;
@@ -49,198 +94,206 @@
   --bp-xl: 1280px;
   --bp-2xl: 1536px;
 
-  --icon-xs: 14px;
-  --icon-sm: 16px;
-  --icon-md: 20px;
-  --icon-lg: 24px;
-  --icon-xl: 32px;
+  --container-max: 1380px;
+  --drawer-width: 480px;
+  --touch-target: 44px;
 
-  --space-1: 0.25rem;
-  --space-2: 0.5rem;
-  --space-3: 0.75rem;
-  --space-4: 1rem;
-  --space-5: 1.25rem;
-  --space-6: 1.5rem;
-  --space-8: 2rem;
-  --space-10: 2.5rem;
-  --space-12: 3rem;
-  --space-16: 4rem;
+  /* Tailored architectural corners — crisp bespoke blocks, never bubbly SaaS cards */
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-card: 4px;
+  --radius-sheet: 6px;
+  --radius-pill: 9999px;
 
-  --space-fluid-xs: clamp(0.25rem, 0.2rem + 0.25vw, 0.5rem);
-  --space-fluid-sm: clamp(0.5rem, 0.4rem + 0.5vw, 0.75rem);
-  --space-fluid-md: clamp(1rem, 0.8rem + 1vw, 1.5rem);
-  --space-fluid-lg: clamp(1.25rem, 1rem + 1.5vw, 2.25rem);
-  --space-fluid-xl: clamp(1.75rem, 1.35rem + 2.2vw, 3.5rem);
+  /* Component aliases */
+  --card-radius: var(--radius-card);
+  --card-padding: clamp(1.15rem, 2vw, 1.5rem);
+  --btn-height: var(--touch-target);
+  --btn-radius: var(--radius-xs);
+  --input-height: 44px;
+  --input-radius: var(--radius-xs);
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --spring: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 160ms;
+  --duration-base: 240ms;
+  --duration-slow: 360ms;
+
+  --z-base: 1;
+  --z-sticky: 20;
+  --z-header: 35;
+  --z-bottom-nav: 40;
+  --z-widget: 45;
+  --z-backdrop: 50;
+  --z-drawer: 60;
+  --z-modal: 70;
+  --z-toast: 90;
 
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 
-  --bg-canvas: var(--primitive-stone-300);
-  --bg-page: var(--primitive-stone-100);
-  --bg-surface: #ffffff;
-  --bg-elevated: #ffffff;
-  --bg-subtle: var(--primitive-stone-200);
-  --bg-header-glass: rgba(246, 244, 239, 0.88);
-  --bg-glass: rgba(255, 255, 255, 0.82);
-  --bg-glass-dark: rgba(20, 20, 19, 0.62);
+  /* ------------------------------------------------------------------------
+     5. SEMANTIC TOKENS — EDITORIAL LIGHT THEME (Default)
+     Contrast Ratios vs #FAF8F4 / #FFFFFF:
+       --text-primary (#141312): 17.4:1 (WCAG AAA)
+       --text-secondary (#54504A): 7.5:1 (WCAG AAA)
+       --text-muted (#6E6961): 5.1:1 (WCAG AA)
+       --accent-gold (#8C6D3F): 4.7:1 (WCAG AA)
+     ------------------------------------------------------------------------ */
+  color-scheme: light;
+  --bg-page: var(--primitive-stone-50);
+  --bg-surface: var(--primitive-white);
+  --bg-elevated: var(--primitive-white);
+  --bg-subtle: var(--primitive-stone-100);
+  --bg-muted: var(--primitive-stone-200);
+  --bg-inverse: var(--primitive-stone-900);
+  --bg-header-glass: rgba(250, 248, 244, 0.92);
+  --bg-glass: rgba(255, 255, 255, 0.92);
+  --bg-glass-dark: rgba(20, 19, 18, 0.84);
+  --overlay-scrim: rgba(14, 14, 13, 0.56);
 
   --text-primary: var(--primitive-stone-900);
   --text-secondary: var(--primitive-stone-600);
   --text-muted: var(--primitive-stone-500);
   --text-on-dark: var(--primitive-stone-50);
+  --text-inverse: var(--primitive-stone-50);
 
+  --border-subtle: var(--primitive-stone-200);
+  --border-strong: var(--primitive-stone-300);
+  --border-focus: var(--primitive-gold-600);
+
+  --brand-primary: var(--primitive-stone-900);
+  --brand-primary-hover: var(--primitive-stone-800);
   --accent-noir: var(--primitive-stone-900);
   --accent-noir-hover: var(--primitive-stone-800);
-  --accent-sky: var(--primitive-sky-500);
-  --accent-sand: var(--primitive-sand-200);
-  --accent-gold: var(--primitive-gold-500);
-  --accent-success: #16a34a;
-  --accent-rating: #f5b82e;
+  --accent-gold: var(--primitive-gold-600);
+  --accent-brass-soft: rgba(140, 109, 63, 0.11);
+  --accent-brass-border: rgba(140, 109, 63, 0.34);
+  --accent-rating: var(--primitive-gold-600);
+  --accent-success: var(--primitive-emerald-500);
+  --fill-placeholder: linear-gradient(155deg, #f2efe9 0%, #e6e1d8 100%);
+  --focus-ring: rgba(140, 109, 63, 0.28);
 
-  --overlay-scrim: rgba(16, 16, 15, 0.52);
-  --focus-ring: rgba(184, 148, 95, 0.18);
-  --focus-ring-error: rgba(220, 38, 38, 0.16);
-  /* Derived from theme colours, so it follows light/dark automatically */
-  --fill-placeholder: linear-gradient(165deg, var(--bg-subtle) 0%, var(--bg-page) 100%);
+  --state-success-bg: var(--primitive-emerald-50);
+  --state-success-text: var(--primitive-emerald-700);
+  --state-success-border: rgba(39, 103, 73, 0.28);
 
-  --state-success-bg: #ecfdf3;
-  --state-success-text: #166534;
-  --state-success-border: #abefc6;
+  --state-warning-bg: var(--primitive-amber-50);
+  --state-warning-text: var(--primitive-amber-800);
+  --state-warning-border: rgba(156, 104, 33, 0.32);
 
-  --state-warning-bg: #fffbeb;
-  --state-warning-text: #92400e;
-  --state-warning-border: #fde68a;
+  --state-error-bg: var(--primitive-rose-50);
+  --state-error-text: var(--primitive-rose-700);
+  --state-error-border: rgba(158, 42, 43, 0.3);
 
-  --state-error-bg: #fef2f2;
-  --state-error-text: #991b1b;
-  --state-error-border: #fecaca;
+  --state-info-bg: var(--primitive-sky-50);
+  --state-info-text: var(--primitive-sky-700);
+  --state-info-border: rgba(51, 92, 129, 0.28);
 
-  --state-info-bg: #f0f7ff;
-  --state-info-text: #1e40af;
-  --state-info-border: #bfdbfe;
-
-  --border-subtle: rgba(23, 23, 22, 0.08);
-  --border-strong: rgba(23, 23, 22, 0.18);
-
-  --radius-xs: 8px;
-  --radius-sm: 12px;
-  --radius-md: 18px;
-  --radius-card: 26px;
-  --radius-sheet: 32px;
-  --radius-pill: 9999px;
-
-  --card-radius: var(--radius-card);
-  --card-padding: 1.25rem;
-  --btn-height: 42px;
-  --input-height: 42px;
-  --drawer-width: 480px;
-  --touch-target-min: 44px;
-
-  --container-max: 1400px;
-  --announce-h: 38px;
-  --header-h: 68px;
-  --tabbar-h: 64px;
-
-  --widget-launcher: 60px;
-  --widget-panel-w: 392px;
-  --widget-panel-h: min(620px, calc(100dvh - 7rem));
-  --widget-offset: 1.25rem;
-
-  --z-header: 40;
-  --z-tabbar: 55;
-  --z-widget: 60;
-  --z-overlay: 70;
-  --z-drawer: 80;
-  --z-toast: 100;
-  --z-status: 110;
-
-  --duration-fast: 150ms;
-  --duration-base: 240ms;
-
-  --shadow-soft: 0 8px 28px -6px rgba(20, 20, 19, 0.07);
-  --shadow-elevated: 0 22px 48px -12px rgba(20, 20, 19, 0.15);
-  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --shadow-soft: 0 2px 10px rgba(20, 19, 18, 0.04);
+  --shadow-card: 0 8px 26px rgba(20, 19, 18, 0.06);
+  --shadow-elevated: 0 20px 52px rgba(20, 19, 18, 0.14);
 }
 
+/* --------------------------------------------------------------------------
+   6. SEMANTIC TOKENS — NOIR OBSIDIAN DARK THEME
+   Contrast Ratios vs #0E0E0D / #161614:
+     --text-primary (#F5F2EB): 16.8:1 (WCAG AAA)
+     --text-secondary (#B8B2A6): 8.7:1 (WCAG AAA)
+     --text-muted (#948D80): 5.5:1 (WCAG AA)
+     --accent-gold (#C5A572): 8.2:1 (WCAG AAA)
+   -------------------------------------------------------------------------- */
 [data-theme="dark"] {
-  --bg-canvas: #0d0d0c;
-  --bg-page: #131312;
-  --bg-surface: #1c1c1a;
-  --bg-elevated: #242421;
-  --bg-subtle: #252422;
-  --bg-header-glass: rgba(19, 19, 18, 0.88);
-  --bg-glass: rgba(28, 28, 26, 0.85);
+  color-scheme: dark;
+  --bg-page: var(--primitive-stone-950);
+  --bg-surface: #161614;
+  --bg-elevated: #1e1d1a;
+  --bg-subtle: #201f1c;
+  --bg-muted: #2c2a26;
+  --bg-inverse: #f5f2eb;
+  --bg-header-glass: rgba(14, 14, 13, 0.9);
+  --bg-glass: rgba(22, 22, 20, 0.92);
+  --bg-glass-dark: rgba(14, 14, 13, 0.88);
+  --overlay-scrim: rgba(0, 0, 0, 0.74);
 
-  --text-primary: #f5f3ef;
-  --text-secondary: #b5b0a6;
-  --text-muted: #858077;
-  --text-on-dark: #141413;
+  --text-primary: #f5f2eb;
+  --text-secondary: #b8b2a6;
+  --text-muted: #948d80;
+  --text-on-dark: var(--primitive-stone-950);
+  --text-inverse: var(--primitive-stone-950);
 
-  --accent-noir: #f5f3ef;
-  --accent-noir-hover: #e2ddd3;
-  --accent-gold: #d4b07b;
-  --accent-success: #22c55e;
-  --accent-rating: #fbbf24;
+  --border-subtle: #2a2824;
+  --border-strong: #3e3b35;
+  --border-focus: var(--primitive-gold-400);
 
-  --overlay-scrim: rgba(0, 0, 0, 0.62);
-  --focus-ring: rgba(212, 176, 123, 0.24);
-  --focus-ring-error: rgba(252, 165, 165, 0.22);
+  --brand-primary: #f5f2eb;
+  --brand-primary-hover: #e6e1d8;
+  --accent-noir: #f5f2eb;
+  --accent-noir-hover: #e6e1d8;
+  --accent-gold: var(--primitive-gold-400);
+  --accent-brass-soft: rgba(197, 165, 114, 0.14);
+  --accent-brass-border: rgba(197, 165, 114, 0.38);
+  --accent-rating: var(--primitive-gold-400);
+  --accent-success: #489e73;
+  --fill-placeholder: linear-gradient(155deg, #201f1c 0%, #161614 100%);
+  --focus-ring: rgba(197, 165, 114, 0.34);
 
-  --state-success-bg: rgba(22, 101, 52, 0.22);
-  --state-success-text: #86efac;
-  --state-success-border: rgba(134, 239, 172, 0.35);
+  --state-success-bg: rgba(39, 103, 73, 0.22);
+  --state-success-text: #86d3ac;
+  --state-success-border: rgba(134, 211, 172, 0.3);
 
-  --state-warning-bg: rgba(146, 64, 14, 0.24);
-  --state-warning-text: #fcd34d;
-  --state-warning-border: rgba(252, 211, 77, 0.35);
+  --state-warning-bg: rgba(156, 104, 33, 0.22);
+  --state-warning-text: #ecc382;
+  --state-warning-border: rgba(236, 195, 130, 0.3);
 
-  --state-error-bg: rgba(153, 27, 27, 0.25);
-  --state-error-text: #fca5a5;
-  --state-error-border: rgba(252, 165, 165, 0.35);
+  --state-error-bg: rgba(158, 42, 43, 0.24);
+  --state-error-text: #f3a6a7;
+  --state-error-border: rgba(243, 166, 167, 0.32);
 
-  --state-info-bg: rgba(30, 64, 175, 0.25);
-  --state-info-text: #93c5fd;
-  --state-info-border: rgba(147, 197, 253, 0.35);
+  --state-info-bg: rgba(51, 92, 129, 0.24);
+  --state-info-text: #9ec2e6;
+  --state-info-border: rgba(158, 194, 230, 0.3);
 
-  --border-subtle: rgba(245, 243, 239, 0.09);
-  --border-strong: rgba(245, 243, 239, 0.2);
-
-  --shadow-soft: 0 10px 30px -8px rgba(0, 0, 0, 0.5);
-  --shadow-elevated: 0 24px 56px -12px rgba(0, 0, 0, 0.7);
+  --shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.42);
+  --shadow-card: 0 12px 32px rgba(0, 0, 0, 0.52);
+  --shadow-elevated: 0 24px 64px rgba(0, 0, 0, 0.72);
 }
 
-[data-font-scale="compact"] {
-  --font-scale: 0.92;
+[data-font-scale="lg"] {
+  --font-scale: 1.08;
 }
 
-[data-font-scale="default"] {
-  --font-scale: 1;
+[data-font-scale="xl"] {
+  --font-scale: 1.16;
 }
 
-[data-font-scale="large"] {
-  --font-scale: 1.1;
-}
-
-/* Responsive token overrides */
-@media (max-width: 768px), (pointer: coarse) {
-  :root {
-    --btn-height: 44px;
-    --input-height: 44px;
-  }
-}
-
-@media (max-width: 640px) {
-  :root {
-    --space-6: 1.15rem;
-    --space-8: 1.5rem;
-  }
-}
-
-/* Global accessibility guarantees — apply to every Noir app */
+/* --------------------------------------------------------------------------
+   7. ACCESSIBILITY: KEYBOARD FOCUS & REDUCED MOTION
+   -------------------------------------------------------------------------- */
 :focus-visible {
-  outline: 2px solid var(--accent-gold);
+  outline: 2px solid var(--border-focus);
   outline-offset: 2px;
+}
+
+.skip-link {
+  position: fixed;
+  top: -120px;
+  left: var(--space-4);
+  z-index: 999;
+  background: var(--brand-primary);
+  color: var(--text-inverse);
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: none;
+  transition: top var(--duration-fast) var(--ease-out);
+}
+
+.skip-link:focus {
+  top: var(--space-4);
 }
 
 @media (prefers-reduced-motion: reduce) {

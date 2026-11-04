@@ -3,12 +3,16 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useStore } from "@/store/StoreProvider";
 import { Icon } from "@/components/ui/Icon";
+import { BrandMonogram } from "@/components/ui/BrandLogo";
+import { ASSISTANT } from "@/config/ui.config";
 import { formatInr, formatPriceRange, getProductImage } from "@noir/utils/formatters.js";
 
 export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
-  const { currentActor, assistant, addToBag, openDrawer, navigateTo } = useStore();
-  const [isOpen, setIsOpen] = useState(false);
+  const { currentActor, assistant, addToBag, openDrawer, navigateTo, ui, setOverlay } = useStore();
   const [input, setInput] = useState("");
+
+  const isOpen = Boolean(ui?.chatOpen);
+  const setIsOpen = (nextOpen) => setOverlay({ chatOpen: Boolean(nextOpen) });
 
   const {
     messages,
@@ -47,44 +51,42 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
 
   return (
     <>
-      {/* Floating launcher trigger (fixed bottom-right) */}
       <div className="ai-widget-container" aria-live="polite">
         {!isOpen && (
           <button
             type="button"
             className="ai-floating-trigger"
             onClick={() => setIsOpen(true)}
-            aria-label="Open Noir Atelier AI Stylist Concierge"
+            aria-label="Open Noir Atelier Personal Fashion Consultant"
             aria-haspopup="dialog"
             aria-expanded={false}
           >
-            <span className="ai-trigger-sparkle">
-              <Icon name="sparkles" size={22} />
+            <span className="ai-trigger-sparkle" aria-hidden="true">
+              <BrandMonogram size={22} reversed />
             </span>
-            <span className="ai-trigger-label">AI Stylist</span>
+            <span className="ai-trigger-label">Personal Stylist</span>
             <span className="ai-trigger-ping" aria-hidden="true" />
           </button>
         )}
 
-        {/* Floating Concierge Window (Desktop card / Mobile sheet) */}
         {isOpen && (
           <section
             className="ai-assistant-card"
             role="dialog"
-            aria-label="Noir Atelier AI Stylist Concierge"
+            aria-label="Noir Atelier Personal Fashion Consultant"
             aria-modal="false"
           >
             {/* Header */}
             <header className="ai-card-header">
               <div className="ai-header-lead">
-                <div className="ai-avatar-badge">
-                  <Icon name="sparkles" size={16} />
+                <div className="ai-avatar-badge" aria-hidden="true">
+                  <BrandMonogram size={24} reversed />
                   <span className="ai-online-dot" />
                 </div>
                 <div>
-                  <h3 className="ai-header-title">Noir Atelier Stylist</h3>
+                  <h3 className="ai-header-title">{ASSISTANT.name}</h3>
                   <p className="ai-header-subtitle">
-                    4-Layer Concierge · {currentActor.label || "Customer"}
+                    Live Maison Archive · {currentActor.label || "Private Client"}
                   </p>
                 </div>
               </div>
@@ -93,8 +95,8 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
                   type="button"
                   className="icon-btn-subtle"
                   onClick={clearHistory}
-                  title="Clear conversation"
-                  aria-label="Clear conversation history"
+                  title="Reset consultation"
+                  aria-label="Reset consultation history"
                 >
                   <Icon name="refresh" size={15} />
                 </button>
@@ -102,18 +104,18 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
                   type="button"
                   className="icon-btn-subtle"
                   onClick={() => setIsOpen(false)}
-                  title="Close Assistant"
-                  aria-label="Close Assistant"
+                  title="Close Consultant"
+                  aria-label="Close Consultant"
                 >
                   <Icon name="close" size={16} />
                 </button>
               </div>
             </header>
 
-            {/* Quick Prompts Bar */}
+            {/* Database-Driven Suggested Consultations */}
             {quickPrompts.length > 0 && (
-              <div className="ai-prompts-scroller" role="region" aria-label="Suggested questions">
-                {quickPrompts.slice(0, 4).map((p, idx) => (
+              <div className="ai-prompts-scroller" role="region" aria-label="Suggested consultations">
+                {quickPrompts.slice(0, 5).map((p, idx) => (
                   <button
                     key={idx}
                     type="button"
@@ -136,13 +138,13 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
                 >
                   {msg.role === "assistant" && (
                     <div className="ai-bot-avatar" aria-hidden="true">
-                      <Icon name="sparkles" size={13} />
+                      <BrandMonogram size={17} reversed />
                     </div>
                   )}
 
                   <div className={`ai-bubble ${msg.role === "user" ? "user-bubble" : "assistant-bubble"}`}>
                     {msg.role === "assistant" && msg.persona && (
-                      <div style={{ fontSize: "10.5px", fontWeight: 600, color: "var(--text-muted)", marginBottom: "0.2rem" }}>
+                      <div className="ai-persona-label">
                         {msg.persona}
                       </div>
                     )}
@@ -155,7 +157,7 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
                           <Icon name="check" size={14} />
                         </div>
                         <div className="ai-action-details">
-                          <div className="ai-action-title">Added to Shopping Bag</div>
+                          <div className="ai-action-title">Placed in Shopping Bag</div>
                           <div className="ai-action-sub">
                             {msg.actionCard.name || msg.actionCard.productId}
                             {msg.actionCard.size ? ` · Size ${msg.actionCard.size}` : ""}
@@ -182,7 +184,7 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
                           <Icon name="package" size={14} />
                         </div>
                         <div className="ai-action-details">
-                          <div className="ai-action-title">Order Confirmed</div>
+                          <div className="ai-action-title">Acquisition Confirmed</div>
                           <div className="ai-action-sub">
                             Ref #{msg.actionCard.orderId}
                             {msg.actionCard.grandTotal
@@ -207,9 +209,9 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
                           <Icon name="shield" size={14} />
                         </div>
                         <div className="ai-action-details">
-                          <div className="ai-action-title">Return Claim Filed</div>
+                          <div className="ai-action-title">Return Dossier Filed</div>
                           <div className="ai-action-sub">
-                            Tier {msg.actionCard.tier || "1"} Refund · RMA pending
+                            Tier {msg.actionCard.tier || "1"} Refund · RMA registered
                           </div>
                         </div>
                         <button
@@ -222,7 +224,7 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
                       </div>
                     )}
 
-                    {/* Direct Product Recommendations inside chat */}
+                    {/* Direct Archive Product Cards inside Consultation */}
                     {Array.isArray(msg.productCards) && msg.productCards.length > 0 && (
                       <div className="ai-product-carousel">
                         {msg.productCards.map((p) => {
@@ -257,9 +259,12 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
                                   <button
                                     type="button"
                                     className="btn-pill btn-pill-outline btn-xs"
-                                    onClick={() => onOpenProduct(p)}
+                                    onClick={() => {
+                                      setIsOpen(false);
+                                      onOpenProduct(p);
+                                    }}
                                   >
-                                    View
+                                    Dossier
                                   </button>
                                 )}
                               </div>
@@ -269,13 +274,13 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
                       </div>
                     )}
 
-                    {/* Collapsible Stylist Reasoning & ReAct Steps */}
+                    {/* Collapsible Grounded Archive & Governance Trace */}
                     {Array.isArray(msg.reactSteps) && msg.reactSteps.length > 0 && (
                       <details className="ai-trace-disclosure">
                         <summary className="ai-trace-summary">
-                          <span>Concierge ReAct Trace</span>
+                          <span>Verified Archive &amp; Policy Trace</span>
                           <span className="ai-trace-meta">
-                            {msg.reactSteps.length} steps · {msg.agentName || "supervisor"}
+                            {msg.reactSteps.length} checks · {msg.agentName || "consultant"}
                           </span>
                         </summary>
                         <div className="ai-trace-content">
@@ -299,11 +304,10 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
                 </div>
               ))}
 
-              {/* Thinking Indicator */}
               {isThinking && (
                 <div className="ai-message-row assistant-row">
                   <div className="ai-bot-avatar" aria-hidden="true">
-                    <Icon name="sparkles" size={13} />
+                    <BrandMonogram size={17} reversed />
                   </div>
                   <div className="ai-bubble assistant-bubble ai-typing-bubble">
                     <span className="typing-dot" />
@@ -320,17 +324,17 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
                 ref={inputRef}
                 type="text"
                 className="ai-text-input"
-                placeholder="Ask about tailored garments, linen, sizes, returns…"
+                placeholder={ASSISTANT.inputPlaceholder}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 disabled={isThinking}
-                aria-label="Stylist query"
+                aria-label="Consultation query"
               />
               <button
                 type="submit"
                 className="ai-send-btn"
                 disabled={!input.trim() || isThinking}
-                aria-label="Send message"
+                aria-label="Send inquiry"
               >
                 <Icon name="arrow-right" size={16} />
               </button>

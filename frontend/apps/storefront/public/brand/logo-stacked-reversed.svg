@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 156" fill="none" role="img" aria-label="Noir Atelier Crest Reversed">
+  <g transform="translate(98, 8)">
+    <path d="M13 3.5H51L60.5 13V51L51 60.5H13L3.5 51V13L13 3.5Z" fill="#141312" stroke="#C5A572" stroke-width="1.5"/>
+    <path d="M15.2 7H48.8L57 15.2V48.8L48.8 57H15.2L7 48.8V15.2L15.2 7Z" stroke="#C5A572" stroke-opacity="0.4" stroke-width="0.75"/>
+    <path d="M20.5 19V45M43.5 19V45M20.5 19L43.5 45" stroke="#F5F2EB" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter"/>
+    <path d="M18 19H23M18 45H23M41 19H46M41 45H46" stroke="#F5F2EB" stroke-width="1.35" stroke-linecap="square"/>
+    <path d="M24.5 45L32 16.5L39.5 45" stroke="#C5A572" stroke-width="1.55" stroke-linecap="square" stroke-linejoin="miter"/>
+    <path d="M27 36.5H37" stroke="#C5A572" stroke-width="1.35"/>
+    <path d="M32 11.5L34.2 15L32 18.5L29.8 15L32 11.5Z" fill="#C5A572"/>
+  </g>
+  <text x="130" y="106" text-anchor="middle" fill="#F5F2EB" font-family="'Cormorant Garamond', Georgia, 'Times New Roman', serif" font-size="24" font-weight="600" letter-spacing="6">NOIR ATELIER</text>
+  <line x1="78" y1="119" x2="182" y2="119" stroke="#C5A572" stroke-opacity="0.45" stroke-width="0.8"/>
+  <text x="130" y="136" text-anchor="middle" fill="#B8B2A6" font-family="'Plus Jakarta Sans', 'Helvetica Neue', Arial, sans-serif" font-size="8" font-weight="600" letter-spacing="4">CURATED LUXURY ARCHIVE</text>
+</svg>

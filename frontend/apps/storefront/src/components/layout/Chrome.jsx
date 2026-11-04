@@ -3,22 +3,26 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/ui/Icon";
+import { BrandLogo, BrandMonogram } from "@/components/ui/BrandLogo";
 import { useStore } from "@/store/StoreProvider";
 import { formatInr } from "@noir/utils/formatters.js";
 
 export function AnnouncementBar() {
   const { business, freeShippingMin, taxRules } = useStore();
   const returnDays = business?.returns_and_refunds?.return_window_days ?? 7;
+  const signatureMin = Number(business?.shipping?.signature_required_above_inr ?? 15000);
   const hsnChapters = (taxRules?.hsnChapters || ["61", "62"]).join("/");
 
   return (
-    <aside className="announcement-bar" role="note" aria-label="Store privileges">
+    <aside className="announcement-bar" role="note" aria-label="Maison client privileges">
       <div className="announcement-bar-inner">
         <span>Complimentary Boutique Delivery over {formatInr(freeShippingMin)}</span>
-        <span className="announcement-dot">·</span>
-        <span>{returnDays}-Day Atelier Returns</span>
-        <span className="announcement-dot">·</span>
-        <span>CBIC GST Certified (HSN {hsnChapters})</span>
+        <span className="announcement-dot" aria-hidden="true">·</span>
+        <span>Insured White-Glove Courier over {formatInr(signatureMin)}</span>
+        <span className="announcement-dot" aria-hidden="true">·</span>
+        <span>{returnDays}-Day Security-Seal Returns</span>
+        <span className="announcement-dot announcement-hide-sm" aria-hidden="true">·</span>
+        <span className="announcement-hide-sm">CBIC GST Certified (HSN {hsnChapters})</span>
       </div>
     </aside>
   );
@@ -33,6 +37,7 @@ export function SiteHeader() {
     setSearchQuery,
     cartCount,
     openDrawer,
+    askStylist,
     activePage,
     navigateTo,
     currentActor,
@@ -51,17 +56,22 @@ export function SiteHeader() {
   return (
     <header className="site-header">
       <div className="site-header-inner">
-        {/* Brand & Desktop Navigation */}
+        {/* Brand Identity & Editorial Navigation */}
         <div className="brand-group">
           <Link
             href="/"
             className="brand-logo"
+            aria-label={`${brandTitle} — Home`}
             onClick={() => {
               setActiveDepartment("ALL");
               navigateTo("shop");
             }}
           >
-            {brandTitle}
+            <BrandLogo
+              variant="horizontal"
+              title={brandTitle}
+              subtitle="MAISON DE HAUTE CONFECTION"
+            />
           </Link>
 
           <nav className="primary-nav" aria-label="Garment Collections">
@@ -73,7 +83,7 @@ export function SiteHeader() {
                 navigateTo("shop");
               }}
             >
-              The Edit
+              The Archive
             </button>
             {departments.map((dept) => (
               <button
@@ -93,7 +103,7 @@ export function SiteHeader() {
               className={`nav-link ${activePage === "policies" ? "active" : ""}`}
               onClick={() => navigateTo("policies")}
             >
-              Policies
+              Provenance &amp; Policies
             </button>
             {isStaff && (
               <button
@@ -107,32 +117,41 @@ export function SiteHeader() {
           </nav>
         </div>
 
-        {/* Global Search Bar */}
+        {/* Natural-Language Archive Search */}
         <div className="header-search">
           <span className="header-search-icon">
-            <Icon name="search" size={15} />
+            <Icon name="search" size={14} />
           </span>
           <input
             type="search"
-            placeholder="Search black cotton tees, linen under ₹3,000, merino…"
+            placeholder="Search cashmere coat, silk gown, linen shirt, PRD-041…"
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
               if (activePage !== "shop") navigateTo("shop");
             }}
-            aria-label="Search garments"
+            aria-label="Search curated garments"
           />
+          {searchQuery && (
+            <button
+              type="button"
+              className="header-search-clear"
+              onClick={() => setSearchQuery("")}
+              aria-label="Clear search query"
+            >
+              <Icon name="close" size={12} />
+            </button>
+          )}
         </div>
 
-        {/* Actions Group */}
+        {/* Client & Maison Controls */}
         <div className="header-actions">
           <div className="header-desktop-controls">
-            {/* Demo credential profile switcher */}
             <select
               className="header-pill-select"
               value={currentActor?.token || ""}
               onChange={(e) => switchActor(e.target.value)}
-              aria-label="Switch client or staff credentials"
+              aria-label="Switch client or staff profile"
             >
               {(actorsList || []).map((a) => (
                 <option key={a.token} value={a.token}>
@@ -141,36 +160,41 @@ export function SiteHeader() {
               ))}
             </select>
 
-            {/* Theme switcher */}
             <button
               type="button"
-              className="chip-pill"
+              className="header-icon-btn"
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              aria-label="Toggle color theme"
-              title="Switch light or dark atelier theme"
+              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} atelier theme`}
+              title={theme === "dark" ? "Switch to Alabaster Light" : "Switch to Noir Obsidian"}
             >
               <Icon name={theme === "dark" ? "sun" : "moon"} size={14} />
-              <span>{theme === "dark" ? "Light" : "Noir"}</span>
+              <span>{theme === "dark" ? "Alabaster" : "Noir"}</span>
+            </button>
+
+            <button
+              type="button"
+              className="header-icon-btn"
+              onClick={() => askStylist()}
+              aria-label="Consult Personal Fashion Consultant"
+            >
+              <BrandMonogram size={15} />
+              <span>Stylist</span>
             </button>
           </div>
 
-          {/* Orders Link */}
           <button
             type="button"
-            className={`btn-pill btn-pill-outline ${activePage === "orders" ? "active" : ""}`}
+            className={`btn-pill btn-pill-outline header-action-btn ${activePage === "orders" ? "active" : ""}`}
             onClick={() => navigateTo("orders")}
-            style={{ padding: "0.45rem 0.95rem", fontSize: "var(--text-xs)" }}
             aria-label="Orders and returns"
           >
             <Icon name="package" size={14} />
             <span>Orders</span>
           </button>
 
-          {/* Shopping Bag Button */}
           <button
             type="button"
-            className="btn-pill"
-            style={{ padding: "0.45rem 1.05rem", fontSize: "var(--text-xs)" }}
+            className="btn-pill header-action-btn"
             onClick={() => openDrawer("bag")}
             aria-label={`Shopping bag with ${cartCount} items`}
           >
@@ -178,7 +202,6 @@ export function SiteHeader() {
             <span>Bag ({cartCount})</span>
           </button>
 
-          {/* Mobile Hamburger Button */}
           <button
             type="button"
             className="mobile-menu-btn"
@@ -203,7 +226,7 @@ export function SiteHeader() {
               setMobileMenuOpen(false);
             }}
           >
-            The Edit (All)
+            The Archive (All)
           </button>
           {departments.map((dept) => (
             <button
@@ -237,7 +260,17 @@ export function SiteHeader() {
               setMobileMenuOpen(false);
             }}
           >
-            Atelier Policies
+            Provenance &amp; Policies
+          </button>
+          <button
+            type="button"
+            className="chip-pill"
+            onClick={() => {
+              askStylist();
+              setMobileMenuOpen(false);
+            }}
+          >
+            Personal Stylist
           </button>
           {isStaff && (
             <button
@@ -253,7 +286,7 @@ export function SiteHeader() {
           )}
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+        <div className="mobile-nav-controls">
           <select
             className="header-pill-select"
             value={currentActor?.token || ""}
@@ -275,7 +308,7 @@ export function SiteHeader() {
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           >
             <Icon name={theme === "dark" ? "sun" : "moon"} size={14} />
-            <span>{theme === "dark" ? "Light" : "Noir"}</span>
+            <span>{theme === "dark" ? "Alabaster" : "Noir"}</span>
           </button>
         </div>
       </div>
@@ -284,7 +317,7 @@ export function SiteHeader() {
 }
 
 export function MobileTabBar() {
-  const { activePage, navigateTo, cartCount, openDrawer } = useStore();
+  const { activePage, navigateTo, cartCount, openDrawer, askStylist } = useStore();
 
   return (
     <nav className="mobile-bottom-nav" aria-label="Mobile Navigation">
@@ -294,16 +327,16 @@ export function MobileTabBar() {
         onClick={() => navigateTo("shop")}
       >
         <Icon name="home" size={18} />
-        <span>The Edit</span>
+        <span>Archive</span>
       </button>
 
       <button
         type="button"
-        className={`mobile-tab-btn ${activePage === "orders" ? "active" : ""}`}
-        onClick={() => navigateTo("orders")}
+        className="mobile-tab-btn"
+        onClick={() => askStylist()}
       >
-        <Icon name="package" size={18} />
-        <span>Orders</span>
+        <BrandMonogram size={18} />
+        <span>Stylist</span>
       </button>
 
       <button
@@ -317,64 +350,131 @@ export function MobileTabBar() {
 
       <button
         type="button"
-        className={`mobile-tab-btn ${activePage === "policies" ? "active" : ""}`}
-        onClick={() => navigateTo("policies")}
+        className={`mobile-tab-btn ${activePage === "orders" ? "active" : ""}`}
+        onClick={() => navigateTo("orders")}
       >
-        <Icon name="shield" size={18} />
-        <span>Policies</span>
+        <Icon name="package" size={18} />
+        <span>Orders</span>
       </button>
     </nav>
   );
 }
 
 export function SiteFooter() {
-  const { businessConfig, catalogMeta, setActiveDepartment, navigateTo, taxRules } = useStore();
+  const {
+    businessConfig,
+    catalogMeta,
+    catalogTotal,
+    setActiveDepartment,
+    navigateTo,
+    askStylist,
+    freeShippingMin,
+    taxRules,
+  } = useStore();
+
   const name = businessConfig?.store?.name || "Noir Atelier";
-  const deptNames = (catalogMeta?.departments || []).map((d) => d.name).join(", ");
+  const departments = catalogMeta?.departments || [];
+  const deptNames = departments.map((d) => d.name).join(", ");
+  const curatedTarget = businessConfig?.catalog?.curated_collection_target || catalogTotal || 100;
+  const signatureMin = Number(businessConfig?.shipping?.signature_required_above_inr ?? 15000);
+  const returnDays = businessConfig?.returns_and_refunds?.return_window_days ?? 7;
   const hsnChapters = (taxRules?.hsnChapters || ["61", "62"]).join("/");
 
   return (
     <footer className="site-footer">
-      <div className="site-footer-inner">
-        <div>
-          <p className="brand-logo" style={{ fontSize: "var(--text-lg)" }}>
-            {name}
-          </p>
-          <p style={{ margin: "0.25rem 0 0", color: "var(--text-muted)", fontSize: "11px" }}>
-            Tailored luxury garments{deptNames ? ` across ${deptNames}` : ""} — crafted with certified natural fibers in India.
+      <div className="site-footer-grid">
+        <div className="footer-brand-col">
+          <BrandLogo
+            variant="horizontal"
+            title={name.toUpperCase()}
+            subtitle="MAISON DE HAUTE CONFECTION"
+          />
+          <p className="footer-manifesto">
+            An established fashion house presenting a strictly curated {curatedTarget}-garment archive
+            {deptNames ? ` across ${deptNames}` : ""}. Tailored from certified natural fibers—Belgian flax,
+            Como mulberry silk, Himalayan cashmere, and heritage Indian handlooms.
           </p>
         </div>
 
-        <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", alignItems: "center" }}>
-          <button
-            type="button"
-            className="link-subtle"
-            onClick={() => {
-              setActiveDepartment("ALL");
-              navigateTo("shop");
-            }}
-          >
-            The Collection
-          </button>
-          <button
-            type="button"
-            className="link-subtle"
-            onClick={() => navigateTo("orders")}
-          >
-            Order Tracking
-          </button>
-          <button
-            type="button"
-            className="link-subtle"
-            onClick={() => navigateTo("policies")}
-          >
-            GST &amp; Returns
-          </button>
+        <div className="footer-nav-col">
+          <h3 className="footer-heading">The Archive</h3>
+          <ul className="footer-links">
+            <li>
+              <button
+                type="button"
+                className="link-subtle"
+                onClick={() => {
+                  setActiveDepartment("ALL");
+                  navigateTo("shop");
+                }}
+              >
+                Complete Collection
+              </button>
+            </li>
+            {departments.map((dept) => (
+              <li key={dept.code}>
+                <button
+                  type="button"
+                  className="link-subtle"
+                  onClick={() => {
+                    setActiveDepartment(dept.code);
+                    navigateTo("shop");
+                  }}
+                >
+                  {dept.name}&apos;s Edit
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
 
-        <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-          © {new Date().getFullYear()} {name}. All prices include statutory Goods &amp; Services Tax (CBIC HSN {hsnChapters}).
+        <div className="footer-nav-col">
+          <h3 className="footer-heading">Private Client Care</h3>
+          <ul className="footer-links">
+            <li>
+              <button type="button" className="link-subtle" onClick={() => askStylist()}>
+                Personal Fashion Consultant
+              </button>
+            </li>
+            <li>
+              <button type="button" className="link-subtle" onClick={() => navigateTo("orders")}>
+                Orders &amp; Dispatch Tracking
+              </button>
+            </li>
+            <li>
+              <button type="button" className="link-subtle" onClick={() => navigateTo("policies")}>
+                GST &amp; {returnDays}-Day Return Charter
+              </button>
+            </li>
+          </ul>
         </div>
+
+        <div className="footer-nav-col">
+          <h3 className="footer-heading">Atelier Assurance</h3>
+          <ul className="footer-assurance-list">
+            <li>
+              <Icon name="shield" size={13} />
+              <span>Numbered Security Ribbon (POL-RET-01)</span>
+            </li>
+            <li>
+              <Icon name="truck" size={13} />
+              <span>Complimentary Delivery over {formatInr(freeShippingMin)}</span>
+            </li>
+            <li>
+              <Icon name="award" size={13} />
+              <span>Insured Signature Courier over {formatInr(signatureMin)}</span>
+            </li>
+            <li>
+              <Icon name="check" size={13} />
+              <span>Statutory GST Invoices (CBIC HSN {hsnChapters})</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="site-footer-bottom">
+        <span>© {new Date().getFullYear()} {name}. All prices include statutory Goods &amp; Services Tax (INR).</span>
+        <span>4-Point Hand-Tacked Woven Label · Tamper-Evident Provenance</span>
       </div>
     </footer>
   );

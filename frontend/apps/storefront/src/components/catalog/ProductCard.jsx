@@ -8,25 +8,36 @@ import { LIMITS } from "@/config/ui.config";
 import { formatInr, getProductImage } from "@noir/utils/formatters.js";
 
 export function ProductCard({ product, onSelect }) {
-  const { addToBag, toggleWishlist, isWishlisted, taxRules } = useStore();
+  const { addToBag, toggleWishlist, isWishlisted, taxRules, businessConfig } = useStore();
 
   const stock = Number(product.stock_quantity ?? product.stock ?? 0);
   const availableSizes = product.sizes_available || [];
 
   const [selectedSize, setSelectedSize] = useState(availableSizes[0] || "");
-  // Until the shopper picks a size, a product with size-based pricing shows "From ₹…".
   const [sizeChosen, setSizeChosen] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
 
   const price = product.priceFor(selectedSize);
+  const minPrice = product.priceRange?.min ?? price;
   const showFromPrice = product.hasSizePricing && !sizeChosen;
+
+  const coutureMin = Number(businessConfig?.catalog?.couture_tier_min_inr ?? 100000);
+  const reserveMin = Number(businessConfig?.catalog?.high_value_tier_min_inr ?? 50000);
+  const editionBadge =
+    minPrice >= coutureMin
+      ? { label: "Haute Archive", className: "edition-couture" }
+      : minPrice >= reserveMin
+      ? { label: "Private Reserve", className: "edition-reserve" }
+      : null;
 
   const img = getProductImage(product);
   const wishlisted = isWishlisted(product.product_id);
   const outOfStock = stock <= 0;
-  const lowStock = stock > 0 && stock <= (LIMITS.lowStockThreshold ?? 5);
+  const vaultScarce = stock > 0 && stock <= 2;
+  const lowStock = stock > 2 && stock <= (LIMITS.lowStockThreshold ?? 5);
 
   const gstRate = taxRules.rateFor(price);
+  const fiberSubtitle = product.materialSummary || product.accent_tag || "";
 
   const handleQuickAdd = async (e) => {
     e.stopPropagation();
@@ -46,11 +57,11 @@ export function ProductCard({ product, onSelect }) {
 
   return (
     <article
-      className="product-card"
+      className={`product-card ${editionBadge ? "is-high-value" : ""}`}
       onClick={() => onSelect?.(product)}
       tabIndex={0}
       role="button"
-      aria-label={`View details for ${product.name}`}
+      aria-label={`View dossier for ${product.name}`}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
@@ -58,7 +69,7 @@ export function ProductCard({ product, onSelect }) {
         }
       }}
     >
-      {/* Media container */}
+      {/* 3:4 Editorial Portrait Container */}
       <div className="product-media-wrapper">
         {img.url ? (
           <img
@@ -73,30 +84,44 @@ export function ProductCard({ product, onSelect }) {
           </div>
         )}
 
-        {/* Top Badges */}
+        {/* Top Provenance & Scarcity Plaques */}
         <div className="card-top-badges">
-          {product.accent_tag && (
-            <span className="card-accent-pill">{product.accent_tag}</span>
+          {editionBadge ? (
+            <span className={`card-edition-plaque ${editionBadge.className}`}>
+              {editionBadge.label}
+            </span>
+          ) : (
+            product.accent_tag && (
+              <span className="card-accent-pill">{product.accent_tag}</span>
+            )
+          )}
+
+          {vaultScarce && (
+            <span className="badge card-stock-pill warning">
+              Only {stock} in Vault
+            </span>
           )}
           {lowStock && (
-            <span className="badge card-stock-pill warning">Only {stock} left</span>
+            <span className="badge card-stock-pill warning">
+              Limited · {stock} left
+            </span>
           )}
           {outOfStock && (
-            <span className="badge card-stock-pill danger">Sold Out</span>
+            <span className="badge card-stock-pill danger">Archived / Sold Out</span>
           )}
         </div>
 
-        {/* Wishlist Button */}
+        {/* Save to Private Wishlist */}
         <button
           type="button"
           className={`card-wishlist-btn ${wishlisted ? "active" : ""}`}
           onClick={handleWishlistClick}
           aria-label={wishlisted ? "Remove from Wishlist" : "Save to Wishlist"}
         >
-          <Icon name={wishlisted ? "heart-filled" : "heart"} size={16} />
+          <Icon name={wishlisted ? "heart-filled" : "heart"} size={15} />
         </button>
 
-        {/* Quick Size Overlay on hover/focus */}
+        {/* Quick Size Selection Bar on Hover / Focus */}
         {!outOfStock && availableSizes.length > 0 && (
           <div
             className="card-quick-sizes"
@@ -125,10 +150,10 @@ export function ProductCard({ product, onSelect }) {
         )}
       </div>
 
-      {/* Product Information */}
+      {/* Garment Information */}
       <div className="product-card-body">
         <div className="product-card-meta">
-          <span className="product-dept-tag" style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+          <span className="product-dept-tag">
             <span>
               {product.department}
               {product.categoryName ? ` · ${product.categoryName}` : ""}
@@ -142,15 +167,24 @@ export function ProductCard({ product, onSelect }) {
               />
             )}
           </span>
-          <div className="product-card-rating">
-            <StarRating
-              rating={product.average_rating || 5}
-              count={product.review_count || 0}
-            />
-          </div>
+          {product.review_count > 0 && (
+            <div className="product-card-rating">
+              <StarRating
+                rating={product.average_rating || 5}
+                count={product.review_count || 0}
+              />
+            </div>
+          )}
         </div>
 
         <h3 className="product-card-title">{product.name}</h3>
+
+        {fiberSubtitle && (
+          <p className="product-card-composition">
+            {fiberSubtitle}
+            {product.country_of_origin ? ` · ${product.country_of_origin}` : ""}
+          </p>
+        )}
 
         <div className="product-card-footer">
           <div className="product-price-stack">
@@ -159,7 +193,7 @@ export function ProductCard({ product, onSelect }) {
             </span>
             <span className="product-gst-caption">
               {showFromPrice
-                ? "Price varies by size · incl. GST"
+                ? `Varies by size · incl. ${gstRate}% GST`
                 : `${selectedSize ? `Size ${selectedSize} · ` : ""}incl. ${gstRate}% GST`}
             </span>
           </div>
@@ -177,8 +211,8 @@ export function ProductCard({ product, onSelect }) {
               <Icon name="check" size={14} />
             ) : (
               <>
-                <Icon name="bag" size={14} />
-                <span>+ Bag</span>
+                <Icon name="bag" size={13} />
+                <span>Add</span>
               </>
             )}
           </button>

@@ -5,18 +5,21 @@ import { useStore } from "@/store/StoreProvider";
 import { normalizeProduct } from "@/store/normalizers";
 import { Modal } from "@/components/ui/Overlay";
 import { Icon } from "@/components/ui/Icon";
+import { BrandMonogram, GarmentWovenLabel } from "@/components/ui/BrandLogo";
 import { StarRating, QuantityStepper, Button } from "@/components/ui/Controls";
 import { formatInr, formatPriceRange, getProductImage, validateReviewForm } from "@noir/utils/formatters.js";
 
 export function ProductDetailModal({ product: initialProduct, isOpen, onClose }) {
   const {
     apiClient,
-    currentActor,
     addToBag,
     openDrawer,
+    openProduct,
+    askStylist,
     notify,
     taxRules,
     business,
+    paymentMethods,
     catalogMeta,
     refreshCatalog,
   } = useStore();
@@ -39,15 +42,12 @@ export function ProductDetailModal({ product: initialProduct, isOpen, onClose })
   const [quantity, setQuantity] = useState(1);
   const [isAdding, setIsAdding] = useState(false);
 
-  // Recommendations state
   const [recommendations, setRecommendations] = useState([]);
 
-  // Reviews state
   const [reviews, setReviews] = useState([]);
   const [reviewCount, setReviewCount] = useState(0);
   const [avgRating, setAvgRating] = useState(5.0);
 
-  // Review Form state
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [reviewRating, setReviewRating] = useState(5);
   const [fitFeedback, setFitFeedback] = useState(defaultFitCode);
@@ -96,16 +96,45 @@ export function ProductDetailModal({ product: initialProduct, isOpen, onClose })
   if (!product) return null;
 
   const stock = Number(product.stock_quantity ?? product.stock ?? 0);
+  const sizeBreakdown = product.size_breakdown || product.inventory?.size_breakdown || null;
+  const selectedSizeStock =
+    sizeBreakdown && selectedSize && sizeBreakdown[selectedSize] != null
+      ? Number(sizeBreakdown[selectedSize])
+      : stock;
+
   const availableSizes = product.sizes_available || [];
   const price = product.priceFor(selectedSize);
   const gstRate = taxRules.rateFor(price);
+  const taxableValue = gstRate > 0 ? price / (1 + gstRate / 100) : price;
+  const includedGstAmount = price - taxableValue;
+
   const returnWindowDays = business?.returns_and_refunds?.return_window_days ?? 7;
+  const signatureMin = Number(business?.shipping?.signature_required_above_inr ?? 15000);
+  const freeShippingMin = Number(business?.shipping?.free_shipping_threshold_inr ?? 1999);
+  const coutureMin = Number(business?.catalog?.couture_tier_min_inr ?? 100000);
+  const reserveMin = Number(business?.catalog?.high_value_tier_min_inr ?? 50000);
+
+  const isCouture = price >= coutureMin;
+  const isHighValue = price >= reserveMin;
+  const requiresSignature = price >= signatureMin;
+
+  const editionTitle = isCouture
+    ? "HAUTE ARCHIVE EDITION"
+    : isHighValue
+    ? "PRIVATE CLIENT RESERVE"
+    : "ATELIER EDITION";
+
+  const selectedVariant = (product.variants || []).find((v) => v.size === selectedSize);
+  const activeSku = selectedVariant?.sku || product.sku || product.product_id;
+
+  const eligibleMethods = (paymentMethods || []).filter(
+    (pm) => price >= (pm.minOrder || 0) && price <= (pm.maxOrder ?? Infinity)
+  );
 
   const img = getProductImage(product);
-  const outOfStock = stock <= 0;
-  const maxStock = Math.min(Math.max(stock, 1), 10);
+  const outOfStock = stock <= 0 || selectedSizeStock <= 0;
+  const maxStock = Math.min(Math.max(selectedSizeStock, 1), 10);
 
-  /** Resolves to true when the item reached the bag (the store toasts any error). */
   const handleAddToBag = async () => {
     if (outOfStock || isAdding) return false;
     setIsAdding(true);
@@ -120,6 +149,13 @@ export function ProductDetailModal({ product: initialProduct, isOpen, onClose })
     if (!(await handleAddToBag())) return;
     onClose();
     openDrawer("bag");
+  };
+
+  const handleConsultStylist = () => {
+    onClose();
+    askStylist(
+      `Tell me about ${product.product_id} (${product.name})—its natural fiber composition, fit, and styling pairings.`
+    );
   };
 
   const handleReviewSubmit = async (e) => {
@@ -151,8 +187,8 @@ export function ProductDetailModal({ product: initialProduct, isOpen, onClose })
       refreshCatalog?.();
       notify({
         type: "success",
-        title: "Review submitted",
-        description: "Thank you for your verified fit feedback.",
+        title: "Client impression recorded",
+        description: "Thank you for sharing verified fit and fabric feedback.",
       });
     } catch (err) {
       notify({
@@ -168,7 +204,7 @@ export function ProductDetailModal({ product: initialProduct, isOpen, onClose })
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={product.name} size="lg">
       <div className="product-detail-layout">
-        {/* Gallery / Left Column */}
+        {/* Left Column: Editorial Portrait + Physical Woven Label Specimen */}
         <div className="product-detail-media">
           <div className="detail-main-image-wrap">
             {img.url ? (
@@ -178,27 +214,47 @@ export function ProductDetailModal({ product: initialProduct, isOpen, onClose })
                 <span>{product.name}</span>
               </div>
             )}
-            {product.accent_tag && (
-              <span className="card-accent-pill detail-accent-tag">
-                {product.accent_tag}
+            <span className={`card-edition-plaque detail-accent-tag ${isCouture ? "edition-couture" : "edition-reserve"}`}>
+              {isHighValue ? editionTitle : product.accent_tag || editionTitle}
+            </span>
+          </div>
+
+          {/* Physical Garment Label & Authenticity Specimen */}
+          <div className="detail-provenance-specimen">
+            <GarmentWovenLabel
+              origin={product.country_of_origin || "India"}
+              composition={product.compositionLabel || product.accent_tag || "Certified Natural Fiber"}
+              edition={editionTitle}
+            />
+            <div className="detail-seal-caption">
+              <Icon name="shield" size={14} />
+              <span>
+                Accompanied by numbered <strong>POL-RET-01</strong> tamper-evident security ribbon &amp; archival garment cover.
               </span>
-            )}
+            </div>
           </div>
         </div>
 
-        {/* Right Details Column */}
+        {/* Right Column: Couture Garment Dossier */}
         <div className="product-detail-info">
           <div className="detail-header-meta">
             <span className="detail-dept-badge">
               {product.department}
               {product.categoryName ? ` · ${product.categoryName}` : ""}
             </span>
-            <span className="detail-sku-badge">REF: {product.sku || product.product_id}</span>
+            <span className="detail-sku-badge">SKU: {activeSku}</span>
+            {product.country_of_origin && (
+              <span className="detail-origin-badge">Origin: {product.country_of_origin}</span>
+            )}
           </div>
 
           <h2 className="detail-product-title">{product.name}</h2>
 
-          {/* Rating */}
+          {product.description && (
+            <p className="detail-editorial-lead">{product.description}</p>
+          )}
+
+          {/* Client Rating */}
           <div className="detail-rating-row">
             <StarRating rating={avgRating} count={reviewCount} />
             <a
@@ -209,51 +265,59 @@ export function ProductDetailModal({ product: initialProduct, isOpen, onClose })
                 document.getElementById("reviews-section")?.scrollIntoView({ behavior: "smooth" });
               }}
             >
-              {reviewCount} verified {reviewCount === 1 ? "review" : "reviews"}
+              {reviewCount} verified client {reviewCount === 1 ? "impression" : "impressions"}
             </a>
           </div>
 
-          {/* Price & GST Slab */}
+          {/* Transparent Pricing & Statutory GST Ledger */}
           <div className="detail-pricing-box">
-            <div className="detail-price-main" aria-live="polite">{formatInr(price)}</div>
-            <div className="detail-gst-explainer">
-              <span className="gst-tag">{gstRate}% GST Applicable</span>
-              {product.hsn_code && <span className="hsn-tag">HSN {product.hsn_code}</span>}
+            <div className="detail-price-top">
+              <div className="detail-price-main" aria-live="polite">{formatInr(price)}</div>
+              <div className="detail-gst-explainer">
+                <span className="gst-tag">{gstRate}% GST Included</span>
+                {product.hsn_code && <span className="hsn-tag">CBIC HSN {product.hsn_code}</span>}
+              </div>
             </div>
             <p className="detail-tax-note">
               {product.hasSizePricing
-                ? `Price for size ${selectedSize}; sizes range ${formatPriceRange(product)}. `
+                ? `Size ${selectedSize} tariff (${formatPriceRange(product)} across sizes). `
                 : ""}
-              Includes GST.
+              Taxable base {formatInr(Math.round(taxableValue))} + statutory GST {formatInr(Math.round(includedGstAmount))}.
+              {price >= freeShippingMin ? " Complimentary insured delivery included." : ""}
             </p>
           </div>
 
-          {/* Size Selector */}
+          {/* Tailored Size Selector */}
           <div className="detail-size-section">
             <div className="size-label-row">
               <span className="control-label">Select Tailored Size</span>
               {product.fit_guide && <span className="size-fit-tip">{product.fit_guide}</span>}
             </div>
             <div className="size-options-grid" role="radiogroup" aria-label="Select size">
-              {availableSizes.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  className={`size-btn-pill ${product.hasSizePricing ? "size-btn-pill--priced" : ""} ${selectedSize === s ? "active" : ""}`}
-                  onClick={() => setSelectedSize(s)}
-                  role="radio"
-                  aria-checked={selectedSize === s}
-                >
-                  <span>{s}</span>
-                  {product.hasSizePricing && (
-                    <span className="size-btn-price">{formatInr(product.priceFor(s))}</span>
-                  )}
-                </button>
-              ))}
+              {availableSizes.map((s) => {
+                const szQty = sizeBreakdown && sizeBreakdown[s] != null ? Number(sizeBreakdown[s]) : null;
+                const szSoldOut = szQty !== null && szQty <= 0;
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    className={`size-btn-pill ${product.hasSizePricing ? "size-btn-pill--priced" : ""} ${selectedSize === s ? "active" : ""}`}
+                    onClick={() => setSelectedSize(s)}
+                    role="radio"
+                    aria-checked={selectedSize === s}
+                    disabled={szSoldOut}
+                  >
+                    <span>{s}</span>
+                    {product.hasSizePricing && (
+                      <span className="size-btn-price">{formatInr(product.priceFor(s))}</span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Quantity & CTA */}
+          {/* Quantity, Acquisition CTAs & Private Stylist Handoff */}
           <div className="detail-actions-section">
             <div className="qty-row">
               <span className="control-label">Quantity</span>
@@ -266,8 +330,8 @@ export function ProductDetailModal({ product: initialProduct, isOpen, onClose })
               />
               <span className="stock-status-label">
                 {outOfStock
-                  ? "Sold Out"
-                  : `${stock} units in Atelier Vault`}
+                  ? "Currently Archived / Out of Stock"
+                  : `${selectedSizeStock} ${selectedSizeStock === 1 ? "piece" : "pieces"} in Atelier Vault${selectedSize ? ` (Size ${selectedSize})` : ""}`}
               </span>
             </div>
 
@@ -288,17 +352,51 @@ export function ProductDetailModal({ product: initialProduct, isOpen, onClose })
                 disabled={outOfStock}
                 style={{ flex: 1 }}
               >
-                Buy Now
+                Acquire Now
               </Button>
             </div>
+
+            <button
+              type="button"
+              className="detail-stylist-btn"
+              onClick={handleConsultStylist}
+            >
+              <BrandMonogram size={16} />
+              <span>Consult Personal Fashion Consultant on Fit, Provenance &amp; Styling</span>
+            </button>
           </div>
 
-          {/* Database-Driven Garment Attributes, Composition & Care */}
+          {/* High-Value & Maison Client Confidence Box */}
+          <div className={`detail-trust-ledger ${isHighValue ? "is-elevated" : ""}`}>
+            <div className="trust-ledger-title">
+              <Icon name="award" size={14} />
+              <span>{isHighValue ? "Private Reserve & Haute Archive Assurance" : "Maison Client Assurance"}</span>
+            </div>
+            <ul className="trust-ledger-list">
+              <li>
+                <strong>Authenticity &amp; Seal:</strong> Individually inspected and sealed with a numbered tamper-evident security ribbon (Policy POL-RET-01).
+              </li>
+              <li>
+                <strong>{requiresSignature ? "Insured White-Glove Courier:" : "Boutique Dispatch:"}</strong>{" "}
+                {requiresSignature
+                  ? `Complimentary transit-insured delivery with mandatory recipient signature verification (orders ≥ ${formatInr(signatureMin)}).`
+                  : `Complimentary boutique delivery on orders from ${formatInr(freeShippingMin)}.`}
+              </li>
+              {eligibleMethods.length > 0 && (
+                <li>
+                  <strong>Verified Settlement:</strong>{" "}
+                  {eligibleMethods.map((m) => m.label).join(" · ")}.
+                </li>
+              )}
+            </ul>
+          </div>
+
+          {/* Database-Driven Craftsmanship & Specification Table */}
           <div className="detail-fabric-specs">
             {product.color && (
               <div className="spec-item">
-                <span className="spec-label">Atelier Colourway:</span>
-                <span className="spec-val" style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
+                <span className="spec-label">Colourway</span>
+                <span className="spec-val spec-color-val">
                   {product.colorHex && (
                     <span
                       className="color-swatch-dot"
@@ -311,23 +409,35 @@ export function ProductDetailModal({ product: initialProduct, isOpen, onClose })
               </div>
             )}
             <div className="spec-item">
-              <span className="spec-label">Material &amp; Composition:</span>
+              <span className="spec-label">Natural Fiber</span>
               <span className="spec-val">
                 {product.compositionLabel || product.accent_tag || product.description}
               </span>
             </div>
+            {product.country_of_origin && (
+              <div className="spec-item">
+                <span className="spec-label">Provenance</span>
+                <span className="spec-val">Crafted in {product.country_of_origin}</span>
+              </div>
+            )}
+            {product.fit_guide && (
+              <div className="spec-item">
+                <span className="spec-label">Silhouette &amp; Fit</span>
+                <span className="spec-val">{product.fit_guide}</span>
+              </div>
+            )}
             {product.fabric_and_care && (
               <div className="spec-item">
-                <span className="spec-label">Garment Care:</span>
+                <span className="spec-label">Care Protocol</span>
                 <span className="spec-val">{product.fabric_and_care}</span>
               </div>
             )}
             <div className="spec-item">
-              <span className="spec-label">Atelier Guarantee:</span>
+              <span className="spec-label">Return Charter</span>
               <span className="spec-val">
                 {product.final_sale
                   ? "Final Sale archive piece — eligible for return only on verified manufacturing defects."
-                  : `Complimentary returns within ${returnWindowDays} days if unworn with security ribbon attached.`}
+                  : `Complimentary ${returnWindowDays}-day return window when unworn with original POL-RET-01 security ribbon intact.`}
               </span>
             </div>
           </div>
@@ -337,32 +447,37 @@ export function ProductDetailModal({ product: initialProduct, isOpen, onClose })
       {/* Complete the Look: Database-Driven Recommendations */}
       {recommendations.length > 0 && (
         <section className="detail-recommendations-section">
-          <h3 className="section-subheading">Complete the Look</h3>
+          <h3 className="section-subheading">Complete the Ensemble</h3>
           <p className="section-subcaption">
-            Stylist-curated pieces from the collection that pair seamlessly.
+            Curated pairings selected from the Noir Atelier archive.
           </p>
           <div className="recs-grid">
             {recommendations.map((rec) => {
               const recImg = getProductImage(rec);
               return (
                 <div key={rec.product_id} className="rec-card">
-                  <div className="rec-thumb-wrap">
+                  <button
+                    type="button"
+                    className="rec-thumb-wrap"
+                    onClick={() => openProduct?.(rec.product_id)}
+                    aria-label={`Inspect ${rec.name}`}
+                  >
                     {recImg.url ? (
                       <img src={recImg.url} alt={recImg.alt} className="rec-thumb" />
                     ) : (
                       <div className="rec-thumb placeholder" />
                     )}
-                  </div>
+                  </button>
                   <div className="rec-info">
                     <h4 className="rec-title">{rec.name}</h4>
                     <span className="rec-price">{formatPriceRange(rec)}</span>
                   </div>
                   <button
                     type="button"
-                    className="btn-pill btn-xs"
+                    className="btn-pill btn-pill-outline btn-xs"
                     onClick={() => addToBag(rec, rec.sizes_available[0], 1)}
                   >
-                    + Bag
+                    + Add ({rec.sizes_available?.[0]})
                   </button>
                 </div>
               );
@@ -371,13 +486,13 @@ export function ProductDetailModal({ product: initialProduct, isOpen, onClose })
         </section>
       )}
 
-      {/* Customer Reviews Section */}
+      {/* Client Impressions & Fit Reviews */}
       <section id="reviews-section" className="detail-reviews-section">
         <div className="reviews-header-bar">
           <div>
-            <h3 className="section-subheading">Client Reviews</h3>
+            <h3 className="section-subheading">Verified Client Impressions</h3>
             <span className="reviews-aggregate-caption">
-              ★ {Number(avgRating).toFixed(1)} out of 5 based on {reviewCount} ratings
+              ★ {Number(avgRating).toFixed(1)} average across {reviewCount} verified {reviewCount === 1 ? "acquisition" : "acquisitions"}
             </span>
           </div>
 
@@ -387,19 +502,18 @@ export function ProductDetailModal({ product: initialProduct, isOpen, onClose })
               className="btn-pill btn-pill-outline btn-sm"
               onClick={() => setShowReviewForm(true)}
             >
-              Write a Review
+              Record Impression
             </button>
           )}
         </div>
 
-        {/* Review Submission Form (Demonstrates Principles 9 & 10) */}
         {showReviewForm && (
           <form className="review-composer-card" onSubmit={handleReviewSubmit}>
-            <h4 className="composer-heading">Review {product.name}</h4>
+            <h4 className="composer-heading">Share Fit &amp; Craftsmanship Feedback</h4>
 
             <div className="composer-row">
               <div>
-                <label className="field-label">Overall Rating</label>
+                <label className="field-label">Rating</label>
                 <div className="star-picker" role="radiogroup" aria-label="Select star rating">
                   {[1, 2, 3, 4, 5].map((num) => (
                     <button
@@ -419,7 +533,7 @@ export function ProductDetailModal({ product: initialProduct, isOpen, onClose })
               {fitOptions.length > 0 && (
                 <div>
                   <label className="field-label" htmlFor="fit-feedback-select">
-                    Fit Feedback
+                    Fit Assessment
                   </label>
                   <select
                     id="fit-feedback-select"
@@ -439,13 +553,13 @@ export function ProductDetailModal({ product: initialProduct, isOpen, onClose })
 
             <div className="composer-comment-box">
               <label className="field-label" htmlFor="review-comment-input">
-                Your Review
+                Impression
               </label>
               <textarea
                 id="review-comment-input"
                 className={`textarea-control ${formErrors.comment ? "error" : ""}`}
                 rows={3}
-                placeholder="Describe fabric handfeel, tailoring, drape, or sizing..."
+                placeholder="Note the fabric hand-feel, drape, tailoring, and fit..."
                 value={reviewComment}
                 onChange={(e) => setReviewComment(e.target.value)}
                 aria-invalid={!!formErrors.comment}
@@ -462,7 +576,7 @@ export function ProductDetailModal({ product: initialProduct, isOpen, onClose })
                 size="sm"
                 isLoading={isSubmittingReview}
               >
-                Submit Verified Review
+                Submit Impression
               </Button>
               <Button
                 type="button"
@@ -476,11 +590,10 @@ export function ProductDetailModal({ product: initialProduct, isOpen, onClose })
           </form>
         )}
 
-        {/* Existing Reviews List */}
         <div className="reviews-list">
           {reviews.length === 0 ? (
             <p className="no-reviews-note">
-              No reviews yet for this tailored piece. Be the first to share fit feedback!
+              No client impressions recorded yet for this archive piece.
             </p>
           ) : (
             reviews.map((rev) => (
@@ -491,7 +604,7 @@ export function ProductDetailModal({ product: initialProduct, isOpen, onClose })
                       {rev.author_name || rev.customer_id || "Verified Client"}
                     </span>
                     <span className="verified-badge">
-                      <Icon name="check" size={12} /> Verified Purchase
+                      <Icon name="check" size={12} /> Verified Acquisition
                     </span>
                   </div>
                   <span className="review-date">

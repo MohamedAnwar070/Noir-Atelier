@@ -4,9 +4,9 @@
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  padding: 0.18rem 0.6rem;
+  padding: 0.18rem 0.58rem;
   border: 1px solid var(--tone-border, var(--border-subtle));
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   background: var(--tone-bg, var(--bg-subtle));
   color: var(--tone-fg, var(--text-secondary));
   font-size: var(--text-2xs);

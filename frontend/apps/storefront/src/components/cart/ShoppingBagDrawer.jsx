@@ -31,6 +31,7 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
     taxRules,
     notify,
     navigateTo,
+    askStylist,
   } = useStore();
 
   const [couponInput, setCouponInput] = useState("");
@@ -39,16 +40,32 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
 
   const [chosenAddressId, setSelectedAddressId] = useState(null);
   const [chosenPaymentMethod, setSelectedPaymentMethod] = useState(null);
+
   const methods = paymentMethods || [];
+  const grandTotal = Number(cartTotals.grandTotal || 0);
+
+  const isMethodEligible = (pm) => {
+    const min = Number(pm.minOrder || 0);
+    const max = pm.maxOrder != null ? Number(pm.maxOrder) : Infinity;
+    return grandTotal >= min && grandTotal <= max;
+  };
+
+  const eligibleMethods = methods.filter(isMethodEligible);
+  const chosenMethodObj = methods.find((m) => m.id === chosenPaymentMethod);
+  const selectedPaymentMethod =
+    chosenMethodObj && isMethodEligible(chosenMethodObj)
+      ? chosenMethodObj.id
+      : eligibleMethods[0]?.id ?? "";
+
   const selectedAddressId = chosenAddressId ?? customerAddresses?.[0]?.address_id ?? null;
-  const selectedPaymentMethod = chosenPaymentMethod ?? methods[0]?.id ?? "";
 
   const returnDays = business?.returns_and_refunds?.return_window_days ?? 7;
+  const signatureMin = Number(business?.shipping?.signature_required_above_inr ?? 15000);
+  const qualifiesWhiteGlove = grandTotal >= signatureMin;
 
-  // New Address Modal state (aligned with backend AddressCreateRequest)
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [addrForm, setAddrForm] = useState({
-    label: "Home",
+    label: "Residence",
     street: "",
     city: "",
     state: "Tamil Nadu",
@@ -57,7 +74,6 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
   const [addrErrors, setAddrErrors] = useState({});
   const [isSavingAddr, setIsSavingAddr] = useState(false);
 
-  // Checkout submission state
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [checkoutError, setCheckoutError] = useState(null);
 
@@ -80,7 +96,7 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
     setIsApplyingCoupon(false);
     if (result.ok) {
       setCouponInput("");
-      notify({ type: "success", title: "Coupon applied", description: result.message });
+      notify({ type: "success", title: "Privilege code applied", description: result.message });
     } else {
       setCouponError(result.message);
     }
@@ -99,11 +115,11 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
       const added = await addCustomerAddress(addrForm);
       setSelectedAddressId(added.address_id);
       setShowAddressModal(false);
-      setAddrForm({ label: "Home", street: "", city: "", state: "Tamil Nadu", pin_code: "" });
+      setAddrForm({ label: "Residence", street: "", city: "", state: "Tamil Nadu", pin_code: "" });
       notify({
         type: "success",
-        title: "Address saved",
-        description: "Delivery destination has been updated.",
+        title: "Destination saved",
+        description: "Delivery residence has been added to your client profile.",
       });
     } catch (err) {
       notify({
@@ -131,8 +147,8 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
       onClose();
       notify({
         type: "success",
-        title: "Order placed",
-        description: `Order #${order?.order_id || ""} is confirmed. Your invoice has been generated.`,
+        title: "Acquisition confirmed",
+        description: `Order #${order?.order_id || ""} is confirmed with statutory GST invoice.`,
       });
       navigateTo("orders");
     } catch (err) {
@@ -153,31 +169,34 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
         isOpen={isOpen}
         onClose={onClose}
         title={`Shopping Bag (${cart.reduce((sum, i) => sum + i.quantity, 0)})`}
-        width="460px"
+        width="480px"
       >
-        {/* Principle 1: Empty State */}
         {cart.length === 0 ? (
           <div className="bag-empty-wrap">
             <StatePanel
               type="empty"
               title="Your Shopping Bag is Empty"
-              description="Add a tailored garment from the collection to compute real-time HSN 61/62 GST slabs and free shipping eligibility."
-              actionLabel="Explore Garments"
+              description="Select a tailored garment from our curated archive to review live CBIC HSN 61/62 GST slabs and delivery privileges."
+              actionLabel="Explore the Archive"
               onAction={onClose}
             />
           </div>
         ) : (
           <div className="bag-content-layout">
-            {/* Free Shipping Tier Bar */}
+            {/* Delivery & White-Glove Assurance Bar */}
             <div className="shipping-progress-box">
               <div className="shipping-progress-text">
-                {remainingForFreeShipping === 0 ? (
+                {qualifiesWhiteGlove ? (
                   <span className="unlocked-label">
-                    <Icon name="check" size={13} /> You unlocked Free Boutique Delivery
+                    <Icon name="award" size={14} /> Insured White-Glove Courier &amp; Signature Delivery Unlocked
+                  </span>
+                ) : remainingForFreeShipping === 0 ? (
+                  <span className="unlocked-label">
+                    <Icon name="check" size={13} /> Complimentary Boutique Delivery Unlocked
                   </span>
                 ) : (
                   <span>
-                    Add <strong>{formatInr(remainingForFreeShipping)}</strong> more for Free Delivery
+                    Add <strong>{formatInr(remainingForFreeShipping)}</strong> more for Complimentary Boutique Delivery
                   </span>
                 )}
               </div>
@@ -187,9 +206,14 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
                   style={{ width: `${freeShippingProgress}%` }}
                 />
               </div>
+              {qualifiesWhiteGlove && (
+                <p className="white-glove-note">
+                  Dispatched in a tamper-evident archival garment case with mandatory recipient signature verification.
+                </p>
+              )}
             </div>
 
-            {/* Line items list */}
+            {/* Line Items */}
             <div className="bag-items-list" role="list">
               {cart.map((item) => {
                 const img = getProductImage(item);
@@ -217,7 +241,7 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
                       </div>
 
                       <div className="bag-item-sub">
-                        <span className="bag-size-pill">Size: {item.size}</span>
+                        <span className="bag-size-pill">Size {item.size}</span>
                         <span className="bag-unit-price">{formatInr(item.price)} each</span>
                       </div>
 
@@ -238,14 +262,14 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
               })}
             </div>
 
-            {/* Coupon Code Section */}
+            {/* Privilege / Promo Code */}
             <div className="bag-coupon-section">
               {appliedCoupon ? (
                 <div className="applied-coupon-pill">
                   <div className="coupon-lead">
                     <Icon name="check" size={14} />
                     <span>
-                      <strong>{appliedCoupon.code}</strong> applied ({appliedCoupon.description || "Promo"})
+                      <strong>{appliedCoupon.code}</strong> applied ({appliedCoupon.description || "Privilege"})
                     </span>
                   </div>
                   <button
@@ -263,7 +287,7 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
                     type="text"
                     className={`input coupon-input ${couponError ? "input--invalid" : ""}`}
                     aria-invalid={Boolean(couponError)}
-                    placeholder="Promo code (e.g. ATELIER10)"
+                    placeholder="Client privilege code (e.g. ATELIER10)"
                     value={couponInput}
                     onChange={(e) => {
                       setCouponInput(e.target.value);
@@ -273,27 +297,27 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
                   />
                   <button
                     type="submit"
-                    className="btn-pill btn-sm"
+                    className="btn-pill btn-pill-outline btn-sm"
                     disabled={isApplyingCoupon}
                     aria-busy={isApplyingCoupon || undefined}
                   >
-                    {isApplyingCoupon ? "Checking…" : "Apply"}
+                    {isApplyingCoupon ? "Verifying…" : "Apply"}
                   </button>
                 </form>
               )}
               {couponError && <p className="coupon-error-text">{couponError}</p>}
             </div>
 
-            {/* Delivery Address Selector */}
+            {/* Delivery Destination */}
             <div className="bag-checkout-section">
               <div className="checkout-subhead-row">
-                <span className="control-label">Delivery Destination</span>
+                <span className="control-label">Delivery Residence</span>
                 <button
                   type="button"
                   className="link-subtle"
                   onClick={() => setShowAddressModal(true)}
                 >
-                  + Add Address
+                  + Add Residence
                 </button>
               </div>
 
@@ -327,12 +351,20 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
               </div>
             </div>
 
-            {/* Payment Method Selector (Database-Driven) */}
+            {/* Database-Driven Payment Channels with Min/Max Ceiling Intelligence */}
             <div className="bag-checkout-section">
-              <span className="control-label">Payment Method</span>
+              <span className="control-label">Settlement Channel</span>
               <div className="payment-options-grid" role="radiogroup" aria-label="Payment method">
                 {methods.map((pm) => {
-                  const belowMinimum = cartTotals.grandTotal < (pm.minOrder || 0);
+                  const belowMinimum = grandTotal < (pm.minOrder || 0);
+                  const aboveMaximum = pm.maxOrder != null && grandTotal > pm.maxOrder;
+                  const disabled = belowMinimum || aboveMaximum;
+                  const limitHint = belowMinimum
+                    ? `Min ${formatInr(pm.minOrder)}`
+                    : aboveMaximum
+                    ? `Max ${formatInr(pm.maxOrder)}`
+                    : null;
+
                   return (
                     <button
                       key={pm.id}
@@ -341,26 +373,33 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
                       onClick={() => setSelectedPaymentMethod(pm.id)}
                       role="radio"
                       aria-checked={selectedPaymentMethod === pm.id}
-                      disabled={belowMinimum}
-                      title={belowMinimum ? `Available on orders above ${formatInr(pm.minOrder)}` : undefined}
+                      disabled={disabled}
+                      title={
+                        belowMinimum
+                          ? `Available on orders from ${formatInr(pm.minOrder)}`
+                          : aboveMaximum
+                          ? `Channel ceiling ${formatInr(pm.maxOrder)} — select Card or Private Wire`
+                          : pm.label
+                      }
                     >
-                      {pm.label}
+                      <span className="pm-chip-label">{pm.label}</span>
+                      {limitHint && <span className="pm-chip-limit">{limitHint}</span>}
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* Price Breakdown / GST Calculation */}
+            {/* Transparent Tariff & Statutory GST Summary */}
             <div className="bag-summary-card">
               <div className="summary-line">
-                <span>Subtotal ({cart.reduce((s, i) => s + i.quantity, 0)} items)</span>
+                <span>Subtotal ({cart.reduce((s, i) => s + i.quantity, 0)} pieces)</span>
                 <span>{formatInr(cartTotals.subtotal)}</span>
               </div>
 
               {cartTotals.discount > 0 && (
                 <div className="summary-line discount">
-                  <span>Promo Discount ({appliedCoupon?.code})</span>
+                  <span>Privilege Discount ({appliedCoupon?.code})</span>
                   <span>−{formatInr(cartTotals.discount)}</span>
                 </div>
               )}
@@ -368,24 +407,23 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
               {cartTotals.gstLines.map(({ rate, amount }) => (
                 <div key={rate} className="summary-line tax">
                   <span>
-                    Incl. GST {rate}% (garments {taxRules.describe(rate)})
+                    Incl. GST {rate}% ({taxRules.describe(rate)})
                   </span>
                   <span>{formatInr(amount)}</span>
                 </div>
               ))}
 
               <div className="summary-line">
-                <span>Boutique Delivery</span>
+                <span>{qualifiesWhiteGlove ? "Insured White-Glove Courier" : "Boutique Delivery"}</span>
                 <span>{cartTotals.shipping === 0 ? "Complimentary" : formatInr(cartTotals.shipping)}</span>
               </div>
 
               <div className="summary-line grand-total">
-                <span>Grand Total</span>
-                <span className="grand-price">{formatInr(cartTotals.grandTotal)}</span>
+                <span>Total (Incl. GST)</span>
+                <span className="grand-price">{formatInr(grandTotal)}</span>
               </div>
             </div>
 
-            {/* Error Message if checkout fails */}
             {checkoutError && (
               <div className="checkout-error-banner" role="alert">
                 <Icon name="alert" size={16} />
@@ -393,31 +431,42 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
               </div>
             )}
 
-            {/* Place Order CTA */}
+            {/* Sticky Acquisition Footer */}
             <div className="bag-actions-footer">
               <Button
                 variant="primary"
                 size="lg"
                 onClick={handlePlaceOrder}
                 isLoading={isPlacingOrder}
-                disabled={!selectedPaymentMethod}
+                disabled={!selectedPaymentMethod || !selectedAddressId}
                 style={{ width: "100%" }}
               >
-                Confirm &amp; Place Order · {formatInr(cartTotals.grandTotal)}
+                Confirm Acquisition · {formatInr(grandTotal)}
               </Button>
-              <p className="checkout-guarantee-note">
-                <Icon name="lock" size={12} /> 256-bit Secure Encryption · {returnDays}-Day Guarantee
-              </p>
+              <div className="checkout-guarantee-row">
+                <span className="checkout-guarantee-note">
+                  <Icon name="lock" size={12} /> 256-bit Encrypted Settlement · {returnDays}-Day Return Charter
+                </span>
+                <button
+                  type="button"
+                  className="link-subtle"
+                  onClick={() => {
+                    onClose();
+                    askStylist("Can you review my bag and advise on sizing or delivery?");
+                  }}
+                >
+                  Need Stylist Assistance?
+                </button>
+              </div>
             </div>
           </div>
         )}
       </Drawer>
 
-      {/* Add Address Modal (Principle 9: Form Validation) */}
       <Modal
         isOpen={showAddressModal}
         onClose={() => setShowAddressModal(false)}
-        title="Add Delivery Address"
+        title="Add Delivery Residence"
         size="md"
       >
         <form onSubmit={handleSaveAddress} className="form-stack" noValidate>
@@ -458,10 +507,10 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
               required
             />
             <TextField
-              label="Address Label"
+              label="Residence Label"
               value={addrForm.label}
               onChange={(e) => setAddrForm({ ...addrForm, label: e.target.value })}
-              placeholder="Home / Studio"
+              placeholder="Residence / Atelier"
             />
           </div>
 
@@ -470,7 +519,7 @@ export function ShoppingBagDrawer({ isOpen, onClose }) {
               Cancel
             </Button>
             <Button type="submit" variant="primary" isLoading={isSavingAddr}>
-              Save Address
+              Save Residence
             </Button>
           </div>
         </form>

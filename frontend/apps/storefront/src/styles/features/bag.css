@@ -1,7 +1,5 @@
 /*
  * Shopping bag drawer — <ShoppingBagDrawer>, rendered inside <Drawer>.
- * Sections follow DOM order: empty state → shipping progress → line items →
- * coupon → address → payment → summary → sticky place-order footer.
  */
 
 .bag-content-layout {
@@ -10,7 +8,6 @@
   gap: 1.25rem;
 }
 
-/* Vertical rhythm inside each checkout block comes from `gap` only */
 .bag-coupon-section,
 .bag-checkout-section {
   display: flex;
@@ -18,7 +15,6 @@
   gap: 0.6rem;
 }
 
-/* ==== Empty bag ==== */
 .bag-empty-wrap {
   display: flex;
   align-items: center;
@@ -32,12 +28,13 @@
   box-shadow: none;
 }
 
-/* ==== Free-shipping progress ==== */
+/* ==== Delivery & White-Glove Assurance Bar ==== */
 .shipping-progress-box {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.85rem 1rem;
+  gap: 0.48rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   background: var(--bg-subtle);
 }
@@ -50,25 +47,35 @@
 .unlocked-label {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  color: var(--state-success-text);
+  gap: 0.4rem;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
+.unlocked-label svg {
+  color: var(--accent-gold);
+}
+
 .shipping-progress-track {
-  height: 6px;
+  height: 3px;
   overflow: hidden;
-  border-radius: var(--radius-pill);
   background: var(--border-subtle);
 }
 
 .shipping-progress-fill {
   height: 100%;
-  background: var(--accent-success);
+  background: var(--accent-gold);
   transition: width 300ms ease;
 }
 
-/* ==== Line items ==== */
+.white-glove-note {
+  margin: 0.1rem 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+/* ==== Line Items ==== */
 .bag-items-list {
   display: flex;
   flex-direction: column;
@@ -77,17 +84,18 @@
 
 .bag-line-item {
   display: flex;
-  gap: 0.85rem;
+  gap: 0.9rem;
   padding-bottom: 1rem;
   border-bottom: 1px solid var(--border-subtle);
 }
 
 .bag-item-thumb-wrap {
   flex-shrink: 0;
-  width: 72px;
+  width: 74px;
   aspect-ratio: 3 / 4;
   overflow: hidden;
   border-radius: var(--radius-xs);
+  border: 1px solid var(--border-subtle);
   background: var(--bg-subtle);
 }
 
@@ -113,9 +121,10 @@
 }
 
 .bag-item-title {
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.3;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.25;
 }
 
 .bag-item-sub {
@@ -127,41 +136,44 @@
 }
 
 .bag-size-pill {
-  padding: 0.1rem 0.4rem;
-  border-radius: 4px;
+  padding: 0.12rem 0.45rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 2px;
   background: var(--bg-subtle);
+  font-size: 10.5px;
+  font-weight: 600;
 }
 
 .bag-unit-price {
   color: var(--text-muted);
-  font-size: var(--text-2xs);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .bag-item-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 0.5rem;
+  margin-top: 0.45rem;
 }
 
 .bag-item-total {
   font-size: 13.5px;
-  font-weight: 700;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
-/* ==== Coupon ==== */
+/* ==== Privilege Code ==== */
 .coupon-form {
   display: flex;
   gap: 0.5rem;
 }
 
-/* Composes .input (components/form.css) — only the pill shape differs */
 .coupon-input {
   flex: 1;
   min-height: 36px;
-  padding: 0.45rem 0.95rem;
-  border-radius: var(--radius-pill);
+  padding: 0.45rem 0.85rem;
+  border-radius: var(--radius-sm);
   font-size: var(--text-xs);
   text-transform: uppercase;
 }
@@ -171,9 +183,9 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: 0.55rem 0.95rem;
+  padding: 0.55rem 0.85rem;
   border: 1px solid var(--state-success-border);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   background: var(--state-success-bg);
   color: var(--state-success-text);
   font-size: var(--text-xs);
@@ -200,7 +212,7 @@
   font-size: 11px;
 }
 
-/* ==== Delivery address ==== */
+/* ==== Delivery Residence ==== */
 .checkout-subhead-row {
   display: flex;
   align-items: center;
@@ -221,7 +233,7 @@
   gap: var(--space-3);
   padding: 0.75rem 0.95rem;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: border-color 140ms ease, background 140ms ease;
 }
@@ -231,11 +243,10 @@
 }
 
 .address-option-card.selected {
-  border-color: var(--accent-noir);
+  border-color: var(--accent-gold);
   background: var(--bg-subtle);
 }
 
-/* Keyboard focus lands on the visually hidden radio inside the card */
 .address-option-card:focus-within {
   outline: 2px solid var(--accent-gold);
   outline-offset: 2px;
@@ -264,35 +275,40 @@
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  border-radius: 2px;
   background: var(--accent-noir);
   color: var(--text-on-dark);
-  animation: toastIn 200ms var(--spring);
 }
 
-/* ==== Payment method ==== */
+/* ==== Settlement Channel Grid ==== */
 .payment-options-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 0.5rem;
 }
 
 .payment-method-chip {
-  padding: 0.65rem 0.45rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.18rem;
+  padding: 0.65rem 0.75rem;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   background: var(--bg-surface);
-  font-size: 11px;
+  color: var(--text-primary);
+  font-size: 11.5px;
   font-weight: 500;
-  text-align: center;
+  text-align: left;
   cursor: pointer;
   transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
 }
 
-.payment-method-chip:hover:not(.active) {
-  border-color: var(--border-strong);
+.payment-method-chip:hover:not(.active):not(:disabled) {
+  border-color: var(--accent-gold);
 }
 
 .payment-method-chip.active {
@@ -301,12 +317,33 @@
   color: var(--text-on-dark);
 }
 
-/* ==== Price summary ==== */
+.payment-method-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: var(--bg-subtle);
+}
+
+.pm-chip-label {
+  line-height: 1.3;
+}
+
+.pm-chip-limit {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.payment-method-chip.active .pm-chip-limit {
+  color: rgba(250, 248, 244, 0.75);
+}
+
+/* ==== Tariff Summary ==== */
 .bag-summary-card {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  padding: 1rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   background: var(--bg-subtle);
   font-size: var(--text-xs);
@@ -332,7 +369,7 @@
   padding-top: 0.65rem;
   border-top: 1px solid var(--border-strong);
   font-size: var(--text-base);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .grand-price {
@@ -345,14 +382,13 @@
   gap: 0.5rem;
   padding: 0.75rem 1rem;
   border: 1px solid var(--state-error-border);
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   background: var(--state-error-bg);
   color: var(--state-error-text);
   font-size: var(--text-xs);
 }
 
-/* ==== Sticky place-order footer ==== */
-/* Bleeds to the drawer edges by cancelling .overlay__body padding */
+/* ==== Sticky Acquisition Footer ==== */
 .bag-actions-footer {
   position: sticky;
   bottom: calc(-1 * var(--space-fluid-md));
@@ -366,12 +402,18 @@
   background: var(--bg-page);
 }
 
-.checkout-guarantee-note {
+.checkout-guarantee-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 11px;
+}
+
+.checkout-guarantee-note {
+  display: inline-flex;
+  align-items: center;
   gap: 0.35rem;
   color: var(--text-muted);
-  font-size: 11px;
-  text-align: center;
 }

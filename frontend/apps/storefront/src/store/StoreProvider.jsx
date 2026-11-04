@@ -115,6 +115,7 @@ export function StoreProvider({ children, initialPage = "shop" }) {
   });
   const [productDetail, setProductDetail] = useState({ status: "idle", product: null, recommendations: [], error: null });
   const [busyKey, setBusyKey] = useState(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   const handleNetworkEvent = useCallback((evt) => {
     setSystem((prev) => {
@@ -196,6 +197,8 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     return { minPrice, maxPrice };
   }, []);
 
+  const pageSize = LIMITS.catalogPageSize || 24;
+
   const fetchProducts = useCallback(
     async (nextFilters = filtersRef.current, { silent = false } = {}) => {
       if (!silent) {
@@ -217,6 +220,8 @@ export function StoreProvider({ children, initialPage = "shop" }) {
           maxPrice,
           inStockOnly: nextFilters.inStockOnly,
           sort: nextFilters.sort || "featured",
+          limit: pageSize,
+          offset: 0,
         });
         const rawItems = Array.isArray(res) ? res : res?.items || [];
         const normalized = rawItems.map(normalizeProduct);
@@ -227,14 +232,68 @@ export function StoreProvider({ children, initialPage = "shop" }) {
           interpretation: res?.interpretation || null,
           error: null,
         });
+        if (silent) {
+          api
+            .searchCatalog({ sort: DEFAULT_FILTERS.sort, limit: 100, offset: 0 })
+            .then((arch) => {
+              const rows = Array.isArray(arch) ? arch : arch?.items || [];
+              if (rows.length) setAllProducts(rows.map(normalizeProduct));
+            })
+            .catch(() => {});
+        }
         return normalized;
       } catch (error) {
         setCatalog((prev) => ({ ...prev, status: "error", error }));
         return null;
       }
     },
-    [api, resolvePriceBounds]
+    [api, pageSize, resolvePriceBounds]
   );
+
+  const catalogItemsRef = useRef([]);
+  catalogItemsRef.current = catalog.items;
+
+  const loadMoreProducts = useCallback(async () => {
+    if (isLoadingMore) return null;
+    const currentItems = catalogItemsRef.current;
+    if (currentItems.length >= catalog.total) return currentItems;
+    setIsLoadingMore(true);
+    try {
+      const nextFilters = filtersRef.current;
+      const { minPrice, maxPrice } = resolvePriceBounds(nextFilters);
+      const res = await api.searchCatalog({
+        q: nextFilters.q,
+        category: nextFilters.category,
+        department: nextFilters.department,
+        color: nextFilters.color,
+        material: nextFilters.material,
+        minPrice,
+        maxPrice,
+        inStockOnly: nextFilters.inStockOnly,
+        sort: nextFilters.sort || "featured",
+        limit: pageSize,
+        offset: currentItems.length,
+      });
+      const rawItems = Array.isArray(res) ? res : res?.items || [];
+      const incoming = rawItems.map(normalizeProduct);
+      setCatalog((prev) => {
+        const seen = new Set(prev.items.map((item) => item.product_id));
+        const merged = [...prev.items, ...incoming.filter((item) => !seen.has(item.product_id))];
+        return {
+          ...prev,
+          status: "ready",
+          items: merged,
+          total: typeof res?.total === "number" ? res.total : prev.total,
+        };
+      });
+      return incoming;
+    } catch (error) {
+      notify({ tone: "error", title: "Unable to load more pieces", message: friendlyErrorMessage(error) });
+      return null;
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [api, catalog.total, isLoadingMore, notify, pageSize, resolvePriceBounds]);
 
   const refreshCatalogMeta = useCallback(async () => {
     try {
@@ -317,10 +376,11 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     setBoot({ status: "loading", error: null });
     setCatalog((prev) => ({ ...prev, status: "loading", error: null }));
     try {
-      const [cfg, meta, searchRes, registry, health] = await Promise.all([
+      const [cfg, meta, searchRes, fullArchiveRes, registry, health] = await Promise.all([
         api.getPoliciesAndConfig(),
         api.getCatalogMeta(),
-        api.searchCatalog({ sort: DEFAULT_FILTERS.sort }),
+        api.searchCatalog({ sort: DEFAULT_FILTERS.sort, limit: pageSize, offset: 0 }),
+        api.searchCatalog({ sort: DEFAULT_FILTERS.sort, limit: 100, offset: 0 }).catch(() => null),
         api.getAgentsRegistry().catch(() => []),
         api.getHealth().catch(() => ({})),
       ]);
@@ -358,7 +418,12 @@ export function StoreProvider({ children, initialPage = "shop" }) {
 
       const rawProducts = Array.isArray(searchRes) ? searchRes : searchRes?.items || [];
       const normalizedProducts = rawProducts.map(normalizeProduct);
-      setAllProducts(normalizedProducts);
+      const rawArchive = fullArchiveRes
+        ? Array.isArray(fullArchiveRes)
+          ? fullArchiveRes
+          : fullArchiveRes?.items || []
+        : rawProducts;
+      setAllProducts(rawArchive.map(normalizeProduct));
       setCatalog({
         status: "ready",
         items: normalizedProducts,
@@ -716,6 +781,18 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     onAfterAction: refreshAfterAssistant,
   });
 
+  const askStylist = useCallback(
+    (promptText = "") => {
+      setUi((prev) => ({ ...prev, chatOpen: true, cartOpen: false, productId: null }));
+      if (promptText && String(promptText).trim()) {
+        assistant.send(String(promptText).trim());
+      }
+    },
+    [assistant]
+  );
+
+  const hasMoreProducts = catalog.items.length < catalog.total;
+
   const taxRules = useMemo(() => buildTaxRules(business.tax), [business.tax]);
   const freeShippingMin = Number(business.shipping?.free_shipping_threshold_inr ?? 1999);
   const defaultShippingFee = Number(business.shipping?.default_shipping_fee_inr ?? 99);
@@ -833,6 +910,9 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     allProducts,
     catalog: catalogArray,
     catalogTotal: catalog.total,
+    hasMoreProducts,
+    isLoadingMore,
+    loadMoreProducts,
     searchInterpretation: catalog.interpretation,
     isLoadingCatalog: catalog.status === "loading",
     catalogError: catalog.error?.message || null,
@@ -896,6 +976,7 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     removeToast: dismissToast,
     busyKey,
     assistant,
+    askStylist,
     classifyApiError,
   };
 

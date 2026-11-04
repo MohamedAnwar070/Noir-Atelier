@@ -462,10 +462,30 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
 
         session.add_all(
             [
-                PaymentMethod(method_id="upi", name="UPI (Instant)", min_order_inr=Decimal("1.00")),
-                PaymentMethod(method_id="card", name="Credit / Debit Card", min_order_inr=Decimal("1.00")),
-                PaymentMethod(method_id="bank_transfer", name="IMPS / NEFT Bank Transfer", min_order_inr=Decimal("1.00")),
-                PaymentMethod(method_id="emi", name="No-Cost Atelier EMI", min_order_inr=Decimal("5000.00")),
+                PaymentMethod(
+                    method_id="upi",
+                    name="UPI (Instant · Up to ₹1,00,000)",
+                    min_order_inr=Decimal("1.00"),
+                    max_order_inr=Decimal("100000.00"),
+                ),
+                PaymentMethod(
+                    method_id="card",
+                    name="Credit / Debit Card",
+                    min_order_inr=Decimal("1.00"),
+                    max_order_inr=Decimal("1500000.00"),
+                ),
+                PaymentMethod(
+                    method_id="bank_transfer",
+                    name="IMPS / RTGS / NEFT Private Wire",
+                    min_order_inr=Decimal("1.00"),
+                    max_order_inr=Decimal("5000000.00"),
+                ),
+                PaymentMethod(
+                    method_id="emi",
+                    name="No-Cost Atelier EMI",
+                    min_order_inr=Decimal("5000.00"),
+                    max_order_inr=Decimal("500000.00"),
+                ),
             ]
         )
 

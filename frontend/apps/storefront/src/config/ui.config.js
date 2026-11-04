@@ -10,23 +10,24 @@ export const LIMITS = {
   toastDurationMs: 5500,
   maxLineQuantity: 10,
   lowStockThreshold: 5,
-  chatMaxLength: 400,
+  chatMaxLength: 500,
   reviewMinLength: 10,
+  catalogPageSize: 24,
 };
 
 export const ASSISTANT = {
-  name: "Atelier Stylist",
-  tagline: "Ask about fabrics, sizes, orders or returns",
-  inputPlaceholder: "Ask about a piece, your order or a return…",
+  name: "Personal Fashion Consultant",
+  tagline: "Private styling, natural fiber provenance, sizing & client care",
+  inputPlaceholder: "Inquire about drape, fiber origin, Haute Archive pieces, or an order…",
   welcome:
-    "Hello! I'm your Atelier Stylist. I can help you find the right piece, add it to your bag, place an order, or sort out a return.",
+    "Welcome to Noir Atelier. As your Personal Fashion Consultant, I can guide you through our curated archive—advising on natural fiber provenance, silhouette and fit, styling pairings, or assisting with your bag, orders, and returns.",
   statusBadges: {
-    action_completed: { label: "Done", tone: "success" },
-    pending_approval: { label: "Awaiting approval", tone: "warning" },
-    escalated: { label: "Team notified", tone: "info" },
-    clarify_missing_info: { label: "Need a detail", tone: "neutral" },
-    blocked_unauthorized: { label: "Not allowed", tone: "warning" },
-    blocked_prompt_injection: { label: "Blocked", tone: "warning" },
-    error: { label: "Couldn't finish", tone: "error" },
+    action_completed: { label: "Completed", tone: "success" },
+    pending_approval: { label: "Private review", tone: "warning" },
+    escalated: { label: "Concierge notified", tone: "info" },
+    clarify_missing_info: { label: "Detail needed", tone: "neutral" },
+    blocked_unauthorized: { label: "Restricted", tone: "warning" },
+    blocked_prompt_injection: { label: "Declined", tone: "warning" },
+    error: { label: "Unable to complete", tone: "error" },
   },
 };

@@ -102,6 +102,8 @@ def run_order_node(state: AgentGraphState, client: PlatformApiClient) -> AgentGr
             items = [{"product_id": pid, "size": size, "quantity": qty}]
 
         estimated = state.request.context.get("estimated_amount_inr")
+        if estimated is None and "target" in locals() and isinstance(target, dict) and target.get("mrp_inr") is not None:
+            estimated = float(target["mrp_inr"]) * int(items[0].get("quantity", 1))
         code, payload = tools.create_order(
             customer_id=customer_id,
             items=items,
@@ -163,7 +165,11 @@ def run_order_node(state: AgentGraphState, client: PlatformApiClient) -> AgentGr
         elif code == 403:
             state.status = "blocked_unauthorized"
             state.data = payload_dict
-            state.reply = payload.get("message", "This order exceeds the automated spending limit and needs review.")
+            state.reply = (
+                "For Private Reserve and Haute Archive acquisitions above ₹50,000, autonomous chat checkout is "
+                "restricted for your security. Please add the piece to your Shopping Bag to complete verified "
+                "Credit/Debit Card or IMPS/RTGS/NEFT Private Wire settlement, or ask me to connect you with a Private Client Advisor."
+            )
         else:
             state.status = "error"
             state.data = payload_dict
