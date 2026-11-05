@@ -19,22 +19,79 @@ function parseValidationDetail(detail) {
 }
 
 export class NoirApiClient {
-  constructor({ baseUrl = "", token = "demo_CUS-001", slowThresholdMs = 1200, onNetworkEvent = null } = {}) {
+  constructor({
+    baseUrl = "",
+    token = null,
+    refreshToken = null,
+    slowThresholdMs = 1200,
+    onNetworkEvent = null,
+    onAuthSessionUpdate = null,
+  } = {}) {
     this.baseUrl =
       baseUrl ||
       (typeof window !== "undefined" && window.NOIR_API_BASE) ||
       (typeof process !== "undefined" && process.env && process.env.NEXT_PUBLIC_API_BASE_URL) ||
       (typeof window !== "undefined" && window.location?.origin ? window.location.origin : "http://127.0.0.1:8000");
-    this.token = token || "demo_CUS-001";
+    this.token = token || null;
+    this.refreshToken = refreshToken || null;
     this.slowThresholdMs = slowThresholdMs;
     this.onNetworkEvent = onNetworkEvent;
+    this.onAuthSessionUpdate = onAuthSessionUpdate;
+    this._refreshPromise = null;
   }
 
   setToken(token) {
-    this.token = token;
+    this.token = token || null;
   }
 
-  async request(method, path, { params = null, body = null, tokenOverride = null } = {}) {
+  setAuthTokens({ accessToken = null, refreshToken = null } = {}) {
+    this.token = accessToken || null;
+    if (refreshToken !== undefined) {
+      this.refreshToken = refreshToken || null;
+    }
+  }
+
+  clearAuthTokens() {
+    this.token = null;
+    this.refreshToken = null;
+  }
+
+  async _attemptTokenRefresh() {
+    if (this._refreshPromise) {
+      return this._refreshPromise;
+    }
+    this._refreshPromise = (async () => {
+      try {
+        const { data } = await this.request("POST", "/api/auth/refresh", {
+          body: { refresh_token: this.refreshToken || undefined },
+          skipAuthRefresh: true,
+          omitAuthHeader: true,
+        });
+        if (data?.tokens?.access_token) {
+          this.setAuthTokens({
+            accessToken: data.tokens.access_token,
+            refreshToken: data.tokens.refresh_token || this.refreshToken,
+          });
+          this.onAuthSessionUpdate?.(data);
+          return data;
+        }
+        return null;
+      } catch {
+        this.clearAuthTokens();
+        this.onAuthSessionUpdate?.(null);
+        return null;
+      } finally {
+        this._refreshPromise = null;
+      }
+    })();
+    return this._refreshPromise;
+  }
+
+  async request(
+    method,
+    path,
+    { params = null, body = null, tokenOverride = null, skipAuthRefresh = false, omitAuthHeader = false } = {}
+  ) {
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
       this.onNetworkEvent?.({ type: "offline" });
       throw {
@@ -54,10 +111,13 @@ export class NoirApiClient {
       });
     }
 
+    const effectiveToken = omitAuthHeader ? null : tokenOverride || this.token;
     const headers = {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${tokenOverride || this.token}`,
     };
+    if (effectiveToken) {
+      headers.Authorization = `Bearer ${effectiveToken}`;
+    }
 
     const t0 = performance.now();
     const slowTimer = setTimeout(() => {
@@ -69,6 +129,7 @@ export class NoirApiClient {
       res = await fetch(url.toString(), {
         method,
         headers,
+        credentials: "include",
         body: body ? JSON.stringify(body) : undefined,
       });
     } catch (networkErr) {
@@ -86,6 +147,24 @@ export class NoirApiClient {
     const latencyMs = Math.round(performance.now() - t0);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
+      const canTryRefresh =
+        res.status === 401 &&
+        !skipAuthRefresh &&
+        !path.startsWith("/api/auth/") &&
+        !tokenOverride &&
+        Boolean(this.refreshToken || this.token);
+
+      if (canTryRefresh) {
+        const refreshed = await this._attemptTokenRefresh();
+        if (refreshed?.tokens?.access_token) {
+          return this.request(method, path, {
+            params,
+            body,
+            skipAuthRefresh: true,
+          });
+        }
+      }
+
       if (res.status === 401) {
         this.onNetworkEvent?.({ type: "session_expired", status: 401, data });
       } else if (res.status === 403) {
@@ -539,6 +618,185 @@ export class NoirApiClient {
         actor_role: actorRole,
         session_id: sessionId || undefined,
         preferred_agent: preferredAgent || undefined,
+      },
+    });
+    return data;
+  }
+
+  /* ── Authentication, Sessions & RBAC Governance ────────────────────── */
+
+  async listRoles() {
+    const { data } = await this.request("GET", "/api/auth/roles", { skipAuthRefresh: true });
+    return data;
+  }
+
+  async registerCustomer({ name, email, password, phone = null, preferredDepartment = null }) {
+    const { data } = await this.request("POST", "/api/auth/register", {
+      body: {
+        name,
+        email,
+        password,
+        phone: phone || undefined,
+        preferred_department: preferredDepartment || undefined,
+      },
+      skipAuthRefresh: true,
+      omitAuthHeader: true,
+    });
+    if (data?.tokens?.access_token) {
+      this.setAuthTokens({
+        accessToken: data.tokens.access_token,
+        refreshToken: data.tokens.refresh_token,
+      });
+    }
+    return data;
+  }
+
+  async registerAdmin({
+    name,
+    email,
+    password,
+    roleCode = "manager",
+    phone = null,
+    departmentScope = null,
+    inviteCode = null,
+  }) {
+    const { data } = await this.request("POST", "/api/auth/register/admin", {
+      body: {
+        name,
+        email,
+        password,
+        role_code: roleCode,
+        phone: phone || undefined,
+        department_scope: departmentScope || undefined,
+        invite_code: inviteCode || undefined,
+      },
+      skipAuthRefresh: true,
+    });
+    if (data?.tokens?.access_token) {
+      this.setAuthTokens({
+        accessToken: data.tokens.access_token,
+        refreshToken: data.tokens.refresh_token,
+      });
+    }
+    return data;
+  }
+
+  async login({ email, password, portal = "auto" }) {
+    const { data } = await this.request("POST", "/api/auth/login", {
+      body: { email, password, portal },
+      skipAuthRefresh: true,
+      omitAuthHeader: true,
+    });
+    if (data?.tokens?.access_token) {
+      this.setAuthTokens({
+        accessToken: data.tokens.access_token,
+        refreshToken: data.tokens.refresh_token,
+      });
+    }
+    return data;
+  }
+
+  async refreshAuthSession(refreshToken = null) {
+    const { data } = await this.request("POST", "/api/auth/refresh", {
+      body: { refresh_token: refreshToken || this.refreshToken || undefined },
+      skipAuthRefresh: true,
+      omitAuthHeader: true,
+    });
+    if (data?.tokens?.access_token) {
+      this.setAuthTokens({
+        accessToken: data.tokens.access_token,
+        refreshToken: data.tokens.refresh_token,
+      });
+    }
+    return data;
+  }
+
+  async logout(refreshToken = null) {
+    try {
+      const { data } = await this.request("POST", "/api/auth/logout", {
+        body: { refresh_token: refreshToken || this.refreshToken || undefined },
+        skipAuthRefresh: true,
+      });
+      return data;
+    } finally {
+      this.clearAuthTokens();
+    }
+  }
+
+  async logoutAllSessions() {
+    try {
+      const { data } = await this.request("POST", "/api/auth/logout-all", {
+        skipAuthRefresh: true,
+      });
+      return data;
+    } finally {
+      this.clearAuthTokens();
+    }
+  }
+
+  async getCurrentUser() {
+    const { data } = await this.request("GET", "/api/auth/me");
+    return data;
+  }
+
+  async listAuthSessions() {
+    const { data } = await this.request("GET", "/api/auth/sessions");
+    return data;
+  }
+
+  async revokeAuthSession(sessionId) {
+    const { data } = await this.request("DELETE", `/api/auth/sessions/${sessionId}`);
+    return data;
+  }
+
+  async changePassword({ currentPassword, newPassword }) {
+    const { data } = await this.request("POST", "/api/auth/change-password", {
+      body: { current_password: currentPassword, new_password: newPassword },
+    });
+    return data;
+  }
+
+  async getRbacMatrix() {
+    const { data } = await this.request("GET", "/api/admin/rbac/matrix");
+    return data;
+  }
+
+  async listAdminUsers() {
+    const { data } = await this.request("GET", "/api/admin/users");
+    return data;
+  }
+
+  async createStaffUser({ name, email, password, roleCode, phone = null, departmentScope = null }) {
+    const { data } = await this.request("POST", "/api/admin/users/staff", {
+      body: {
+        name,
+        email,
+        password,
+        role_code: roleCode,
+        phone: phone || undefined,
+        department_scope: departmentScope || undefined,
+      },
+    });
+    return data;
+  }
+
+  async updateStaffUser(staffId, { roleCode = null, status = null, departmentScope = null, name = null }) {
+    const { data } = await this.request("PATCH", `/api/admin/users/staff/${staffId}`, {
+      body: {
+        role_code: roleCode ?? undefined,
+        status: status ?? undefined,
+        department_scope: departmentScope ?? undefined,
+        name: name ?? undefined,
+      },
+    });
+    return data;
+  }
+
+  async updateCustomerStatus(customerId, { status = null, loyaltyTier = null }) {
+    const { data } = await this.request("PATCH", `/api/admin/users/customers/${customerId}/status`, {
+      body: {
+        status: status ?? undefined,
+        loyalty_tier: loyaltyTier ?? undefined,
       },
     });
     return data;

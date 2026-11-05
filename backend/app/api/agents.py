@@ -6,7 +6,7 @@ from agents.client import PlatformApiClient
 from agents.main import NoirAtelierMultiAgentOrchestrator, get_agent_registry_metadata
 from agents.schemas.state import AgentRequest, AgentResponse
 
-from ..auth import ActorContext, resolve_actor
+from ..auth import ActorContext, resolve_optional_actor
 
 router = APIRouter()
 
@@ -20,7 +20,7 @@ def api_agents_registry() -> List[Dict[str, Any]]:
 def api_agents_chat(
     req: AgentRequest,
     request: Request,
-    actor: ActorContext = Depends(resolve_actor),
+    actor: ActorContext = Depends(resolve_optional_actor),
 ) -> AgentResponse:
     from fastapi.testclient import TestClient
 

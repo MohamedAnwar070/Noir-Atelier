@@ -15,7 +15,6 @@ from .governance import (
 )
 from .order import Cart, Coupon, CouponUsage, Order, OrderItem
 from .payment import Invoice, Payment, PaymentMethod
-from .reference import OrderStatus, RefundStatus, ReturnReason
 from .product import (
     Category,
     Inventory,
@@ -26,6 +25,8 @@ from .product import (
     ProductVector,
     Recommendation,
 )
+from .rbac import AuthSession, Permission, Role, RolePermission, StaffUser
+from .reference import OrderStatus, RefundStatus, ReturnReason
 
 __all__ = [
     "Base",
@@ -70,4 +71,9 @@ __all__ = [
     "AgentPermission",
     "AgentSession",
     "IdempotencyKey",
+    "Role",
+    "Permission",
+    "RolePermission",
+    "StaffUser",
+    "AuthSession",
 ]

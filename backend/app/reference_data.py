@@ -1,7 +1,7 @@
 """Reference (lookup) data shipped with the application.
 
 Single definition used by:
-  * migration 0003 — to populate existing databases,
+  * migrations 0003 & 0004 — to populate existing databases,
   * scripts/seed_demo.py — to populate fresh databases.
 
 ``ensure_reference_data`` only INSERTs rows that are missing; it never
@@ -10,7 +10,7 @@ After the first install this data is owned by the database (admin APIs),
 not by this file.
 """
 
-from typing import Any, Dict, List, Type
+from typing import Any, Dict, List, Tuple, Type
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -21,8 +21,11 @@ from .models import (
     Department,
     Material,
     OrderStatus,
+    Permission,
     RefundStatus,
     ReturnReason,
+    Role,
+    RolePermission,
     SearchSynonym,
 )
 
@@ -124,6 +127,202 @@ FIT_FEEDBACK_OPTIONS: List[Dict[str, str]] = [
     {"code": "runs_large", "label": "Runs slightly relaxed"},
 ]
 
+# Canonical RBAC Roles & Granular Permissions (resource:action).
+ROLES: List[Dict[str, Any]] = [
+    {
+        "code": "customer",
+        "name": "Maison Client",
+        "description": "Authenticated customer able to curate bags, place orders, manage addresses, submit verified reviews, and initiate returns.",
+        "actor_type": "customer",
+        "hierarchy_level": 10,
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "code": "support_agent",
+        "name": "Client Concierge",
+        "description": "Maison client-service specialist authorized to inspect orders, returns, and resolve escalated support tickets.",
+        "actor_type": "admin",
+        "hierarchy_level": 40,
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "code": "catalog_manager",
+        "name": "Archive & Merchandising Curator",
+        "description": "Curates garment pieces, size variants, inventory stock levels, colours, materials, and search taxonomy.",
+        "actor_type": "admin",
+        "hierarchy_level": 50,
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "code": "service_account",
+        "name": "AI Orchestrator Service Account",
+        "description": "Scoped multi-agent service identity further constrained by per-endpoint whitelists in agent_permissions.",
+        "actor_type": "agent",
+        "hierarchy_level": 60,
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "code": "manager",
+        "name": "Boutique Store Manager",
+        "description": "Oversees boutique operations, inventory, merchandising, fulfillment scheduling, analytics, and Tier 2/3 return approvals.",
+        "actor_type": "admin",
+        "hierarchy_level": 70,
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "code": "finance_admin",
+        "name": "Finance & Compliance Controller",
+        "description": "Governs GST/financial analytics, business policies, audit logs, payout execution, and Tier 3 dual-approval refunds.",
+        "actor_type": "admin",
+        "hierarchy_level": 80,
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "code": "super_admin",
+        "name": "Maison Executive Administrator",
+        "description": "Full executive governance across RBAC role assignments, staff accounts, policies, catalog, orders, refunds, and audit logs.",
+        "actor_type": "admin",
+        "hierarchy_level": 100,
+        "is_system": True,
+        "is_active": True,
+    },
+]
+
+PERMISSIONS: List[Dict[str, Any]] = [
+    {"code": "catalog:read", "resource": "catalog", "action": "read", "description": "Browse products, categories, variants, and recommendations."},
+    {"code": "catalog:write", "resource": "catalog", "action": "write", "description": "Create, update, or discontinue products and size variants."},
+    {"code": "catalog:manage_taxonomy", "resource": "catalog", "action": "manage_taxonomy", "description": "Manage departments, categories, colours, materials, and search synonyms."},
+    {"code": "inventory:read", "resource": "inventory", "action": "read", "description": "Inspect vault stock availability and low-stock alerts."},
+    {"code": "inventory:write", "resource": "inventory", "action": "write", "description": "Adjust, reserve, restock, and synchronize garment inventory."},
+    {"code": "cart:manage", "resource": "cart", "action": "manage", "description": "Manage personal shopping bag items and promotional codes."},
+    {"code": "reviews:write", "resource": "reviews", "action": "write", "description": "Submit verified garment fit and quality reviews."},
+    {"code": "orders:create", "resource": "orders", "action": "create", "description": "Create inventory holds, orders, and initiate payment settlement."},
+    {"code": "orders:read_own", "resource": "orders", "action": "read_own", "description": "View own orders, GST tax invoices, and courier tracking."},
+    {"code": "orders:read_all", "resource": "orders", "action": "read_all", "description": "Inspect all client orders, invoices, and shipment records."},
+    {"code": "orders:cancel_own", "resource": "orders", "action": "cancel_own", "description": "Cancel own eligible pre-dispatch orders."},
+    {"code": "orders:manage_fulfillment", "resource": "orders", "action": "manage_fulfillment", "description": "Schedule white-glove courier pickups and shipments."},
+    {"code": "orders:analytics", "resource": "orders", "action": "analytics", "description": "Access GMV, revenue, and order status telemetry."},
+    {"code": "customers:read_own", "resource": "customers", "action": "read_own", "description": "Read own client profile, saved addresses, and preferences."},
+    {"code": "customers:write_own", "resource": "customers", "action": "write_own", "description": "Update own client profile and delivery addresses."},
+    {"code": "customers:read_all", "resource": "customers", "action": "read_all", "description": "Inspect client profiles for concierge support and governance."},
+    {"code": "customers:analytics", "resource": "customers", "action": "analytics", "description": "Access client retention and repeat-buyer analytics."},
+    {"code": "returns:create", "resource": "returns", "action": "create", "description": "Initiate garment return requests on eligible delivered orders."},
+    {"code": "returns:read_own", "resource": "returns", "action": "read_own", "description": "Track own return QC status and refund progress."},
+    {"code": "returns:read_all", "resource": "returns", "action": "read_all", "description": "Inspect all return requests and pending refund queues."},
+    {"code": "refunds:approve_tier2", "resource": "refunds", "action": "approve_tier2", "description": "Approve Tier 2 operational returns (Store Manager authority)."},
+    {"code": "refunds:approve_tier3", "resource": "refunds", "action": "approve_tier3", "description": "Co-approve high-value Tier 3 returns under dual-control governance."},
+    {"code": "refunds:process", "resource": "refunds", "action": "process", "description": "Execute approved refund payouts to original settlement channels."},
+    {"code": "support:create_own", "resource": "support", "action": "create_own", "description": "Escalate order or styling inquiries to Maison concierge."},
+    {"code": "support:read_all", "resource": "support", "action": "read_all", "description": "View all client support escalations and SLA queues."},
+    {"code": "support:resolve", "resource": "support", "action": "resolve", "description": "Acknowledge and resolve support tickets."},
+    {"code": "config:read", "resource": "config", "action": "read", "description": "Read Maison policies, GST rules, shipping zones, and payment ceilings."},
+    {"code": "config:write", "resource": "config", "action": "write", "description": "Modify Maison business configuration and operational thresholds."},
+    {"code": "audit:read", "resource": "audit", "action": "read", "description": "Inspect immutable compliance and security audit logs."},
+    {"code": "audit:write", "resource": "audit", "action": "write", "description": "Record administrative compliance audit entries."},
+    {"code": "users:read", "resource": "users", "action": "read", "description": "View staff directory, client accounts, and RBAC permission matrix."},
+    {"code": "users:manage_roles", "resource": "users", "action": "manage_roles", "description": "Provision staff accounts, assign RBAC roles, and suspend/reactivate users."},
+]
+
+_ALL_PERMISSION_CODES: List[str] = [p["code"] for p in PERMISSIONS]
+
+ROLE_PERMISSION_MAP: Dict[str, List[str]] = {
+    "customer": [
+        "catalog:read",
+        "cart:manage",
+        "reviews:write",
+        "orders:create",
+        "orders:read_own",
+        "orders:cancel_own",
+        "customers:read_own",
+        "customers:write_own",
+        "returns:create",
+        "returns:read_own",
+        "support:create_own",
+        "config:read",
+    ],
+    "support_agent": [
+        "catalog:read",
+        "inventory:read",
+        "orders:read_all",
+        "customers:read_all",
+        "returns:read_all",
+        "support:read_all",
+        "support:resolve",
+        "config:read",
+    ],
+    "catalog_manager": [
+        "catalog:read",
+        "catalog:write",
+        "catalog:manage_taxonomy",
+        "inventory:read",
+        "inventory:write",
+        "orders:analytics",
+        "config:read",
+    ],
+    "manager": [
+        "catalog:read",
+        "catalog:write",
+        "catalog:manage_taxonomy",
+        "inventory:read",
+        "inventory:write",
+        "orders:read_all",
+        "orders:manage_fulfillment",
+        "orders:analytics",
+        "customers:read_all",
+        "customers:analytics",
+        "returns:read_all",
+        "refunds:approve_tier2",
+        "refunds:approve_tier3",
+        "refunds:process",
+        "support:read_all",
+        "support:resolve",
+        "config:read",
+        "config:write",
+        "audit:read",
+        "users:read",
+    ],
+    "finance_admin": [
+        "catalog:read",
+        "inventory:read",
+        "orders:read_all",
+        "orders:analytics",
+        "customers:read_all",
+        "customers:analytics",
+        "returns:read_all",
+        "refunds:approve_tier3",
+        "refunds:process",
+        "support:read_all",
+        "config:read",
+        "config:write",
+        "audit:read",
+        "audit:write",
+        "users:read",
+    ],
+    "super_admin": list(_ALL_PERMISSION_CODES),
+    "service_account": [
+        "catalog:read",
+        "inventory:read",
+        "inventory:write",
+        "orders:read_all",
+        "orders:manage_fulfillment",
+        "orders:analytics",
+        "customers:read_all",
+        "customers:analytics",
+        "returns:read_all",
+        "refunds:process",
+        "config:read",
+        "config:write",
+        "audit:read",
+        "audit:write",
+    ],
+}
+
 # (model, natural key used to detect existing rows, rows) — insertion order respects FKs.
 _REGISTRY: List[tuple] = [
     (Department, "code", DEPARTMENTS),
@@ -134,6 +333,8 @@ _REGISTRY: List[tuple] = [
     (OrderStatus, "code", ORDER_STATUSES),
     (RefundStatus, "code", REFUND_STATUSES),
     (ReturnReason, "code", RETURN_REASONS),
+    (Role, "code", ROLES),
+    (Permission, "code", PERMISSIONS),
 ]
 
 
@@ -145,6 +346,24 @@ def _insert_missing(session: Session, model: Type, key: str, rows: List[Dict[str
     return len(missing)
 
 
+def _insert_missing_role_permissions(session: Session) -> int:
+    existing_pairs: set[Tuple[str, str]] = {
+        (r, p)
+        for r, p in session.execute(select(RolePermission.role_code, RolePermission.permission_code)).all()
+    }
+    to_add: List[RolePermission] = []
+    for role_code, perm_codes in ROLE_PERMISSION_MAP.items():
+        for perm_code in perm_codes:
+            if (role_code, perm_code) not in existing_pairs:
+                to_add.append(RolePermission(role_code=role_code, permission_code=perm_code))
+    if to_add:
+        session.add_all(to_add)
+        session.flush()
+    return len(to_add)
+
+
 def ensure_reference_data(session: Session) -> Dict[str, int]:
     """Insert any missing reference rows. Returns {table: rows_inserted}."""
-    return {model.__tablename__: _insert_missing(session, model, key, rows) for model, key, rows in _REGISTRY}
+    counts = {model.__tablename__: _insert_missing(session, model, key, rows) for model, key, rows in _REGISTRY}
+    counts[RolePermission.__tablename__] = _insert_missing_role_permissions(session)
+    return counts

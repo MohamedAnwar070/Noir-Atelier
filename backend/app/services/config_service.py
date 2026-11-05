@@ -4,11 +4,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..auth import ActorContext
-from ..models import BusinessConfig, Coupon, Customer, Department, PaymentMethod, Policy, ShippingZone
+from ..models import BusinessConfig, Coupon, Customer, Department, PaymentMethod, Policy, Role, ShippingZone
 from ..reference_data import FIT_FEEDBACK_OPTIONS
 from .audit_service import record_audit
 
-STAFF_ROLES = ["manager", "finance_admin", "super_admin", "admin"]
+STAFF_ROLES = ["support_agent", "catalog_manager", "manager", "finance_admin", "super_admin", "admin"]
 
 _config_cache: Dict[str, Any] = {}
 
@@ -194,6 +194,15 @@ def list_platform_actors(db: Session) -> List[Dict[str, Any]]:
                 "loyalty_tier": "STAFF",
                 "label": "Finance Admin (FIN-001)",
             },
+            {
+                "token": "admin_root",
+                "id": "ADM-001",
+                "actor_type": "admin",
+                "role": "super_admin",
+                "is_staff": True,
+                "loyalty_tier": "STAFF",
+                "label": "Executive Super Admin (ADM-001)",
+            },
         ]
     )
     return actors
@@ -202,9 +211,16 @@ def list_platform_actors(db: Session) -> List[Dict[str, Any]]:
 def get_policies_and_config(db: Session) -> Dict[str, Any]:
     cfg = get_business_config_map(db)
     policies = db.scalars(select(Policy).where(Policy.is_active.is_(True))).all()
+    db_staff_roles = [
+        r.code
+        for r in db.scalars(
+            select(Role).where(Role.actor_type == "admin", Role.is_active.is_(True)).order_by(Role.hierarchy_level.asc())
+        ).all()
+    ]
+    staff_roles = db_staff_roles or list(STAFF_ROLES)
     return {
         "business_config": cfg,
-        "staff_roles": list(STAFF_ROLES),
+        "staff_roles": staff_roles,
         "policies": [
             {
                 "policy_id": p.policy_id,

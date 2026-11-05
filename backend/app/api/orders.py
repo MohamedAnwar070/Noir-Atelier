@@ -5,10 +5,10 @@ from fastapi import APIRouter, Depends, Header, Query, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..auth import ActorContext, require_agent_or_admin, require_authenticated, resolve_actor
+from ..auth import ActorContext, require_agent_or_admin, require_authenticated, require_permissions, resolve_actor
 from ..config import get_settings
 from ..database import get_db
-from ..models import Invoice, Shipment
+from ..models import Invoice, Order, Shipment
 from ..schemas.order_schema import (
     OrderCalculateRequest,
     OrderCancelRequest,
@@ -168,16 +168,25 @@ def api_initiate_payment(
 def api_schedule_shipment(
     req: ShipmentScheduleRequest,
     db: Session = Depends(get_db),
-    actor: ActorContext = Depends(require_agent_or_admin),
+    actor: ActorContext = Depends(require_permissions("orders:manage_fulfillment", allow_agent=True)),
 ) -> Dict[str, Any]:
     return schedule_shipment(db, actor, req)
+
+
+def _assert_order_record_access(db: Session, actor: ActorContext, order_id: str) -> None:
+    if actor.actor_type == "agent" or actor.has_permission("orders:read_all"):
+        return
+    ord_row = db.scalar(select(Order).where(Order.order_id == order_id))
+    if ord_row is not None and actor.actor_type == "customer" and ord_row.customer_id == actor.actor_id:
+        return
+    raise AppError("forbidden_order_access", "You are not authorized to access this order's records.", 403)
 
 
 @router.get("/api/shipments/{identifier}")
 def api_get_shipment(
     identifier: str,
     db: Session = Depends(get_db),
-    _actor: ActorContext = Depends(require_authenticated),
+    actor: ActorContext = Depends(require_authenticated),
 ) -> Dict[str, Any]:
     clean = identifier.strip().upper()
     shp = db.scalar(
@@ -185,6 +194,7 @@ def api_get_shipment(
     )
     if shp is None:
         raise AppError("shipment_not_found", f"Shipment for '{identifier}' not found.", 404)
+    _assert_order_record_access(db, actor, shp.order_id)
     return {
         "shipment_id": shp.shipment_id,
         "order_id": shp.order_id,
@@ -201,7 +211,7 @@ def api_get_shipment(
 def api_get_invoice(
     identifier: str,
     db: Session = Depends(get_db),
-    _actor: ActorContext = Depends(require_authenticated),
+    actor: ActorContext = Depends(require_authenticated),
 ) -> Dict[str, Any]:
     clean = identifier.strip().upper()
     inv = db.scalar(
@@ -209,6 +219,7 @@ def api_get_invoice(
     )
     if inv is None:
         raise AppError("invoice_not_found", f"Invoice for '{identifier}' not found.", 404)
+    _assert_order_record_access(db, actor, inv.order_id)
     return {
         "invoice_id": inv.invoice_id,
         "order_id": inv.order_id,

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, JSON, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..database import Base
@@ -18,6 +18,8 @@ class Customer(Base, TimestampMixin, SoftDeleteMixin):
     password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     loyalty_tier: Mapped[str] = mapped_column(String(32), default="STANDARD", nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="active", nullable=False)
+    failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_login: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     addresses: Mapped[List["CustomerAddress"]] = relationship(

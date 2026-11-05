@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..auth import ActorContext, require_admin, require_agent_or_admin, require_authenticated
+from ..auth import ActorContext, require_admin, require_agent_or_admin, require_authenticated, require_permissions
 from ..database import get_db
 from ..models import SupportTicket
 from ..schemas.return_schema import (
@@ -86,7 +86,7 @@ def api_support_escalate(
 def api_list_tickets(
     status: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
-    _actor: ActorContext = Depends(require_admin),
+    _actor: ActorContext = Depends(require_permissions("support:read_all")),
 ) -> List[Dict[str, Any]]:
     stmt = select(SupportTicket).order_by(SupportTicket.created_at.desc())
     if status:
@@ -113,7 +113,7 @@ def api_list_tickets(
 def api_resolve_ticket(
     ticket_id: str,
     db: Session = Depends(get_db),
-    actor: ActorContext = Depends(require_admin),
+    actor: ActorContext = Depends(require_permissions("support:resolve")),
 ) -> Dict[str, Any]:
     tkt = db.scalar(select(SupportTicket).where(SupportTicket.ticket_id == ticket_id.strip().upper()))
     if tkt is None:

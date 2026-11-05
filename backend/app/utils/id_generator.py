@@ -7,6 +7,7 @@ ENTITY_ID_PATTERNS: Dict[str, Pattern[str]] = {
     "sku": re.compile(r"^PRD-\d{3,4}-[A-Z]{2,4}-[A-Z0-9]{1,4}$"),
     "category": re.compile(r"^CAT-(?:MEN|WMN|KID|\d{2})$"),
     "customer": re.compile(r"^CUS-\d{3,5}$"),
+    "staff": re.compile(r"^(?:ADM|MGR|FIN|STF)-\d{3,5}$"),
     "address": re.compile(r"^ADR-\d{3,5}$"),
     "cart": re.compile(r"^CRT-\d{3,5}$"),
     "order": re.compile(r"^ORD-\d{4,6}$"),
@@ -23,6 +24,8 @@ ENTITY_ID_PATTERNS: Dict[str, Pattern[str]] = {
 PREFIX_MAP: Dict[str, Tuple[str, int]] = {
     "product": ("PRD", 3),
     "customer": ("CUS", 3),
+    "staff": ("STF", 3),
+    "admin": ("ADM", 3),
     "address": ("ADR", 3),
     "cart": ("CRT", 3),
     "order": ("ORD", 4),

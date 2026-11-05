@@ -14,6 +14,9 @@ import { ShoppingBagDrawer } from "@/components/cart/ShoppingBagDrawer";
 import { OrdersView } from "@/components/orders/OrdersView";
 import { AdminView } from "@/components/admin/AdminView";
 import { PoliciesView } from "@/components/policies/PoliciesView";
+import { AccountView } from "@/components/auth/AccountView";
+import { AuthModal } from "@/components/auth/AuthModal";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AiAssistantBubble } from "@/components/assistant/AiAssistantBubble";
 import { ToastContainer } from "@/components/ui/StatePanel";
 import { Icon } from "@/components/ui/Icon";
@@ -69,9 +72,28 @@ function StorefrontInner() {
           <CatalogSection onSelectProduct={(p) => setSelectedProduct(p)} />
         )}
 
-        {activePage === "orders" && <OrdersView />}
+        {activePage === "orders" && (
+          <ProtectedRoute
+            requireAuth
+            title="Client Orders & Returns"
+            description="Sign in to view your bespoke orders, track dispatch status, or initiate security-sealed returns."
+          >
+            <OrdersView />
+          </ProtectedRoute>
+        )}
 
-        {activePage === "admin" && <AdminView />}
+        {activePage === "account" && <AccountView />}
+
+        {activePage === "admin" && (
+          <ProtectedRoute
+            requireStaff
+            requiredPermissions={["orders:analytics", "inventory:read"]}
+            title="Maison Governance Portal"
+            description="Restricted to authorized atelier staff, catalog curators, and store leadership."
+          >
+            <AdminView />
+          </ProtectedRoute>
+        )}
 
         {activePage === "policies" && <PoliciesView />}
       </main>
@@ -94,6 +116,9 @@ function StorefrontInner() {
         isOpen={activeDrawer === "bag"}
         onClose={closeDrawer}
       />
+
+      {/* Maison Authentication & RBAC Modal */}
+      <AuthModal />
 
       {/* AI Stylist Floating Bubble (Right Bottom Widget with Action Feedback & ReAct Trace) */}
       <AiAssistantBubble

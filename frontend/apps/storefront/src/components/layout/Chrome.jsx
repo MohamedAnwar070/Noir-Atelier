@@ -41,12 +41,16 @@ export function SiteHeader() {
     activePage,
     navigateTo,
     currentActor,
+    authUser,
+    isAuthenticated,
     isStaff,
     switchActor,
     actorsList,
     businessConfig,
     theme,
     setTheme,
+    openAuthModal,
+    logout,
   } = useStore();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -114,6 +118,19 @@ export function SiteHeader() {
                 Governance
               </button>
             )}
+            <button
+              type="button"
+              className={`nav-link ${activePage === "account" ? "active" : ""}`}
+              onClick={() => {
+                if (isAuthenticated) {
+                  navigateTo("account");
+                } else {
+                  openAuthModal("login");
+                }
+              }}
+            >
+              Maison Profile
+            </button>
           </nav>
         </div>
 
@@ -147,18 +164,57 @@ export function SiteHeader() {
         {/* Client & Maison Controls */}
         <div className="header-actions">
           <div className="header-desktop-controls">
-            <select
-              className="header-pill-select"
-              value={currentActor?.token || ""}
-              onChange={(e) => switchActor(e.target.value)}
-              aria-label="Switch client or staff profile"
-            >
-              {(actorsList || []).map((a) => (
-                <option key={a.token} value={a.token}>
-                  {a.label}
-                </option>
-              ))}
-            </select>
+            {(actorsList || []).length > 0 && (
+              <select
+                className="header-pill-select"
+                value={currentActor?.token || ""}
+                onChange={(e) => switchActor(e.target.value)}
+                aria-label="Switch client or staff profile"
+                title="Persona switcher (demo & testing)"
+              >
+                {(actorsList || []).map((a) => (
+                  <option key={a.token} value={a.token}>
+                    {a.label}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {isAuthenticated ? (
+              <button
+                type="button"
+                className={`header-account-btn ${activePage === "account" ? "active" : ""}`}
+                onClick={() => navigateTo("account")}
+                aria-label={`Maison Account: ${authUser?.name || currentActor?.name || currentActor?.label}`}
+                title="Atelier Profile & Active JWT Sessions"
+              >
+                <span className="header-role-dot" aria-hidden="true" />
+                <Icon name={isStaff ? "shield" : "user"} size={13} />
+                <span>{authUser?.name || currentActor?.name || currentActor?.label}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="header-account-btn"
+                onClick={() => openAuthModal("login")}
+                aria-label="Maison Client Sign In"
+              >
+                <Icon name="lock" size={13} />
+                <span>Sign In</span>
+              </button>
+            )}
+
+            {isAuthenticated && (
+              <button
+                type="button"
+                className="header-icon-btn"
+                onClick={() => logout()}
+                aria-label="Sign out of Atelier"
+                title="Sign out of active session"
+              >
+                <Icon name="logout" size={13} />
+              </button>
+            )}
 
             <button
               type="button"
@@ -284,6 +340,20 @@ export function SiteHeader() {
               Governance Portal
             </button>
           )}
+          <button
+            type="button"
+            className={`chip-pill ${activePage === "account" ? "active" : ""}`}
+            onClick={() => {
+              if (isAuthenticated) {
+                navigateTo("account");
+              } else {
+                openAuthModal("login");
+              }
+              setMobileMenuOpen(false);
+            }}
+          >
+            {isAuthenticated ? "Maison Profile" : "Client Sign-In"}
+          </button>
         </div>
 
         <div className="mobile-nav-controls">
@@ -317,7 +387,7 @@ export function SiteHeader() {
 }
 
 export function MobileTabBar() {
-  const { activePage, navigateTo, cartCount, openDrawer, askStylist } = useStore();
+  const { activePage, navigateTo, cartCount, openDrawer, askStylist, isAuthenticated, openAuthModal } = useStore();
 
   return (
     <nav className="mobile-bottom-nav" aria-label="Mobile Navigation">
@@ -356,6 +426,21 @@ export function MobileTabBar() {
         <Icon name="package" size={18} />
         <span>Orders</span>
       </button>
+
+      <button
+        type="button"
+        className={`mobile-tab-btn ${activePage === "account" ? "active" : ""}`}
+        onClick={() => {
+          if (isAuthenticated) {
+            navigateTo("account");
+          } else {
+            openAuthModal("login");
+          }
+        }}
+      >
+        <Icon name="user" size={18} />
+        <span>{isAuthenticated ? "Profile" : "Sign In"}</span>
+      </button>
     </nav>
   );
 }
@@ -370,6 +455,8 @@ export function SiteFooter() {
     askStylist,
     freeShippingMin,
     taxRules,
+    isAuthenticated,
+    openAuthModal,
   } = useStore();
 
   const name = businessConfig?.store?.name || "Noir Atelier";
@@ -437,6 +524,21 @@ export function SiteFooter() {
               </button>
             </li>
             <li>
+              <button
+                type="button"
+                className="link-subtle"
+                onClick={() => {
+                  if (isAuthenticated) {
+                    navigateTo("account");
+                  } else {
+                    openAuthModal("login");
+                  }
+                }}
+              >
+                Maison Identity &amp; Sessions
+              </button>
+            </li>
+            <li>
               <button type="button" className="link-subtle" onClick={() => navigateTo("orders")}>
                 Orders &amp; Dispatch Tracking
               </button>
@@ -452,6 +554,10 @@ export function SiteFooter() {
         <div className="footer-nav-col">
           <h3 className="footer-heading">Atelier Assurance</h3>
           <ul className="footer-assurance-list">
+            <li>
+              <Icon name="shield" size={13} />
+              <span>Stateful JWT RBAC &amp; Token Rotation</span>
+            </li>
             <li>
               <Icon name="shield" size={13} />
               <span>Numbered Security Ribbon (POL-RET-01)</span>

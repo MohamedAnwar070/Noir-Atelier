@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import admin, agents, audit, cart, config, customers, orders, products, returns
+from .api import admin, agents, audit, auth_routes, cart, config, customers, orders, products, returns
 from .config import PROJECT_ROOT, get_settings
 from .database import get_active_db_backend, get_sync_engine
 from .utils.exceptions import AppError
@@ -61,6 +61,7 @@ async def handle_app_error(request: Request, exc: AppError) -> JSONResponse:
     )
 
 
+app.include_router(auth_routes.router, tags=["Authentication & RBAC"])
 app.include_router(products.router, tags=["Products & Inventory"])
 app.include_router(cart.router, tags=["Cart & Coupons"])
 app.include_router(orders.router, tags=["Orders, Payments & Shipments"])

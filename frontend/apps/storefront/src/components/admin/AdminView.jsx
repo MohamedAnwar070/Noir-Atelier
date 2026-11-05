@@ -45,6 +45,19 @@ export function AdminView() {
   const [materialForm, setMaterialForm] = useState({ name: "", family: "", hsnDefault: "62" });
   const [isSavingVocab, setIsSavingVocab] = useState(false);
 
+  // Staff & RBAC governance state
+  const [staffUsers, setStaffUsers] = useState([]);
+  const [rbacMatrix, setRbacMatrix] = useState({ roles: [] });
+  const [staffForm, setStaffForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+    roleCode: "manager",
+    phone: "",
+    departmentScope: "",
+  });
+  const [isCreatingStaff, setIsCreatingStaff] = useState(false);
+
   const refundStatusMap = useMemo(() => {
     const map = {};
     for (const row of catalogMeta?.refund_statuses || []) {
@@ -82,14 +95,18 @@ export function AdminView() {
     setIsLoading(true);
     setAuthError(null);
     try {
-      const [data, refunds, synRows] = await Promise.all([
+      const [data, refunds, synRows, usersData, matrixData] = await Promise.all([
         apiClient.getAdminDashboard(),
         apiClient.listRefunds().catch(() => []),
         apiClient.listCatalogSynonyms().catch(() => []),
+        apiClient.listAdminUsers().catch(() => ({ staff: [], customers: [] })),
+        apiClient.getRbacMatrix().catch(() => ({ roles: [] })),
       ]);
       setDashboardData(data);
       setReturnsQueue((Array.isArray(refunds) ? refunds : []).filter(isRefundPending));
       setSynonyms(Array.isArray(synRows) ? synRows : []);
+      setStaffUsers(Array.isArray(usersData?.staff) ? usersData.staff : []);
+      setRbacMatrix(matrixData || { roles: [] });
     } catch (err) {
       if (err.status === 403 || err.code === "permission_denied") {
         setAuthError(
@@ -261,6 +278,66 @@ export function AdminView() {
     }
   };
 
+  const handleToggleStaffStatus = async (staff) => {
+    const nextStatus = staff.status === "active" ? "suspended" : "active";
+    try {
+      await apiClient.updateStaffUser(staff.staff_id, { status: nextStatus });
+      setStaffUsers((prev) =>
+        prev.map((s) => (s.staff_id === staff.staff_id ? { ...s, status: nextStatus } : s))
+      );
+      notify({
+        type: "success",
+        title: "Staff Account Updated",
+        description: `${staff.name} is now ${nextStatus}.`,
+      });
+    } catch (err) {
+      notify({
+        type: "error",
+        title: "Failed to update staff status",
+        description: err.message || "An error occurred.",
+      });
+    }
+  };
+
+  const handleCreateStaff = async (e) => {
+    e.preventDefault();
+    if (!staffForm.name || !staffForm.email || !staffForm.password) return;
+    setIsCreatingStaff(true);
+    try {
+      const created = await apiClient.createStaffUser({
+        name: staffForm.name.trim(),
+        email: staffForm.email.trim(),
+        password: staffForm.password,
+        roleCode: staffForm.roleCode,
+        phone: staffForm.phone?.trim() || null,
+        departmentScope: staffForm.departmentScope?.trim() || null,
+      });
+      const newStaffObj = created.user || created;
+      setStaffUsers((prev) => [newStaffObj, ...prev]);
+      setStaffForm({
+        name: "",
+        email: "",
+        password: "",
+        roleCode: "manager",
+        phone: "",
+        departmentScope: "",
+      });
+      notify({
+        type: "success",
+        title: "Staff Member Provisioned",
+        description: `${newStaffObj.name || staffForm.name} assigned role ${newStaffObj.role_name || staffForm.roleCode}.`,
+      });
+    } catch (err) {
+      notify({
+        type: "error",
+        title: "Provisioning Failed",
+        description: err.message || "Could not provision staff user.",
+      });
+    } finally {
+      setIsCreatingStaff(false);
+    }
+  };
+
   // Principle 7: Permission Denied State
   if (!isStaff) {
     return (
@@ -322,6 +399,13 @@ export function AdminView() {
             onClick={() => setActiveTab("vocabulary")}
           >
             Search &amp; Vocabulary ({synonyms.length})
+          </button>
+          <button
+            type="button"
+            className={`dept-tab-btn ${activeTab === "rbac" ? "active" : ""}`}
+            onClick={() => setActiveTab("rbac")}
+          >
+            RBAC &amp; Staff ({staffUsers.length})
           </button>
         </div>
       </div>
@@ -653,6 +737,195 @@ export function AdminView() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* RBAC Governance & Staff Directory */}
+      {!isLoading && !authError && activeTab === "rbac" && (
+        <div className="admin-rbac-section form-stack">
+          {/* Staff Provisioning Form */}
+          <div className="bag-summary-card" style={{ padding: "1.5rem", marginBottom: "1.5rem" }}>
+            <span className="hero-eyebrow">Maison Governance</span>
+            <h3 className="section-heading" style={{ marginTop: "0.25rem", marginBottom: "0.5rem" }}>
+              Provision Atelier Staff Member
+            </h3>
+            <p className="section-subheading" style={{ marginBottom: "1.25rem" }}>
+              Issue administrative credentials with predefined Role-Based Access Control privileges.
+            </p>
+            <form onSubmit={handleCreateStaff} className="form-stack">
+              <div className="form-two-col">
+                <TextField
+                  label="Full Name"
+                  value={staffForm.name}
+                  onChange={(e) => setStaffForm({ ...staffForm, name: e.target.value })}
+                  placeholder="e.g. Elena Rostova"
+                  required
+                />
+                <TextField
+                  label="Maison Work Email"
+                  type="email"
+                  value={staffForm.email}
+                  onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })}
+                  placeholder="elena@noir.test"
+                  required
+                />
+              </div>
+
+              <div className="form-two-col">
+                <TextField
+                  label="Initial Password"
+                  type="password"
+                  value={staffForm.password}
+                  onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })}
+                  placeholder="Min 8 chars, mixed case, symbol"
+                  required
+                />
+                <div className="text-field-group">
+                  <label className="text-field-label">Atelier RBAC Role</label>
+                  <select
+                    className="text-field-input"
+                    value={staffForm.roleCode}
+                    onChange={(e) => setStaffForm({ ...staffForm, roleCode: e.target.value })}
+                    required
+                  >
+                    <option value="manager">Store Manager (manager)</option>
+                    <option value="catalog_manager">Archive Curator (catalog_manager)</option>
+                    <option value="finance_admin">Finance Controller (finance_admin)</option>
+                    <option value="support_agent">Client Concierge (support_agent)</option>
+                    <option value="super_admin">Executive Super Admin (super_admin)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-two-col">
+                <TextField
+                  label="Phone (Optional)"
+                  value={staffForm.phone}
+                  onChange={(e) => setStaffForm({ ...staffForm, phone: e.target.value })}
+                  placeholder="+91 98765 43210"
+                />
+                <TextField
+                  label="Department Scope (Optional)"
+                  value={staffForm.departmentScope}
+                  onChange={(e) => setStaffForm({ ...staffForm, departmentScope: e.target.value })}
+                  placeholder="e.g. MEN, WOMEN, HAUTE_COUTURE"
+                />
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "0.5rem" }}>
+                <Button type="submit" variant="primary" size="md" isLoading={isCreatingStaff}>
+                  Provision Staff Profile
+                </Button>
+              </div>
+            </form>
+          </div>
+
+          {/* Active Staff Directory */}
+          <div className="bag-summary-card" style={{ padding: "1.5rem", marginBottom: "1.5rem" }}>
+            <span className="hero-eyebrow">Staff Roster</span>
+            <h3 className="section-heading" style={{ margin: "0.25rem 0 1rem" }}>
+              Active Atelier Personnel ({staffUsers.length})
+            </h3>
+
+            <div className="rbac-user-table-wrap">
+              <table className="rbac-user-table">
+                <thead>
+                  <tr>
+                    <th>Staff Member</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Department Scope</th>
+                    <th>Status</th>
+                    <th>Last Active</th>
+                    <th>Governance Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {staffUsers.map((staff) => (
+                    <tr key={staff.staff_id}>
+                      <td>
+                        <strong>{staff.name}</strong>
+                        <div style={{ fontSize: "11px", color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
+                          {staff.staff_id}
+                        </div>
+                      </td>
+                      <td>{staff.email}</td>
+                      <td>
+                        <span className="rbac-perm-chip" style={{ fontWeight: 600 }}>
+                          {staff.role_name || staff.role_code}
+                        </span>
+                      </td>
+                      <td>{staff.department_scope || "Global Atelier"}</td>
+                      <td>
+                        <span
+                          style={{
+                            display: "inline-block",
+                            padding: "2px 8px",
+                            borderRadius: "12px",
+                            fontSize: "11px",
+                            fontWeight: 600,
+                            background: staff.status === "active" ? "rgba(46, 125, 50, 0.12)" : "rgba(211, 47, 47, 0.12)",
+                            color: staff.status === "active" ? "#2e7d32" : "#d32f2f",
+                          }}
+                        >
+                          {staff.status === "active" ? "Active" : "Suspended"}
+                        </span>
+                      </td>
+                      <td style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>
+                        {staff.last_login_at ? new Date(staff.last_login_at).toLocaleDateString() : "Never"}
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn-pill btn-pill-outline btn-xs"
+                          onClick={() => handleToggleStaffStatus(staff)}
+                        >
+                          {staff.status === "active" ? "Suspend Access" : "Reactivate"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* RBAC Permission Matrix */}
+          <div className="bag-summary-card" style={{ padding: "1.5rem" }}>
+            <span className="hero-eyebrow">Security Architecture</span>
+            <h3 className="section-heading" style={{ margin: "0.25rem 0 0.5rem" }}>
+              Atelier Role &amp; Permission Matrix
+            </h3>
+            <p className="section-subheading" style={{ marginBottom: "1.25rem" }}>
+              Fine-grained access controls mapped across 7 canonical roles and 32 atomic permissions.
+            </p>
+
+            <div className="rbac-role-cards">
+              {(rbacMatrix.roles || []).map((r) => (
+                <div key={r.role_code} className="rbac-role-card">
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                    <strong>{r.name}</strong>
+                    <code style={{ fontSize: "11px", color: "var(--color-accent)" }}>{r.role_code}</code>
+                  </div>
+                  <p style={{ fontSize: "12px", color: "var(--color-text-muted)", margin: 0 }}>
+                    {r.description}
+                  </p>
+                  <div>
+                    <span style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-text-muted)" }}>
+                      Granted Permissions ({r.permissions?.length || 0}):
+                    </span>
+                    <div className="rbac-perm-cloud" style={{ marginTop: "0.35rem" }}>
+                      {(r.permissions || []).map((p) => (
+                        <span key={p} className="rbac-perm-chip">
+                          {p}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>

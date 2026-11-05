@@ -29,9 +29,9 @@ class TestModelsAndSeed(unittest.TestCase):
     def setUp(self) -> None:
         self.engine = create_engine("sqlite:///:memory:")
 
-    def test_41_tables_registered_and_all_foreign_keys_indexed(self) -> None:
+    def test_46_tables_registered_and_all_foreign_keys_indexed(self) -> None:
         tables = set(Base.metadata.tables.keys())
-        self.assertEqual(len(tables), 41)
+        self.assertEqual(len(tables), 46)
         for required in (
             "customers",
             "customer_addresses",
@@ -74,6 +74,11 @@ class TestModelsAndSeed(unittest.TestCase):
             "agent_permissions",
             "agent_sessions",
             "idempotency_keys",
+            "roles",
+            "permissions",
+            "role_permissions",
+            "staff_users",
+            "auth_sessions",
         ):
             self.assertIn(required, tables)
 

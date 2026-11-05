@@ -273,7 +273,7 @@ def approve_refund(
         rfd.approved_date = datetime.now(timezone.utc)
         rfd.status = "approved"
     elif rfd.approval_tier == 2:
-        if actor.actor_type != "admin" or actor.role not in ("manager", "super_admin"):
+        if actor.actor_type != "admin" or not actor.has_permission("refunds:approve_tier2"):
             raise AppError(
                 "manager_approval_required",
                 f"Refund '{rfd.refund_id}' (INR {rfd.amount_inr}) is Tier 2 and requires Store Manager approval.",
@@ -283,7 +283,7 @@ def approve_refund(
         rfd.approved_date = datetime.now(timezone.utc)
         rfd.status = "approved"
     else:
-        if actor.actor_type != "admin":
+        if actor.actor_type != "admin" or not actor.has_permission("refunds:approve_tier3"):
             raise AppError(
                 "dual_approval_required",
                 f"Refund '{rfd.refund_id}' (INR {rfd.amount_inr}) is Tier 3 (> INR 25,000) and requires Manager + Finance dual approval.",

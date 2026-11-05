@@ -30,10 +30,53 @@ from backend.app.models import (
     ProductReview,
     Recommendation,
     ShippingZone,
+    StaffUser,
 )
+from backend.app.security import hash_password
 from backend.app.storage.object_store import LocalObjectStore
 from backend.app.reference_data import CATEGORIES, FIT_FEEDBACK_OPTIONS, ensure_reference_data
 from backend.app.services.variant_service import set_variant_prices
+
+
+def ensure_default_auth_accounts(session: Session) -> None:
+    """Idempotently backfill demo client passwords and seed Maison RBAC staff accounts."""
+    default_staff = [
+        ("ADM-001", "Vikramaditya Rao", "admin@noir.test", "super_admin", None),
+        ("MGR-001", "Ananya Deshmukh", "manager@noir.test", "manager", None),
+        ("FIN-001", "Raghavendra Iyer", "finance@noir.test", "finance_admin", None),
+        ("STF-004", "Kabir Malhotra", "curator@noir.test", "catalog_manager", None),
+        ("STF-005", "Meera Krishnan", "concierge@noir.test", "support_agent", None),
+    ]
+    existing_staff_ids = set(session.scalars(select(StaffUser.staff_id)).all())
+    missing_staff = [row for row in default_staff if row[0] not in existing_staff_ids]
+
+    cust_without_pw = session.scalars(
+        select(Customer).where(
+            Customer.customer_id.in_(("CUS-001", "CUS-002")),
+            Customer.password_hash.is_(None),
+        )
+    ).all()
+
+    if cust_without_pw:
+        client_hash = hash_password("NoirClient@2026")
+        for cust in cust_without_pw:
+            cust.password_hash = client_hash
+
+    if missing_staff:
+        staff_hash = hash_password("NoirAdmin@2026")
+        for sid, sname, semail, srole, sdept in missing_staff:
+            session.add(
+                StaffUser(
+                    staff_id=sid,
+                    name=sname,
+                    email=semail,
+                    password_hash=staff_hash,
+                    role_code=srole,
+                    department_scope=sdept,
+                    status="active",
+                )
+            )
+    session.flush()
 
 
 def seed_database(engine: Optional[Engine] = None) -> dict:
@@ -51,6 +94,8 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
         session.commit()
 
         if session.get(Product, "PRD-001") is not None:
+            ensure_default_auth_accounts(session)
+            session.commit()
             return {"status": "already_seeded"}
 
         color_ids = {c.name: c.color_id for c in session.scalars(select(Color))}
@@ -254,6 +299,7 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
         ]
         session.add_all(customers)
         session.flush()
+        ensure_default_auth_accounts(session)
 
         addresses = [
             CustomerAddress(

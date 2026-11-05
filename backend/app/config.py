@@ -79,10 +79,16 @@ class Settings:
 
     jwt_algorithm: str
     jwt_secret: str
+    jwt_refresh_secret: str
     access_token_ttl_min: int
     refresh_token_ttl_days: int
     password_hasher: str
     service_account_secret: str
+    admin_invite_code: str
+    auth_rate_limit_per_min: int
+    max_failed_logins: int
+    lockout_minutes: int
+    cookie_secure: bool
 
     rate_limit_agent: int
     rate_limit_customer: int
@@ -155,10 +161,19 @@ def get_settings() -> Settings:
         media_base_url=os.environ.get("MEDIA_BASE_URL", "http://localhost:8000/media"),
         jwt_algorithm=os.environ.get("JWT_ALGORITHM", "HS256"),
         jwt_secret=os.environ.get("JWT_SECRET", "change-me-in-production"),
+        jwt_refresh_secret=os.environ.get("JWT_REFRESH_SECRET", "change-me-refresh-secret-in-production"),
         access_token_ttl_min=int(os.environ.get("ACCESS_TOKEN_TTL_MIN", "30")),
         refresh_token_ttl_days=int(os.environ.get("REFRESH_TOKEN_TTL_DAYS", "14")),
         password_hasher=os.environ.get("PASSWORD_HASHER", "argon2"),
         service_account_secret=os.environ.get("SERVICE_ACCOUNT_SECRET", "change-me-service-secret"),
+        admin_invite_code=os.environ.get("ADMIN_INVITE_CODE", "NOIR-ATELIER-ADMIN-2026"),
+        auth_rate_limit_per_min=int(os.environ.get("AUTH_RATE_LIMIT_PER_MIN", "20")),
+        max_failed_logins=int(os.environ.get("MAX_FAILED_LOGINS", "5")),
+        lockout_minutes=int(os.environ.get("LOCKOUT_MINUTES", "15")),
+        cookie_secure=_as_bool(
+            os.environ.get("COOKIE_SECURE", ""),
+            os.environ.get("APP_ENV", "development").strip().lower() == "production",
+        ),
         rate_limit_agent=int(os.environ.get("RATE_LIMIT_AGENT", "100")),
         rate_limit_customer=int(os.environ.get("RATE_LIMIT_CUSTOMER", "60")),
         rate_limit_anon=int(os.environ.get("RATE_LIMIT_ANON", "30")),

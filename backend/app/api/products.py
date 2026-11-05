@@ -4,7 +4,15 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from ..auth import ActorContext, require_admin, require_agent_or_admin, require_authenticated, resolve_actor
+from ..auth import (
+    ActorContext,
+    require_admin,
+    require_agent_or_admin,
+    require_authenticated,
+    require_permissions,
+    resolve_actor,
+    resolve_optional_actor,
+)
 from ..database import get_db
 from ..schemas.product_schema import (
     InventoryReserveRequest,
@@ -38,7 +46,7 @@ router = APIRouter()
 @router.get("/api/catalog/meta")
 def api_get_catalog_meta(
     db: Session = Depends(get_db),
-    _actor: ActorContext = Depends(resolve_actor),
+    _actor: ActorContext = Depends(resolve_optional_actor),
 ) -> Dict[str, Any]:
     return get_catalog_meta(db)
 
@@ -57,7 +65,7 @@ def api_search_catalog(
     limit: int = Query(default=24, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    _actor: ActorContext = Depends(resolve_actor),
+    _actor: ActorContext = Depends(resolve_optional_actor),
 ) -> Dict[str, Any]:
     return search_catalog(
         db=db,
@@ -89,7 +97,7 @@ def api_search_products(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    _actor: ActorContext = Depends(resolve_actor),
+    _actor: ActorContext = Depends(resolve_optional_actor),
 ) -> List[Dict[str, Any]]:
     return search_products(
         db=db,
@@ -122,7 +130,7 @@ def api_products_analytics(
 def api_get_product(
     product_id: str,
     db: Session = Depends(get_db),
-    _actor: ActorContext = Depends(resolve_actor),
+    _actor: ActorContext = Depends(resolve_optional_actor),
 ) -> Dict[str, Any]:
     prod = get_product_by_id_or_sku(db, product_id)
     return serialize_product(prod, db)
@@ -133,7 +141,7 @@ def api_get_recommendations(
     product_id: str,
     limit: int = Query(default=4, ge=1, le=10),
     db: Session = Depends(get_db),
-    _actor: ActorContext = Depends(resolve_actor),
+    _actor: ActorContext = Depends(resolve_optional_actor),
 ) -> List[Dict[str, Any]]:
     return get_product_recommendations(db, product_id, limit=limit)
 
@@ -152,7 +160,7 @@ def api_create_product_review(
 def api_create_product(
     req: ProductCreateRequest,
     db: Session = Depends(get_db),
-    actor: ActorContext = Depends(require_admin),
+    actor: ActorContext = Depends(require_permissions("catalog:write")),
 ) -> Dict[str, Any]:
     return create_product(db, actor, req)
 
@@ -162,7 +170,7 @@ def api_update_product(
     product_id: str,
     req: ProductUpdateRequest,
     db: Session = Depends(get_db),
-    actor: ActorContext = Depends(require_admin),
+    actor: ActorContext = Depends(require_permissions("catalog:write")),
 ) -> Dict[str, Any]:
     return update_product(db, actor, product_id, req)
 
@@ -173,7 +181,7 @@ def api_update_variant(
     size: str,
     req: VariantUpdateRequest,
     db: Session = Depends(get_db),
-    actor: ActorContext = Depends(require_admin),
+    actor: ActorContext = Depends(require_permissions("catalog:write")),
 ) -> Dict[str, Any]:
     """Set the price of one size (adds the size if new) and/or retire it."""
     return update_variant(db, actor, product_id, size, req)
@@ -184,7 +192,7 @@ def api_update_variant(
 def api_discontinue_product(
     product_id: str,
     db: Session = Depends(get_db),
-    actor: ActorContext = Depends(require_agent_or_admin),
+    actor: ActorContext = Depends(require_permissions("catalog:write", allow_agent=True)),
 ) -> Dict[str, Any]:
     return discontinue_product(db, actor, product_id)
 
@@ -192,7 +200,7 @@ def api_discontinue_product(
 @router.get("/api/categories")
 def api_list_categories(
     db: Session = Depends(get_db),
-    _actor: ActorContext = Depends(resolve_actor),
+    _actor: ActorContext = Depends(resolve_optional_actor),
 ) -> List[Dict[str, Any]]:
     return list_categories(db)
 
@@ -201,7 +209,7 @@ def api_list_categories(
 def api_list_inventory(
     low_stock_only: bool = Query(default=False),
     db: Session = Depends(get_db),
-    _actor: ActorContext = Depends(require_agent_or_admin),
+    _actor: ActorContext = Depends(require_permissions("inventory:read", allow_agent=True)),
 ) -> List[Dict[str, Any]]:
     return list_inventory(db, low_stock_only=low_stock_only)
 
@@ -211,7 +219,7 @@ def api_update_inventory(
     product_id: str,
     req: InventoryUpdateRequest,
     db: Session = Depends(get_db),
-    actor: ActorContext = Depends(require_agent_or_admin),
+    actor: ActorContext = Depends(require_permissions("inventory:write", allow_agent=True)),
 ) -> Dict[str, Any]:
     return update_inventory_stock(db, actor, product_id, req)
 
@@ -220,7 +228,7 @@ def api_update_inventory(
 def api_reserve_inventory(
     req: InventoryReserveRequest,
     db: Session = Depends(get_db),
-    actor: ActorContext = Depends(require_agent_or_admin),
+    actor: ActorContext = Depends(require_permissions("inventory:write", allow_agent=True)),
 ) -> Dict[str, Any]:
     prod = get_product_by_id_or_sku(db, req.product_id)
     assert prod.inventory is not None
@@ -238,7 +246,7 @@ def api_reserve_inventory(
 def api_restock_inventory(
     req: InventoryReserveRequest,
     db: Session = Depends(get_db),
-    actor: ActorContext = Depends(require_agent_or_admin),
+    actor: ActorContext = Depends(require_permissions("inventory:write", allow_agent=True)),
 ) -> Dict[str, Any]:
     prod = get_product_by_id_or_sku(db, req.product_id)
     assert prod.inventory is not None

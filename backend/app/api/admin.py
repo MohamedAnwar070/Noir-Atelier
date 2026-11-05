@@ -4,9 +4,14 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..auth import ActorContext, require_admin, require_agent_or_admin
+from ..auth import ActorContext, require_admin, require_permissions
 from ..database import get_db
 from ..models import SupportTicket
+from ..schemas.auth_schema import (
+    CustomerStatusUpdateRequest,
+    StaffCreateRequest,
+    StaffUpdateRequest,
+)
 from ..schemas.config_schema import ConfigUpdateRequest
 from ..schemas.product_schema import (
     CategoryCreateRequest,
@@ -14,6 +19,13 @@ from ..schemas.product_schema import (
     DepartmentCreateRequest,
     MaterialCreateRequest,
     SynonymCreateRequest,
+)
+from ..services.auth_service import (
+    create_staff_account_by_admin,
+    get_rbac_matrix,
+    list_all_users_for_governance,
+    update_customer_account_status,
+    update_staff_account,
 )
 from ..services.config_service import update_business_config
 from ..services.customer_service import get_customers_analytics
@@ -37,7 +49,7 @@ router = APIRouter()
 def api_update_config_policies(
     req: ConfigUpdateRequest,
     db: Session = Depends(get_db),
-    actor: ActorContext = Depends(require_agent_or_admin),
+    actor: ActorContext = Depends(require_permissions("config:write", allow_agent=True)),
 ) -> Dict[str, Any]:
     return update_business_config(db, actor, req.config_key, req.config_value, req.reason)
 
@@ -45,14 +57,15 @@ def api_update_config_policies(
 @router.get("/api/admin/dashboard")
 def api_admin_dashboard(
     db: Session = Depends(get_db),
-    _actor: ActorContext = Depends(require_admin),
+    actor: ActorContext = Depends(require_admin),
 ) -> Dict[str, Any]:
     tickets = db.scalars(select(SupportTicket).order_by(SupportTicket.created_at.desc())).all()
     return {
-        "orders": get_orders_analytics(db),
-        "customers": get_customers_analytics(db),
-        "low_stock_alerts": list_inventory(db, low_stock_only=True),
-        "recent_refunds": list_refunds(db)[:10],
+        "actor_role": actor.role,
+        "orders": get_orders_analytics(db) if actor.has_permission("orders:analytics") else {},
+        "customers": get_customers_analytics(db) if actor.has_permission("customers:analytics") else {},
+        "low_stock_alerts": list_inventory(db, low_stock_only=True) if actor.has_permission("inventory:read") else [],
+        "recent_refunds": list_refunds(db)[:10] if actor.has_permission("returns:read_all") else [],
         "support_tickets": [
             {
                 "ticket_id": t.ticket_id,
@@ -64,7 +77,7 @@ def api_admin_dashboard(
                 "priority": t.priority,
                 "status": t.status,
             }
-            for t in tickets[:15]
+            for t in (tickets[:15] if actor.has_permission("support:read_all") else [])
         ],
     }
 
@@ -72,7 +85,7 @@ def api_admin_dashboard(
 @router.post("/api/admin/inventory/sync")
 def api_admin_inventory_sync(
     db: Session = Depends(get_db),
-    _actor: ActorContext = Depends(require_admin),
+    _actor: ActorContext = Depends(require_permissions("inventory:write")),
 ) -> Dict[str, Any]:
     items = list_inventory(db, low_stock_only=False)
     return {"status": "synced", "synced_skus": len(items)}
@@ -90,7 +103,7 @@ def api_list_catalog_synonyms(
 def api_create_catalog_synonym(
     req: SynonymCreateRequest,
     db: Session = Depends(get_db),
-    actor: ActorContext = Depends(require_admin),
+    actor: ActorContext = Depends(require_permissions("catalog:manage_taxonomy")),
 ) -> Dict[str, Any]:
     return create_search_synonym(db, actor, req)
 
@@ -99,7 +112,7 @@ def api_create_catalog_synonym(
 def api_delete_catalog_synonym(
     synonym_id: int,
     db: Session = Depends(get_db),
-    actor: ActorContext = Depends(require_admin),
+    actor: ActorContext = Depends(require_permissions("catalog:manage_taxonomy")),
 ) -> Dict[str, Any]:
     return delete_search_synonym(db, actor, synonym_id)
 
@@ -108,7 +121,7 @@ def api_delete_catalog_synonym(
 def api_create_catalog_color(
     req: ColorCreateRequest,
     db: Session = Depends(get_db),
-    actor: ActorContext = Depends(require_admin),
+    actor: ActorContext = Depends(require_permissions("catalog:manage_taxonomy")),
 ) -> Dict[str, Any]:
     return create_catalog_color(db, actor, req)
 
@@ -117,7 +130,7 @@ def api_create_catalog_color(
 def api_create_catalog_material(
     req: MaterialCreateRequest,
     db: Session = Depends(get_db),
-    actor: ActorContext = Depends(require_admin),
+    actor: ActorContext = Depends(require_permissions("catalog:manage_taxonomy")),
 ) -> Dict[str, Any]:
     return create_catalog_material(db, actor, req)
 
@@ -126,7 +139,7 @@ def api_create_catalog_material(
 def api_create_catalog_category(
     req: CategoryCreateRequest,
     db: Session = Depends(get_db),
-    actor: ActorContext = Depends(require_admin),
+    actor: ActorContext = Depends(require_permissions("catalog:manage_taxonomy")),
 ) -> Dict[str, Any]:
     return create_catalog_category(db, actor, req)
 
@@ -135,6 +148,51 @@ def api_create_catalog_category(
 def api_create_catalog_department(
     req: DepartmentCreateRequest,
     db: Session = Depends(get_db),
-    actor: ActorContext = Depends(require_admin),
+    actor: ActorContext = Depends(require_permissions("catalog:manage_taxonomy")),
 ) -> Dict[str, Any]:
     return create_catalog_department(db, actor, req)
+
+
+@router.get("/api/admin/rbac/matrix")
+def api_get_rbac_matrix(
+    db: Session = Depends(get_db),
+    _actor: ActorContext = Depends(require_admin),
+) -> Dict[str, Any]:
+    return get_rbac_matrix(db)
+
+
+@router.get("/api/admin/users")
+def api_list_governance_users(
+    db: Session = Depends(get_db),
+    _actor: ActorContext = Depends(require_permissions("users:read")),
+) -> Dict[str, Any]:
+    return list_all_users_for_governance(db)
+
+
+@router.post("/api/admin/users/staff", status_code=201)
+def api_create_staff_user(
+    req: StaffCreateRequest,
+    db: Session = Depends(get_db),
+    actor: ActorContext = Depends(require_permissions("users:manage_roles")),
+) -> Dict[str, Any]:
+    return create_staff_account_by_admin(db, actor, req)
+
+
+@router.patch("/api/admin/users/staff/{staff_id}")
+def api_update_staff_user(
+    staff_id: str,
+    req: StaffUpdateRequest,
+    db: Session = Depends(get_db),
+    actor: ActorContext = Depends(require_permissions("users:manage_roles")),
+) -> Dict[str, Any]:
+    return update_staff_account(db, actor, staff_id, req)
+
+
+@router.patch("/api/admin/users/customers/{customer_id}/status")
+def api_update_customer_status(
+    customer_id: str,
+    req: CustomerStatusUpdateRequest,
+    db: Session = Depends(get_db),
+    actor: ActorContext = Depends(require_permissions("users:manage_roles")),
+) -> Dict[str, Any]:
+    return update_customer_account_status(db, actor, customer_id, req)

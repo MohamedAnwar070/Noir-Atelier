@@ -17,7 +17,9 @@ import {
 const StoreContext = createContext(null);
 
 const ACTOR_STORAGE_KEY = "noir_actor_token";
+const SESSION_REFRESH_KEY = "noir_session_refresh";
 const WISHLIST_STORAGE_KEY = "noir_wishlist";
+const ANON_PERMISSIONS = ["catalog:read", "config:read"];
 
 const EMPTY_CATALOG_META = {
   departments: [],
@@ -78,8 +80,11 @@ export function StoreProvider({ children, initialPage = "shop" }) {
   });
   const [catalogMeta, setCatalogMeta] = useState(EMPTY_CATALOG_META);
   const [agentRegistry, setAgentRegistry] = useState([]);
+  const [availableRoles, setAvailableRoles] = useState([]);
   const [actors, setActors] = useState([]);
   const [actor, setActor] = useState(null);
+  const [authUser, setAuthUser] = useState(null);
+  const [permissions, setPermissions] = useState(ANON_PERMISSIONS);
   const [categories, setCategories] = useState([]);
   const [allProducts, setAllProducts] = useState([]);
   const [catalog, setCatalog] = useState({
@@ -109,6 +114,8 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     productId: null,
     menuOpen: false,
     accountOpen: false,
+    authModalOpen: false,
+    authModalMode: "login",
     chatOpen: false,
     returnOrderId: null,
     page: initialPage,
@@ -136,9 +143,68 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     });
   }, []);
 
+  const buildActorFromUser = useCallback((user, accessToken = null) => {
+    if (!user) return null;
+    const isStaffUser = Boolean(user.is_staff || user.actor_type === "admin");
+    const roleLabel = user.role_name || user.role;
+    return {
+      id: user.id,
+      customerId: user.customer_id || (user.actor_type === "customer" ? user.id : null),
+      staffId: user.staff_id || (isStaffUser ? user.id : null),
+      token: accessToken || null,
+      actor_type: user.actor_type,
+      role: user.role,
+      role_name: roleLabel,
+      hierarchy_level: user.hierarchy_level || (isStaffUser ? 50 : 10),
+      is_staff: isStaffUser,
+      loyalty_tier: user.loyalty_tier || (isStaffUser ? "STAFF" : "STANDARD"),
+      name: user.name,
+      email: user.email,
+      phone: user.phone || null,
+      status: user.status || "active",
+      label: `${user.name} · ${roleLabel}`,
+    };
+  }, []);
+
+  const handleAuthSessionUpdate = useCallback(
+    (refreshed) => {
+      if (!refreshed || !refreshed.user) {
+        setAuthUser(null);
+        setActor(null);
+        actorRef.current = null;
+        setPermissions(ANON_PERMISSIONS);
+        try {
+          window.sessionStorage.removeItem(SESSION_REFRESH_KEY);
+        } catch {
+          /* storage unavailable */
+        }
+        return;
+      }
+      const nextActor = buildActorFromUser(refreshed.user, refreshed.tokens?.access_token);
+      actorRef.current = nextActor;
+      setAuthUser(refreshed.user);
+      setActor(nextActor);
+      setPermissions(Array.isArray(refreshed.permissions) ? refreshed.permissions : ANON_PERMISSIONS);
+      if (refreshed.tokens?.refresh_token) {
+        try {
+          window.sessionStorage.setItem(SESSION_REFRESH_KEY, refreshed.tokens.refresh_token);
+        } catch {
+          /* storage unavailable */
+        }
+      }
+    },
+    [buildActorFromUser]
+  );
+
   const apiRef = useRef(null);
-  if (!apiRef.current) apiRef.current = new NoirApiClient({ onNetworkEvent: (evt) => handleNetworkEvent(evt) });
+  if (!apiRef.current) {
+    apiRef.current = new NoirApiClient({
+      onNetworkEvent: (evt) => handleNetworkEvent(evt),
+      onAuthSessionUpdate: (data) => handleAuthSessionUpdate(data),
+    });
+  }
   const api = apiRef.current;
+  api.onAuthSessionUpdate = handleAuthSessionUpdate;
 
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
@@ -177,11 +243,37 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     [dismissToast]
   );
 
+  const isAuthenticated = Boolean(actor && actor.actor_type && actor.actor_type !== "anon");
   const isCustomer = actor?.role === "customer";
   const isStaff = Boolean(
     actor?.is_staff ||
       actor?.actor_type === "admin" ||
       (config.staffRoles || []).includes(actor?.role)
+  );
+
+  const permissionsSet = useMemo(() => new Set(permissions || []), [permissions]);
+
+  const hasPermission = useCallback(
+    (permCode) => {
+      if (!isAuthenticated) return ANON_PERMISSIONS.includes(permCode);
+      if (actor?.role === "super_admin") return true;
+      return permissionsSet.has(permCode);
+    },
+    [actor?.role, isAuthenticated, permissionsSet]
+  );
+
+  const hasAnyPermission = useCallback(
+    (...permCodes) => permCodes.some((code) => hasPermission(code)),
+    [hasPermission]
+  );
+
+  const hasRole = useCallback(
+    (...roleCodes) => {
+      if (!isAuthenticated || !actor?.role) return false;
+      if (actor.role === "super_admin") return true;
+      return roleCodes.includes(actor.role);
+    },
+    [actor?.role, isAuthenticated]
   );
 
   const resolvePriceBounds = useCallback((nextFilters, meta = catalogMetaRef.current) => {
@@ -376,27 +468,100 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     setBoot({ status: "loading", error: null });
     setCatalog((prev) => ({ ...prev, status: "loading", error: null }));
     try {
-      const [cfg, meta, searchRes, fullArchiveRes, registry, health] = await Promise.all([
+      const [cfg, meta, searchRes, fullArchiveRes, registry, health, rolesRes] = await Promise.all([
         api.getPoliciesAndConfig(),
         api.getCatalogMeta(),
         api.searchCatalog({ sort: DEFAULT_FILTERS.sort, limit: pageSize, offset: 0 }),
         api.searchCatalog({ sort: DEFAULT_FILTERS.sort, limit: 100, offset: 0 }).catch(() => null),
         api.getAgentsRegistry().catch(() => []),
         api.getHealth().catch(() => ({})),
+        api.listRoles().catch(() => []),
       ]);
 
       const actorList = cfg.actors || [];
-      const savedToken = typeof window !== "undefined" ? window.localStorage.getItem(ACTOR_STORAGE_KEY) : null;
-      const resolved =
-        actorList.find((a) => a.token === savedToken) ||
-        actorList.find((a) => a.role === "customer") ||
-        actorList[0] ||
-        null;
+      setAvailableRoles(Array.isArray(rolesRes) ? rolesRes : []);
 
-      if (resolved) {
-        api.setToken(resolved.token);
-        actorRef.current = resolved;
+      // Restore active JWT session (via HttpOnly cookie or session refresh token) or saved demo persona
+      let resolvedActor = null;
+      let resolvedUser = null;
+      let resolvedPerms = ANON_PERMISSIONS;
+
+      const storedRefresh =
+        typeof window !== "undefined" ? window.sessionStorage.getItem(SESSION_REFRESH_KEY) : null;
+      const savedDemoToken =
+        typeof window !== "undefined" ? window.localStorage.getItem(ACTOR_STORAGE_KEY) : null;
+
+      if (storedRefresh) {
+        api.setAuthTokens({ accessToken: api.token, refreshToken: storedRefresh });
       }
+
+      // 1. Try restoring live JWT session via cookie or refresh token
+      try {
+        if (storedRefresh && !api.token) {
+          const refreshed = await api.refreshAuthSession(storedRefresh);
+          if (refreshed?.user) {
+            resolvedUser = refreshed.user;
+            resolvedPerms = refreshed.permissions || ANON_PERMISSIONS;
+            resolvedActor = buildActorFromUser(refreshed.user, refreshed.tokens?.access_token);
+            if (refreshed.tokens?.refresh_token) {
+              window.sessionStorage.setItem(SESSION_REFRESH_KEY, refreshed.tokens.refresh_token);
+            }
+          }
+        } else {
+          const meRes = await api.getCurrentUser();
+          if (meRes?.user) {
+            resolvedUser = meRes.user;
+            resolvedPerms = meRes.permissions || ANON_PERMISSIONS;
+            resolvedActor = buildActorFromUser(meRes.user, api.token);
+          }
+        }
+      } catch {
+        if (storedRefresh) {
+          try {
+            const refreshed = await api.refreshAuthSession(storedRefresh);
+            if (refreshed?.user) {
+              resolvedUser = refreshed.user;
+              resolvedPerms = refreshed.permissions || ANON_PERMISSIONS;
+              resolvedActor = buildActorFromUser(refreshed.user, refreshed.tokens?.access_token);
+              if (refreshed.tokens?.refresh_token) {
+                window.sessionStorage.setItem(SESSION_REFRESH_KEY, refreshed.tokens.refresh_token);
+              }
+            }
+          } catch {
+            try {
+              window.sessionStorage.removeItem(SESSION_REFRESH_KEY);
+            } catch {
+              /* ignore */
+            }
+            api.clearAuthTokens();
+          }
+        }
+      }
+
+      // 2. Fallback to explicitly chosen demo persona when in demo_mode
+      if (!resolvedActor && savedDemoToken && Boolean(health?.demo_mode)) {
+        const matchedDemo = actorList.find((a) => a.token === savedDemoToken);
+        if (matchedDemo) {
+          api.setToken(matchedDemo.token);
+          try {
+            const meRes = await api.getCurrentUser();
+            if (meRes?.user) {
+              resolvedUser = meRes.user;
+              resolvedPerms = meRes.permissions || ANON_PERMISSIONS;
+              resolvedActor = { ...buildActorFromUser(meRes.user, matchedDemo.token), token: matchedDemo.token };
+            } else {
+              resolvedActor = matchedDemo;
+            }
+          } catch {
+            resolvedActor = matchedDemo;
+          }
+        }
+      }
+
+      actorRef.current = resolvedActor;
+      setAuthUser(resolvedUser);
+      setPermissions(resolvedPerms);
+      setSystem((prev) => ({ ...prev, sessionExpired: false }));
 
       const mergedMeta = { ...EMPTY_CATALOG_META, ...(meta || {}) };
       catalogMetaRef.current = mergedMeta;
@@ -414,7 +579,7 @@ export function StoreProvider({ children, initialPage = "shop" }) {
         demoMode: Boolean(health?.demo_mode),
       });
       setActors(actorList);
-      setActor(resolved);
+      setActor(resolvedActor);
 
       const rawProducts = Array.isArray(searchRes) ? searchRes : searchRes?.items || [];
       const normalizedProducts = rawProducts.map(normalizeProduct);
@@ -432,12 +597,14 @@ export function StoreProvider({ children, initialPage = "shop" }) {
         error: null,
       });
       setBoot({ status: "ready", error: null });
-      await loadAccountData();
+      if (resolvedActor) {
+        await loadAccountData();
+      }
     } catch (error) {
       setBoot({ status: "error", error });
       setCatalog((prev) => ({ ...prev, status: "error", error }));
     }
-  }, [api, loadAccountData]);
+  }, [api, buildActorFromUser, loadAccountData, pageSize]);
 
   useEffect(() => {
     setThemeState(getInitialTheme());
@@ -523,25 +690,216 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     });
   }, []);
 
+  const openAuthModal = useCallback((mode = "login") => {
+    setUi((prev) => ({ ...prev, authModalOpen: true, authModalMode: mode }));
+  }, []);
+
+  const closeAuthModal = useCallback(() => {
+    setUi((prev) => ({ ...prev, authModalOpen: false }));
+  }, []);
+
+  const applyAuthSession = useCallback(
+    async (res, welcomeTitle = "Welcome to Noir Atelier") => {
+      const user = res?.user;
+      const tokens = res?.tokens;
+      const perms = Array.isArray(res?.permissions) ? res.permissions : ANON_PERMISSIONS;
+      const nextActor = buildActorFromUser(user, tokens?.access_token);
+
+      if (tokens?.access_token) {
+        api.setAuthTokens({
+          accessToken: tokens.access_token,
+          refreshToken: tokens.refresh_token || null,
+        });
+      }
+      try {
+        window.localStorage.removeItem(ACTOR_STORAGE_KEY);
+        if (tokens?.refresh_token) {
+          window.sessionStorage.setItem(SESSION_REFRESH_KEY, tokens.refresh_token);
+        }
+      } catch {
+        /* storage unavailable */
+      }
+
+      actorRef.current = nextActor;
+      setAuthUser(user);
+      setActor(nextActor);
+      setPermissions(perms);
+      setSystem((prev) => ({ ...prev, sessionExpired: false }));
+      setUi((prev) => ({ ...prev, authModalOpen: false }));
+
+      if (user?.actor_type === "customer") {
+        await loadAccountData();
+      } else {
+        setCart(null);
+        setOrders({ status: "idle", items: [], error: null });
+        setAddresses([]);
+      }
+
+      notify({
+        tone: "success",
+        title: welcomeTitle,
+        message: `Signed in as ${user?.name} (${user?.role_name || user?.role}).`,
+      });
+      return res;
+    },
+    [api, buildActorFromUser, loadAccountData, notify]
+  );
+
+  const login = useCallback(
+    async ({ email, password, portal = "auto" }) => {
+      const res = await api.login({ email, password, portal });
+      return applyAuthSession(res, "Welcome back");
+    },
+    [api, applyAuthSession]
+  );
+
+  const registerCustomer = useCallback(
+    async ({ name, email, password, phone = null, preferredDepartment = null }) => {
+      const res = await api.registerCustomer({ name, email, password, phone, preferredDepartment });
+      return applyAuthSession(res, "Maison Client Profile Created");
+    },
+    [api, applyAuthSession]
+  );
+
+  const registerAdmin = useCallback(
+    async ({ name, email, password, roleCode = "manager", phone = null, departmentScope = null, inviteCode = null }) => {
+      const res = await api.registerAdmin({
+        name,
+        email,
+        password,
+        roleCode,
+        phone,
+        departmentScope,
+        inviteCode,
+      });
+      if (res?.tokens?.access_token) {
+        return applyAuthSession(res, "Maison Staff Account Provisioned");
+      }
+      notify({
+        tone: "success",
+        title: "Staff Account Created",
+        message: `${res?.user?.name} provisioned with role ${res?.user?.role_name || roleCode}.`,
+      });
+      return res;
+    },
+    [api, applyAuthSession, notify]
+  );
+
+  const logout = useCallback(async () => {
+    const storedRefresh =
+      typeof window !== "undefined" ? window.sessionStorage.getItem(SESSION_REFRESH_KEY) : null;
+    try {
+      await api.logout(storedRefresh);
+    } catch {
+      /* session already cleared server-side */
+    }
+    try {
+      window.sessionStorage.removeItem(SESSION_REFRESH_KEY);
+      window.localStorage.removeItem(ACTOR_STORAGE_KEY);
+    } catch {
+      /* storage unavailable */
+    }
+    actorRef.current = null;
+    setAuthUser(null);
+    setActor(null);
+    setPermissions(ANON_PERMISSIONS);
+    setCart(null);
+    setOrders({ status: "idle", items: [], error: null });
+    setAddresses([]);
+    setUi((prev) => ({
+      ...prev,
+      cartOpen: false,
+      page: ["admin", "orders", "account"].includes(prev.page) ? "shop" : prev.page,
+    }));
+    notify({
+      tone: "info",
+      title: "Signed out",
+      message: "Your Noir Atelier session has been securely closed.",
+    });
+  }, [api, notify]);
+
+  const logoutAll = useCallback(async () => {
+    try {
+      await api.logoutAllSessions();
+    } catch {
+      /* ignore */
+    }
+    try {
+      window.sessionStorage.removeItem(SESSION_REFRESH_KEY);
+      window.localStorage.removeItem(ACTOR_STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+    actorRef.current = null;
+    setAuthUser(null);
+    setActor(null);
+    setPermissions(ANON_PERMISSIONS);
+    setCart(null);
+    setOrders({ status: "idle", items: [], error: null });
+    setAddresses([]);
+    setUi((prev) => ({
+      ...prev,
+      cartOpen: false,
+      page: ["admin", "orders", "account"].includes(prev.page) ? "shop" : prev.page,
+    }));
+    notify({
+      tone: "info",
+      title: "Signed out across all devices",
+      message: "All active tokens and sessions for your account have been revoked.",
+    });
+  }, [api, notify]);
+
+  const refreshProfile = useCallback(async () => {
+    try {
+      const meRes = await api.getCurrentUser();
+      if (meRes?.user) {
+        const nextActor = buildActorFromUser(meRes.user, api.token);
+        actorRef.current = nextActor;
+        setAuthUser(meRes.user);
+        setActor(nextActor);
+        setPermissions(meRes.permissions || ANON_PERMISSIONS);
+      }
+      return meRes;
+    } catch {
+      return null;
+    }
+  }, [api, buildActorFromUser]);
+
   const switchActor = useCallback(
     async (token) => {
+      if (!token) {
+        await logout();
+        return;
+      }
       const next = actors.find((a) => a.token === token);
       if (!next) return;
-      api.setToken(next.token);
-      actorRef.current = next;
-      setActor(next);
-      setSystem((prev) => ({ ...prev, sessionExpired: false }));
+      api.setAuthTokens({ accessToken: next.token, refreshToken: null });
       try {
+        window.sessionStorage.removeItem(SESSION_REFRESH_KEY);
         window.localStorage.setItem(ACTOR_STORAGE_KEY, next.token);
       } catch {
         /* storage unavailable */
       }
+      let enrichedActor = next;
+      try {
+        const meRes = await api.getCurrentUser();
+        if (meRes?.user) {
+          setAuthUser(meRes.user);
+          setPermissions(meRes.permissions || ANON_PERMISSIONS);
+          enrichedActor = { ...buildActorFromUser(meRes.user, next.token), token: next.token };
+        }
+      } catch {
+        setPermissions(ANON_PERMISSIONS);
+      }
+      actorRef.current = enrichedActor;
+      setActor(enrichedActor);
+      setSystem((prev) => ({ ...prev, sessionExpired: false }));
       setCart(null);
       setOrders({ status: "idle", items: [], error: null });
       await loadAccountData();
-      notify({ tone: "info", title: "Account switched", message: `You're now browsing as ${next.label}.` });
+      notify({ tone: "info", title: "Account switched", message: `You're now browsing as ${enrichedActor.label}.` });
     },
-    [actors, api, loadAccountData, notify]
+    [actors, api, buildActorFromUser, loadAccountData, logout, notify]
   );
 
   const renewSession = useCallback(async () => {
@@ -590,10 +948,19 @@ export function StoreProvider({ children, initialPage = "shop" }) {
 
   const guardCustomer = useCallback(() => {
     if (actorRef.current?.role === "customer") return true;
+    if (!actorRef.current || actorRef.current.actor_type === "anon") {
+      setUi((prev) => ({ ...prev, authModalOpen: true, authModalMode: "login" }));
+      notify({
+        tone: "info",
+        title: "Maison Sign-In Required",
+        message: "Sign in or create your client profile to curate your shopping bag and place orders.",
+      });
+      return false;
+    }
     notify({
       tone: "info",
-      title: "Customer account needed",
-      message: "Team accounts can't shop. Switch to a customer account to place orders.",
+      title: "Client Account Required",
+      message: "Staff governance accounts cannot place personal orders. Sign in with a client profile to shop.",
     });
     return false;
   }, [notify]);
@@ -837,11 +1204,14 @@ export function StoreProvider({ children, initialPage = "shop" }) {
   ordersArray.error = orders.error;
 
   const currentActor = actor || {
-    token: "demo_CUS-001",
-    role: "customer",
-    label: "CUS-001 · Arjun (VIP_GOLD)",
-    id: "CUS-001",
-    customerId: "CUS-001",
+    token: null,
+    actor_type: "anon",
+    role: "anon",
+    role_name: "Guest Visitor",
+    is_staff: false,
+    label: "Guest Visitor",
+    id: "anon",
+    customerId: null,
   };
 
   const addCustomerAddress = async (addr) => {
@@ -900,10 +1270,25 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     agentRegistry,
     actors,
     actorsList: actors,
+    availableRoles,
     actor,
+    authUser,
     currentActor,
+    isAuthenticated,
     isCustomer,
     isStaff,
+    permissions,
+    hasPermission,
+    hasAnyPermission,
+    hasRole,
+    login,
+    registerCustomer,
+    registerAdmin,
+    logout,
+    logoutAll,
+    refreshProfile,
+    openAuthModal,
+    closeAuthModal,
     switchActor,
     renewSession,
     categories,
