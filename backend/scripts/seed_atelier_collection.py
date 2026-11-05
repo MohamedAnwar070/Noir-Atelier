@@ -27,7 +27,6 @@ from backend.app.models import (
     BusinessConfig,
     Category,
     Color,
-    Inventory,
     Material,
     PaymentMethod,
     Product,
@@ -38,6 +37,7 @@ from backend.app.models import (
     SearchSynonym,
 )
 from backend.app.reference_data import FIT_FEEDBACK_OPTIONS
+from backend.app.services.inventory_service import Ref, open_balance
 from backend.app.services.config_service import invalidate_config_cache
 from backend.app.services.variant_service import set_variant_prices
 from backend.app.storage.object_store import LocalObjectStore
@@ -189,11 +189,6 @@ def _adult_prices(base: int, sizes: Tuple[str, ...] = ("S", "M", "L", "XL"), ste
 def _kids_prices(base: int, step: int = 150) -> Dict[str, Decimal]:
     sizes = ("4Y", "6Y", "8Y", "10Y", "12Y")
     return {sz: Decimal(f"{base + idx * step}.00") for idx, sz in enumerate(sizes)}
-
-
-def _stock_map(sizes: List[str], per_size: int) -> Tuple[int, Dict[str, int]]:
-    breakdown = {sz: per_size for sz in sizes}
-    return sum(breakdown.values()), breakdown
 
 
 # 95 curated garments (PRD-006 .. PRD-100) completing the 100-piece Maison Archive
@@ -492,7 +487,7 @@ def seed_atelier_collection(engine: Optional[Engine] = None) -> Dict[str, Any]:
             else:
                 v_prices = _adult_prices(base_price, sizes=("S", "M", "L", "XL"), step=price_step)
 
-            total_qty, size_map = _stock_map(list(v_prices.keys()), per_size_qty)
+            size_map = {size: per_size_qty for size in v_prices}
 
             img_rel_key = f"products/{pid}/product.jpg"
             img_dest = object_store.root / img_rel_key
@@ -545,16 +540,13 @@ def seed_atelier_collection(engine: Optional[Engine] = None) -> Dict[str, Any]:
                     display_order=1,
                 )
             )
-            session.add(
-                Inventory(
-                    product_id=pid,
-                    quantity_available=total_qty,
-                    quantity_reserved=0,
-                    quantity_damaged=0,
-                    size_breakdown=size_map,
-                    low_stock_threshold=2 if base_price >= 80000 else 5,
+            # Opening stock per size, through the ledger like every other stock change.
+            seed_ref = Ref("admin", pid, "seed", "atelier_collection_opening_stock")
+            for variant in prod.variants:
+                open_balance(
+                    session, variant, size_map.get(variant.size, 0), seed_ref,
+                    low_stock_threshold=1 if base_price >= 80000 else 2,
                 )
-            )
 
             # Seed an authentic client review on key flagship & archive pieces
             if num % 3 == 0 or base_price >= 100000:

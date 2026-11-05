@@ -93,7 +93,6 @@ AGENT_ENDPOINT_WHITELIST: Dict[str, List[Tuple[str, str]]] = {
     AgentRole.FULFILLMENT.value: [
         ("GET", "/api/shipments/{id}"),
         ("POST", "/api/shipments/schedule"),
-        ("POST", "/api/inventory/reserve"),
     ],
     AgentRole.SUPPORT.value: [
         ("GET", "/api/orders/{id}"),

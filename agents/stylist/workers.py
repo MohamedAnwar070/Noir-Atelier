@@ -123,6 +123,7 @@ def fact_from_item(item: Dict[str, Any], pricing: Dict[str, Any]) -> ProductFact
     prices = [float(v["mrp_inr"]) for v in item.get("variants", []) if v.get("is_active", True)]
     low = min(prices) if prices else float(item.get("mrp_inr") or 0)
     high = max(prices) if prices else low
+    by_size = {str(s): int(q) for s, q in (item.get("stock_by_size") or {}).items()}
     return ProductFact(
         product_id=item["product_id"],
         name=item["name"],
@@ -133,8 +134,9 @@ def fact_from_item(item: Dict[str, Any], pricing: Dict[str, Any]) -> ProductFact
         price_min=low,
         price_max=high,
         stock=int(item.get("stock") or 0),
-        sizes=list(item.get("sizes_available") or []),
+        sizes=[s for s, q in by_size.items() if q > 0],
         gst_rate_pct=_gst_rate_pct(low, pricing),
+        stock_by_size=by_size,
     )
 
 
@@ -211,6 +213,9 @@ def collect_results(
             chosen.append(item)
             results.relaxed = results.relaxed or relaxed
 
-    results.products = [fact_from_item(item, pricing) for item in chosen]
-    results.display_items = {item["product_id"]: item for item in chosen}
+    facts = [fact_from_item(item, pricing) for item in chosen]
+    # Never recommend a piece that is sold out in the shopper's own size.
+    keep = [f for f in facts if f.available_in(profile.sizes) is not False]
+    results.products = keep
+    results.display_items = {item["product_id"]: item for item in chosen if any(f.product_id == item["product_id"] for f in keep)}
     return results

@@ -79,12 +79,21 @@ class ProductFact:
     price_min: float
     price_max: float
     stock: int
-    sizes: List[str]
+    sizes: List[str]  # sizes with sellable stock right now
     gst_rate_pct: int
+    stock_by_size: Dict[str, int] = field(default_factory=dict)  # every active size, incl. sold out
 
     @property
     def in_stock(self) -> bool:
         return self.stock > 0
+
+    def available_in(self, wanted_sizes: List[str]) -> Optional[bool]:
+        """None if the product is not made in any of these sizes (e.g. kids sizing vs an adult
+        profile); otherwise whether at least one of them has stock."""
+        offered = [s for s in wanted_sizes if s in self.stock_by_size]
+        if not offered:
+            return None
+        return any(self.stock_by_size[s] > 0 for s in offered)
 
 
 @dataclass

@@ -124,7 +124,7 @@ export function friendlyErrorMessage(err, fallback = "Something went wrong. Plea
     const shortages = err.details?.shortages;
     if (Array.isArray(shortages) && shortages.length) {
       return shortages
-        .map((s) => `${s.name}: only ${s.available} left (you asked for ${s.requested})`)
+        .map((s) => `${s.name}${s.size ? ` (size ${s.size})` : ""}: only ${s.available} left (you asked for ${s.requested})`)
         .join(" · ");
     }
     return FRIENDLY_BY_CODE.insufficient_stock;

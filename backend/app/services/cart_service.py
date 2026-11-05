@@ -30,13 +30,13 @@ def add_item_to_cart(db: Session, actor: ActorContext, req: CartAddRequest) -> D
     # A SKU identifies one size: if the caller passed a variant SKU, it decides the size.
     sku_size = variant_size_for_sku(prod, req.product_id)
     variant = get_variant(prod, sku_size or req.size)
-    inv = prod.inventory
-    if inv is None or inv.quantity_available < req.quantity:
-        avail = inv.quantity_available if inv else 0
+    avail = variant.stock.quantity_available if variant.stock else 0
+    if avail < req.quantity:
         raise AppError(
             "insufficient_stock",
-            f"Product '{prod.name}' ({prod.product_id}) has only {avail} available in stock.",
+            f"'{prod.name}' ({prod.product_id}) has only {avail} available in size {variant.size}.",
             422,
+            details={"product_id": prod.product_id, "size": variant.size, "available": avail},
         )
 
     sess_id, cust_id = _resolve_session_and_customer(actor, req.session_id, req.customer_id)
@@ -48,11 +48,12 @@ def add_item_to_cart(db: Session, actor: ActorContext, req: CartAddRequest) -> D
         )
     )
     if existing:
-        if inv.quantity_available < existing.quantity + req.quantity:
+        if avail < existing.quantity + req.quantity:
             raise AppError(
                 "insufficient_stock",
-                f"Cannot add {req.quantity} more of '{prod.name}'; available stock is {inv.quantity_available}.",
+                f"Cannot add {req.quantity} more of '{prod.name}' in size {variant.size}; available stock is {avail}.",
                 422,
+                details={"product_id": prod.product_id, "size": variant.size, "available": avail},
             )
         existing.quantity += req.quantity
         existing.expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)

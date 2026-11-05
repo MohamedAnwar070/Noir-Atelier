@@ -58,7 +58,8 @@ function gstByRate(lines, { rateKey, amountKey }) {
  * Products have one variant per size, each with its own SKU and price
  * (backend: product_variants). `price` is the "from" price (cheapest size) for
  * listing/sorting; anything that shows or charges a specific size must use
- * `priceFor(size)`.
+ * `priceFor(size)`. Stock is per size too: use `stockFor(size)` (live sellable
+ * units of that size); `stock` is the total across sizes.
  */
 export function normalizeProduct(p) {
   if (!p) return p;
@@ -66,8 +67,14 @@ export function normalizeProduct(p) {
   const stock = toNumber(p.stock_quantity ?? p.stock);
   const variants = (p.variants || [])
     .filter((v) => v.is_active !== false)
-    .map((v) => ({ size: v.size, sku: v.sku, price: toNumber(v.mrp_inr) }));
+    .map((v) => ({
+      size: v.size,
+      sku: v.sku,
+      price: toNumber(v.mrp_inr),
+      stock: toNumber(p.stock_by_size?.[v.size] ?? v.stock),
+    }));
   const priceBySize = new Map(variants.map((v) => [v.size, v.price]));
+  const stockBySize = new Map(variants.map((v) => [v.size, v.stock]));
   const prices = variants.map((v) => v.price);
   const priceRange = prices.length
     ? { min: Math.min(...prices), max: Math.max(...prices) }
@@ -100,6 +107,8 @@ export function normalizeProduct(p) {
     priceFor: (size) => priceBySize.get(size) ?? fromPrice,
     stock,
     stock_quantity: stock,
+    /** Sellable units of one size (0 for unknown sizes — never assume stock). */
+    stockFor: (size) => stockBySize.get(size) ?? 0,
     sizes,
     sizes_available: sizes,
     average_rating: rating,

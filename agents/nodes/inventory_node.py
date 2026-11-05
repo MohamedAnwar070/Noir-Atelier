@@ -5,7 +5,6 @@ from ..schemas.state import AgentGraphState
 from ..tools.ops_tools import InventoryTools
 
 PRODUCT_ID_RE = re.compile(r"\b(PRD-\d{3})\b", re.IGNORECASE)
-QTY_RE = re.compile(r"\b(?:to|set|qty|quantity)\s+(\d+)\b", re.IGNORECASE)
 
 
 def run_inventory_node(state: AgentGraphState, client: PlatformApiClient) -> AgentGraphState:
@@ -32,22 +31,26 @@ def run_inventory_node(state: AgentGraphState, client: PlatformApiClient) -> Age
         return state
 
     if product_id and ("update" in msg_lower or "set" in msg_lower or "adjust" in msg_lower):
-        qm = QTY_RE.search(msg)
-        new_qty = int(state.request.context.get("quantity_available") or (qm.group(1) if qm else 25))
+        # Stock is per size: an update needs explicit {size: count} levels, never a guessed number.
+        sizes = state.request.context.get("sizes")
+        if not isinstance(sizes, dict) or not sizes:
+            state.status = "clarify_missing_info"
+            state.reply = f"Which sizes of {product_id} should I set, and to what counts? For example: M = 12, L = 4."
+            return state
         code, payload = tools.update_inventory(
             product_id,
-            new_qty,
-            size_breakdown=state.request.context.get("size_breakdown"),
-            reason="inventory_agent_stock_sync",
+            {str(k): int(v) for k, v in sizes.items()},
+            reason="inventory_agent_stock_count",
             trace_id=state.trace_id,
             traces=state.tool_traces,
         )
         state.data = payload if isinstance(payload, dict) else {}
         state.status = "action_completed" if code == 200 else "error"
+        levels = ", ".join(f"{s} = {q}" for s, q in (state.data.get("stock_by_size") or {}).items())
         state.reply = (
-            f"Updated {product_id} available inventory to {new_qty} units."
+            f"Updated {product_id} stock per size: {levels}."
             if code == 200
-            else payload.get("message", "Failed to update inventory.")
+            else state.data.get("message", "Failed to update inventory.")
         )
         return state
 
@@ -60,7 +63,7 @@ def run_inventory_node(state: AgentGraphState, client: PlatformApiClient) -> Age
     state.status = "answer"
     state.data = {"inventory": items if isinstance(items, list) else []}
     if code == 200 and isinstance(items, list):
-        total_units = sum(i.get("quantity_available", 0) for i in items)
+        total_units = sum(i.get("stock", 0) for i in items)
         state.reply = (
             f"Inventory snapshot across {len(items)} garment SKUs: {total_units} total units available."
         )

@@ -810,7 +810,7 @@ function renderProductCard(p) {
   const taxInfo = computeGstSlabFromConfig(p.mrp_inr, state.businessConfig?.tax || {});
   const isLiked = state.wishlistIds.has(p.product_id);
   const activeSize = state.cardSizeSelection[p.product_id] || (p.sizes_available || [])[0] || "M";
-  const sizeBreakdown = p.size_breakdown || {};
+  const sizeBreakdown = p.stock_by_size || {}; // live sellable units per size
   const isAddingThis = state.inFlightAction === `add:${p.product_id}`;
 
   return `
@@ -863,7 +863,7 @@ function renderProductCard(p) {
           <div class="product-card-sizes" style="margin-bottom:0.85rem;">
             ${(p.sizes_available || [])
               .map((sz) => {
-                const qty = sizeBreakdown[sz] ?? p.stock;
+                const qty = sizeBreakdown[sz] ?? 0;
                 return `
                   <button
                     class="size-pill ${activeSize === sz ? "active" : ""}"
@@ -909,7 +909,7 @@ function renderProductDetailModal() {
   const visual = getProductEditorialVisual(p);
   const taxInfo = computeGstSlabFromConfig(p.mrp_inr, state.businessConfig?.tax || {});
   const activeSize = state.cardSizeSelection[p.product_id] || (p.sizes_available || [])[0] || "M";
-  const sizeBreakdown = p.size_breakdown || {};
+  const sizeBreakdown = p.stock_by_size || {}; // live sellable units per size
 
   return `
     <div class="detail-modal-backdrop" data-action="close-modal-backdrop">
@@ -955,13 +955,13 @@ function renderProductDetailModal() {
               <div style="display:flex;justify-content:space-between;margin-bottom:0.45rem;">
                 <span class="field-label">SIZE</span>
                 <span style="font-size:11px;color:var(--text-secondary);">
-                  Size ${activeSize}: ${sizeBreakdown[activeSize] ?? p.stock} units available in warehouse
+                  Size ${activeSize}: ${sizeBreakdown[activeSize] ?? 0} units available in warehouse
                 </span>
               </div>
               <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
                 ${(p.sizes_available || [])
                   .map((sz) => {
-                    const qty = sizeBreakdown[sz] ?? p.stock;
+                    const qty = sizeBreakdown[sz] ?? 0;
                     return `
                       <button
                         class="size-pill ${activeSize === sz ? "active" : ""}"
@@ -1435,17 +1435,25 @@ function renderAdminConsolePage() {
                   <div>
                     <strong>${inv.product_id}</strong> · ${inv.name}
                     <div style="font-size:11px;color:var(--text-secondary);">
-                      Available: ${inv.quantity_available} · Reserved: ${inv.quantity_reserved}
+                      Available: ${inv.stock} · Reserved: ${inv.quantity_reserved}
                     </div>
                   </div>
-                  <button
-                    class="chip-pill"
-                    data-action="admin-restock-sku"
-                    data-product-id="${inv.product_id}"
-                    data-current-stock="${inv.quantity_available}"
-                  >
-                    +10 Units
-                  </button>
+                  <div style="display:flex;flex-wrap:wrap;gap:0.3rem;justify-content:flex-end;">
+                    ${(inv.sizes || [])
+                      .map(
+                        (sz) => `
+                      <button
+                        class="chip-pill"
+                        data-action="admin-restock-sku"
+                        data-product-id="${inv.product_id}"
+                        data-size="${sz.size}"
+                        title="${sz.quantity_available} in stock · add 10"
+                      >
+                        ${sz.size} · ${sz.quantity_available} (+10)
+                      </button>`
+                      )
+                      .join("")}
+                  </div>
                 </div>
               `
               )
@@ -2363,8 +2371,8 @@ document.addEventListener("click", async (e) => {
 
   if (action === "admin-restock-sku") {
     const pid = target.getAttribute("data-product-id");
-    const cur = Number(target.getAttribute("data-current-stock") || 0);
-    await api.updateInventory(pid, cur + 10, "admin_portal_restock", state.actor.token);
+    const size = target.getAttribute("data-size");
+    await api.restockInventory(pid, size, 10, "admin_portal_restock", state.actor.token);
     await loadAdminDataFromDb();
   }
 });

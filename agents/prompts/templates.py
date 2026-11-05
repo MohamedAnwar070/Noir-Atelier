@@ -53,9 +53,9 @@ AGENT_PROMPTS: Dict[str, str] = {
     AgentRole.FULFILLMENT.value: (
         f"{COMMON_BRAND_PREAMBLE}\n"
         "Role: Fulfillment & Logistics Specialist (svc-fulfillment).\n"
-        "Allowed endpoints: GET /api/shipments/{id}, POST /api/shipments/schedule, "
-        "POST /api/inventory/reserve.\n"
-        "Responsibilities: Track courier shipments, schedule pickups, and reserve garment stock."
+        "Allowed endpoints: GET /api/shipments/{id}, POST /api/shipments/schedule.\n"
+        "Responsibilities: Track courier shipments and schedule pickups. "
+        "Stock is held only by checkout (POST /api/orders/hold), never reserved directly."
     ),
     AgentRole.SUPPORT.value: (
         f"{COMMON_BRAND_PREAMBLE}\n"

@@ -16,13 +16,13 @@ from ..models import (
     Category,
     Color,
     ColorPalette,
-    Inventory,
     Material,
     Product,
     ProductMaterial,
     ProductOccasion,
     ProductReview,
     ProductVariant,
+    VariantInventory,
 )
 from .interpreter import SearchIntent
 
@@ -79,6 +79,12 @@ def _filtered(intent: SearchIntent, category_slugs: Set[str], in_stock_only: boo
     if intent.min_price is not None or intent.max_price is not None:
         # A product matches if ANY active size is priced in range (sizes can differ in price).
         price_conditions = [ProductVariant.product_id == Product.product_id, ProductVariant.is_active.is_(True)]
+        if in_stock_only:
+            # The SAME size must be both in budget and in stock.
+            price_conditions += [
+                VariantInventory.variant_id == ProductVariant.variant_id,
+                VariantInventory.quantity_available > 0,
+            ]
         has_any_variant = exists().where(
             ProductVariant.product_id == Product.product_id, ProductVariant.is_active.is_(True)
         )
@@ -91,8 +97,14 @@ def _filtered(intent: SearchIntent, category_slugs: Set[str], in_stock_only: boo
             fallback_conditions.append(Product.mrp_inr <= intent.max_price)
         stmt = stmt.where(or_(exists().where(and_(*price_conditions)), and_(*fallback_conditions)))
     if in_stock_only:
+        # In stock = at least one active size has sellable units.
         stmt = stmt.where(
-            exists().where(Inventory.product_id == Product.product_id, Inventory.quantity_available > 0)
+            exists().where(
+                ProductVariant.product_id == Product.product_id,
+                ProductVariant.is_active.is_(True),
+                VariantInventory.variant_id == ProductVariant.variant_id,
+                VariantInventory.quantity_available > 0,
+            )
         )
     if use_text:
         for term in intent.text_terms:
@@ -153,7 +165,6 @@ def run_search(
                 selectinload(Product.images),
                 selectinload(Product.color),
                 selectinload(Product.materials).selectinload(ProductMaterial.material),
-                selectinload(Product.inventory),
                 selectinload(Product.category),
             )
             .limit(limit)

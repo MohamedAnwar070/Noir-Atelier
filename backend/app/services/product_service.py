@@ -4,14 +4,13 @@ import re
 from typing import Any, Dict, List, Optional, Set
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from ..auth import ActorContext
 from ..models import (
     Category,
     Color,
     Department,
-    Inventory,
     Material,
     Occasion,
     OrderStatus,
@@ -31,6 +30,7 @@ from ..schemas.product_schema import (
     CategoryCreateRequest,
     ColorCreateRequest,
     DepartmentCreateRequest,
+    InventoryRestockRequest,
     InventoryUpdateRequest,
     MaterialCreateRequest,
     ProductCreateRequest,
@@ -42,6 +42,8 @@ from ..schemas.product_schema import (
 from ..search.engine import SORT_OPTIONS
 from ..utils.exceptions import AppError
 from .audit_service import next_entity_id, record_audit
+from . import inventory_service as stock
+from .inventory_service import Ref
 from .config_service import get_business_config_map, invalidate_config_cache
 from .variant_service import (
     normalize_size,
@@ -73,7 +75,7 @@ def serialize_product(
     reviews: Optional[List[ProductReview]] = None,
 ) -> Dict[str, Any]:
     """Product API shape. Pass ``reviews`` (from load_reviews) when serializing many products."""
-    inv = p.inventory
+    stock_info = stock.stock_summary(p)
     sorted_imgs = sorted(p.images, key=lambda x: x.display_order)
     images = [img.url for img in sorted_imgs]
     image_gallery = [
@@ -128,9 +130,9 @@ def serialize_product(
         "country_of_origin": p.country_of_origin,
         "final_sale": p.final_sale,
         "security_tag_required": p.security_tag_required,
-        "stock": inv.quantity_available if inv else 0,
-        "quantity_reserved": inv.quantity_reserved if inv else 0,
-        "size_breakdown": dict(inv.size_breakdown or {}) if inv else {},
+        "stock": stock_info["stock"],
+        "quantity_reserved": stock_info["quantity_reserved"],
+        "stock_by_size": stock_info["stock_by_size"],
         "images": images,
         "image_gallery": image_gallery,
         "accent_tag": accent_tag,
@@ -605,15 +607,21 @@ def create_product(db: Session, actor: ActorContext, req: ProductCreateRequest) 
         _set_product_materials(db, prod, req.materials)
     default_img = "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=900&q=80"
     db.add(ProductImage(product_id=pid, url=default_img, alt_text=f"{dept_row.code} Atelier Edition", display_order=1))
-    db.add(
-        Inventory(
-            product_id=pid,
-            quantity_available=req.initial_stock,
-            quantity_reserved=0,
-            quantity_damaged=0,
-            size_breakdown={sz: max(1, req.initial_stock // max(1, len(sizes))) for sz in sizes},
-        )
+    opening = (
+        {normalize_size(k): int(v) for k, v in req.initial_stock_by_size.items()}
+        if req.initial_stock_by_size
+        else stock.split_evenly(req.initial_stock, sizes)
     )
+    unknown = set(opening) - set(sizes)
+    if unknown or any(q < 0 for q in opening.values()):
+        raise AppError(
+            "validation_error",
+            f"initial_stock_by_size must use the product's sizes ({', '.join(sizes)}) with non-negative counts.",
+            422,
+        )
+    opening_ref = Ref("admin", pid, actor.actor_id, "product_created")
+    for variant in prod.variants:
+        stock.open_balance(db, variant, opening.get(variant.size, 0), opening_ref)
     record_audit(
         db,
         actor,
@@ -715,25 +723,19 @@ def discontinue_product(db: Session, actor: ActorContext, product_id: str, reaso
 
 
 def list_inventory(db: Session, low_stock_only: bool = False) -> List[Dict[str, Any]]:
-    rows = db.scalars(select(Inventory).order_by(Inventory.product_id)).all()
+    """Stock per product with one row per size (active products only)."""
+    products = db.scalars(
+        select(Product)
+        .where(Product.is_active.is_(True))
+        .options(selectinload(Product.variants))
+        .order_by(Product.product_id)
+    ).all()
     output = []
-    for inv in rows:
-        is_low = inv.quantity_available <= inv.low_stock_threshold
-        if low_stock_only and not is_low:
+    for prod in products:
+        summary = stock.stock_summary(prod, include_sizes=True)
+        if low_stock_only and not summary["low_stock_alert"]:
             continue
-        output.append(
-            {
-                "product_id": inv.product_id,
-                "name": inv.product.name if inv.product else inv.product_id,
-                "product_name": inv.product.name if inv.product else inv.product_id,
-                "quantity_available": inv.quantity_available,
-                "quantity_reserved": inv.quantity_reserved,
-                "quantity_damaged": inv.quantity_damaged,
-                "low_stock_threshold": inv.low_stock_threshold,
-                "low_stock_alert": is_low,
-                "size_breakdown": dict(inv.size_breakdown or {}),
-            }
-        )
+        output.append({**summary, "name": prod.name, "product_name": prod.name, "quantity_available": summary["stock"]})
     return output
 
 
@@ -743,32 +745,17 @@ def update_inventory_stock(
     product_id: str,
     req: InventoryUpdateRequest,
 ) -> Dict[str, Any]:
-    prod = get_product_by_id_or_sku(db, product_id)
-    inv = prod.inventory
-    if inv is None:
-        raise AppError("inventory_not_found", f"Inventory record missing for '{product_id}'.", 404)
+    return stock.set_levels(db, actor, get_product_by_id_or_sku(db, product_id), req.sizes, req.reason)
 
-    old_qty = inv.quantity_available
-    inv.quantity_available = req.quantity_available
-    if req.size_breakdown is not None:
-        inv.size_breakdown = req.size_breakdown
-    inv.last_sync = datetime.now(timezone.utc)
 
-    record_audit(
-        db,
-        actor,
-        "inventory",
-        prod.product_id,
-        "update_inventory",
-        {"old_available": old_qty, "new_available": inv.quantity_available},
-        req.reason,
+def restock_inventory(db: Session, actor: ActorContext, req: InventoryRestockRequest) -> Dict[str, Any]:
+    return stock.receive_units(
+        db, actor, get_product_by_id_or_sku(db, req.product_id), req.size, req.quantity, req.reason
     )
-    db.commit()
-    return {
-        "product_id": prod.product_id,
-        "quantity_available": inv.quantity_available,
-        "quantity_reserved": inv.quantity_reserved,
-    }
+
+
+def list_inventory_movements(db: Session, product_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+    return stock.list_movements(db, get_product_by_id_or_sku(db, product_id), limit)
 
 
 def list_search_synonyms(db: Session) -> List[Dict[str, Any]]:

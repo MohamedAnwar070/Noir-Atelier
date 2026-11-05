@@ -15,7 +15,7 @@ from ..auth import (
 )
 from ..database import get_db
 from ..schemas.product_schema import (
-    InventoryReserveRequest,
+    InventoryRestockRequest,
     InventoryUpdateRequest,
     ProductCreateRequest,
     ProductReviewCreateRequest,
@@ -25,6 +25,8 @@ from ..schemas.product_schema import (
 from ..services.catalog_attributes_service import get_catalog_attributes
 from ..services.order_service import get_orders_analytics
 from ..services.product_service import (
+    list_inventory_movements,
+    restock_inventory,
     add_product_review,
     create_product,
     discontinue_product,
@@ -238,35 +240,22 @@ def api_update_inventory(
     return update_inventory_stock(db, actor, product_id, req)
 
 
-@router.post("/api/inventory/reserve")
-def api_reserve_inventory(
-    req: InventoryReserveRequest,
-    db: Session = Depends(get_db),
-    actor: ActorContext = Depends(require_permissions("inventory:write", allow_agent=True)),
-) -> Dict[str, Any]:
-    prod = get_product_by_id_or_sku(db, req.product_id)
-    assert prod.inventory is not None
-    prod.inventory.quantity_available = max(0, prod.inventory.quantity_available - req.quantity)
-    prod.inventory.quantity_reserved += req.quantity
-    db.commit()
-    return {
-        "product_id": prod.product_id,
-        "quantity_available": prod.inventory.quantity_available,
-        "quantity_reserved": prod.inventory.quantity_reserved,
-    }
-
-
 @router.post("/api/inventory/restock")
 def api_restock_inventory(
-    req: InventoryReserveRequest,
+    req: InventoryRestockRequest,
     db: Session = Depends(get_db),
     actor: ActorContext = Depends(require_permissions("inventory:write", allow_agent=True)),
 ) -> Dict[str, Any]:
-    prod = get_product_by_id_or_sku(db, req.product_id)
-    assert prod.inventory is not None
-    prod.inventory.quantity_available += req.quantity
-    db.commit()
-    return {
-        "product_id": prod.product_id,
-        "quantity_available": prod.inventory.quantity_available,
-    }
+    """Add newly received units to ONE size (ledger: restock)."""
+    return restock_inventory(db, actor, req)
+
+
+@router.get("/api/inventory/{product_id}/movements")
+def api_inventory_movements(
+    product_id: str,
+    limit: int = Query(default=100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _actor: ActorContext = Depends(require_permissions("inventory:read", allow_agent=True)),
+) -> List[Dict[str, Any]]:
+    """Stock ledger for a product, newest first (every unit in and out, per size)."""
+    return list_inventory_movements(db, product_id, limit)

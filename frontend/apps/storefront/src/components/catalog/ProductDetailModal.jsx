@@ -59,7 +59,9 @@ export function ProductDetailModal({ product: initialProduct, isOpen, onClose })
     if (initialProduct?.product_id && isOpen) {
       const normalizedInit = normalizeProduct(initialProduct);
       setDetailProduct(normalizedInit);
-      setSelectedSize(normalizedInit.sizes_available?.[0] || "");
+      // Open on the first size that can actually be bought.
+      const sizes = normalizedInit.sizes_available || [];
+      setSelectedSize(sizes.find((sz) => normalizedInit.stockFor(sz) > 0) || sizes[0] || "");
       setQuantity(1);
       setReviews(normalizedInit.reviews || []);
       setReviewCount(normalizedInit.review_count || (normalizedInit.reviews?.length ?? 0));
@@ -95,12 +97,8 @@ export function ProductDetailModal({ product: initialProduct, isOpen, onClose })
 
   if (!product) return null;
 
-  const stock = Number(product.stock_quantity ?? product.stock ?? 0);
-  const sizeBreakdown = product.size_breakdown || product.inventory?.size_breakdown || null;
-  const selectedSizeStock =
-    sizeBreakdown && selectedSize && sizeBreakdown[selectedSize] != null
-      ? Number(sizeBreakdown[selectedSize])
-      : stock;
+  const stock = Number(product.stock ?? 0);
+  const selectedSizeStock = selectedSize ? product.stockFor(selectedSize) : 0;
 
   const availableSizes = product.sizes_available || [];
   const price = product.priceFor(selectedSize);
@@ -132,7 +130,7 @@ export function ProductDetailModal({ product: initialProduct, isOpen, onClose })
   );
 
   const img = getProductImage(product);
-  const outOfStock = stock <= 0 || selectedSizeStock <= 0;
+  const outOfStock = selectedSizeStock <= 0;
   const maxStock = Math.min(Math.max(selectedSizeStock, 1), 10);
 
   const handleAddToBag = async () => {
@@ -295,16 +293,20 @@ export function ProductDetailModal({ product: initialProduct, isOpen, onClose })
             </div>
             <div className="size-options-grid" role="radiogroup" aria-label="Select size">
               {availableSizes.map((s) => {
-                const szQty = sizeBreakdown && sizeBreakdown[s] != null ? Number(sizeBreakdown[s]) : null;
-                const szSoldOut = szQty !== null && szQty <= 0;
+                const szSoldOut = product.stockFor(s) <= 0;
                 return (
                   <button
                     key={s}
                     type="button"
                     className={`size-btn-pill ${product.hasSizePricing ? "size-btn-pill--priced" : ""} ${selectedSize === s ? "active" : ""}`}
-                    onClick={() => setSelectedSize(s)}
+                    onClick={() => {
+                      setSelectedSize(s);
+                      setQuantity(1);
+                    }}
                     role="radio"
                     aria-checked={selectedSize === s}
+                    aria-label={szSoldOut ? `Size ${s}, sold out` : `Size ${s}`}
+                    title={szSoldOut ? "Sold out in this size" : undefined}
                     disabled={szSoldOut}
                   >
                     <span>{s}</span>
@@ -329,9 +331,11 @@ export function ProductDetailModal({ product: initialProduct, isOpen, onClose })
                 disabled={outOfStock}
               />
               <span className="stock-status-label">
-                {outOfStock
+                {stock <= 0
                   ? "Currently Archived / Out of Stock"
-                  : `${selectedSizeStock} ${selectedSizeStock === 1 ? "piece" : "pieces"} in Atelier Vault${selectedSize ? ` (Size ${selectedSize})` : ""}`}
+                  : outOfStock
+                  ? `Sold out in size ${selectedSize} · choose another size`
+                  : `${selectedSizeStock} ${selectedSizeStock === 1 ? "piece" : "pieces"} in Atelier Vault (Size ${selectedSize})`}
               </span>
             </div>
 

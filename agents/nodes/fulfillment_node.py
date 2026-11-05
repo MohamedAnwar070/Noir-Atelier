@@ -5,7 +5,6 @@ from ..schemas.state import AgentGraphState
 from ..tools.order_tools import FulfillmentTools
 
 SHIP_OR_ORD_RE = re.compile(r"\b((?:SHP|ORD)-\d{4})\b", re.IGNORECASE)
-PRODUCT_ID_RE = re.compile(r"\b(PRD-\d{3})\b", re.IGNORECASE)
 
 
 def run_fulfillment_node(state: AgentGraphState, client: PlatformApiClient) -> AgentGraphState:
@@ -20,34 +19,6 @@ def run_fulfillment_node(state: AgentGraphState, client: PlatformApiClient) -> A
         or state.request.context.get("order_id")
         or (match.group(1).upper() if match else None)
     )
-
-    if "reserve" in msg_lower and "inventory" in msg_lower:
-        pm = PRODUCT_ID_RE.search(msg)
-        pid = state.request.context.get("product_id") or (pm.group(1).upper() if pm else "PRD-001")
-        qty = int(state.request.context.get("quantity", 1))
-        code, payload = tools.reserve_inventory(
-            pid,
-            qty,
-            trace_id=state.trace_id,
-            traces=state.tool_traces,
-        )
-        payload_dict = dict(payload) if isinstance(payload, dict) else {}
-        state.status = "action_completed" if code == 200 else "error"
-        if code == 200 and isinstance(payload, dict):
-            payload_dict["action_feedback"] = {
-                "type": "inventory_reserved",
-                "badge": "Stock Reserved",
-                "title": f"Reserved {qty} Unit(s) of {pid}",
-                "summary": f"{payload.get('quantity_available')} units remaining in available stock.",
-            }
-            state.reply = (
-                f"Done! I've reserved {qty} unit(s) of {pid}. "
-                f"There are {payload.get('quantity_available')} units remaining in available stock."
-            )
-        else:
-            state.reply = "I couldn't reserve stock for that item."
-        state.data = payload_dict
-        return state
 
     if "schedule" in msg_lower or "dispatch" in msg_lower:
         if not identifier:

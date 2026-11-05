@@ -14,11 +14,12 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..database import Base
-from .base import SoftDeleteMixin, TimestampMixin
+from .base import SoftDeleteMixin, TimestampMixin, utc_now
 
 if TYPE_CHECKING:  # resolved at runtime via the SQLAlchemy registry
     from .catalog import Color, ProductMaterial, ProductOccasion
@@ -127,6 +128,11 @@ class ProductVariant(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     product: Mapped["Product"] = relationship(back_populates="variants")
+    # Stock for this size (one row). Loaded with the variant; locked separately by
+    # inventory_service (never via a join, so FOR UPDATE stays outer-join free).
+    stock: Mapped[Optional["VariantInventory"]] = relationship(
+        back_populates="variant", uselist=False, cascade="all, delete-orphan", lazy="selectin"
+    )
 
     __table_args__ = (
         UniqueConstraint("product_id", "size", name="uq_product_variants_product_size"),
@@ -148,7 +154,97 @@ class ProductImage(Base, TimestampMixin):
     product: Mapped["Product"] = relationship(back_populates="images")
 
 
+# Every way stock can change. The ledger CHECK constraint is generated from this tuple.
+MOVEMENT_TYPES = (
+    "opening_balance",  # first stock of a size (seed, product creation, migration backfill)
+    "sale",             # direct order: available -> sold
+    "hold",             # checkout hold: available -> reserved
+    "hold_release",     # hold expired / cancelled / payment flagged: reserved -> available
+    "hold_capture",     # held order paid: reserved -> sold
+    "late_capture",     # payment arrived after the hold expired: available -> sold
+    "cancel_restock",   # paid order cancelled: sold -> available
+    "return_restock",   # refunded return: sold -> available
+    "restock",          # new units received
+    "adjustment",       # admin / inventory agent sets an absolute level
+    "damage",           # available -> damaged
+)
+
+
+class VariantInventory(Base, TimestampMixin):
+    """Stock of ONE size (variant) — the only source of truth for stock.
+
+    available = sellable now. Units held by a pending checkout move to reserved
+    (they are no longer available) and leave on payment capture or go back on
+    release. Only backend.app.services.inventory_service writes these rows, and
+    every write appends an InventoryMovement in the same transaction.
+    """
+
+    __tablename__ = "variant_inventory"
+
+    variant_id: Mapped[int] = mapped_column(
+        ForeignKey("product_variants.variant_id", ondelete="CASCADE"), primary_key=True
+    )
+    quantity_available: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    quantity_reserved: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    quantity_damaged: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    low_stock_threshold: Mapped[int] = mapped_column(Integer, default=2, server_default="2", nullable=False)
+
+    variant: Mapped["ProductVariant"] = relationship(back_populates="stock", lazy="raise_on_sql")
+
+    __table_args__ = (
+        CheckConstraint("quantity_available >= 0", name="ck_variant_inventory_available_non_negative"),
+        CheckConstraint("quantity_reserved >= 0", name="ck_variant_inventory_reserved_non_negative"),
+        CheckConstraint("quantity_damaged >= 0", name="ck_variant_inventory_damaged_non_negative"),
+        CheckConstraint("low_stock_threshold >= 0", name="ck_variant_inventory_threshold_non_negative"),
+    )
+
+
+class InventoryMovement(Base):
+    """Append-only stock ledger: one row per size per change. Never updated or deleted.
+
+    Invariant: per variant, the sum of the deltas equals its current quantities
+    (scripts/check_inventory_invariants.py).
+    """
+
+    __tablename__ = "inventory_movements"
+
+    movement_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    variant_id: Mapped[int] = mapped_column(
+        ForeignKey("product_variants.variant_id", ondelete="CASCADE"), nullable=False
+    )
+    movement_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    delta_available: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    delta_reserved: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    delta_damaged: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    reference_type: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    reference_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    actor_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    reason: Mapped[Optional[str]] = mapped_column(String(160), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now, server_default=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "movement_type IN (" + ", ".join(f"'{t}'" for t in MOVEMENT_TYPES) + ")",
+            name="ck_inventory_movements_type",
+        ),
+        CheckConstraint(
+            "delta_available <> 0 OR delta_reserved <> 0 OR delta_damaged <> 0",
+            name="ck_inventory_movements_non_zero",
+        ),
+        Index("ix_inventory_movements_variant_created", "variant_id", "created_at"),
+        Index("ix_inventory_movements_reference", "reference_type", "reference_id"),
+    )
+
+
 class Inventory(Base, TimestampMixin):
+    """DEPRECATED product-level stock (replaced by VariantInventory in migration 0006).
+
+    No code reads or writes it any more; kept only so a rollback of 0006 loses
+    nothing. Dropped by the contract migration 0007.
+    """
+
     __tablename__ = "inventory"
 
     inventory_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)

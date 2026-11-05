@@ -480,18 +480,28 @@ export class NoirApiClient {
     return data;
   }
 
-  async updateInventory(productId, quantityAvailable, reason = "admin_stock_adjustment", tokenOverride = null) {
+  /** Sets absolute sellable stock per size, e.g. `{ M: 12, L: 4 }` (stock count / correction). */
+  async updateInventory(productId, sizes, reason = "admin_stock_count", tokenOverride = null) {
     const { data } = await this.request("PUT", `/api/inventory/${productId}`, {
-      body: { quantity_available: Number(quantityAvailable), reason },
+      body: { sizes, reason },
       tokenOverride: tokenOverride || this.token,
     });
     return data;
   }
 
-  /** Adds `quantity` units to available stock (relative; use updateInventory to set an absolute level). */
-  async restockInventory(productId, quantity, tokenOverride = null) {
+  /** Adds newly received units to ONE size (relative; use updateInventory to set absolute levels). */
+  async restockInventory(productId, size, quantity, reason = "units_received", tokenOverride = null) {
     const { data } = await this.request("POST", "/api/inventory/restock", {
-      body: { product_id: productId, quantity: Number(quantity) },
+      body: { product_id: productId, size, quantity: Number(quantity), reason },
+      tokenOverride: tokenOverride || this.token,
+    });
+    return data;
+  }
+
+  /** Stock ledger for a product, newest first: every unit in and out, per size. */
+  async listInventoryMovements(productId, limit = 100, tokenOverride = null) {
+    const { data } = await this.request("GET", `/api/inventory/${productId}/movements`, {
+      params: { limit },
       tokenOverride: tokenOverride || this.token,
     });
     return data;

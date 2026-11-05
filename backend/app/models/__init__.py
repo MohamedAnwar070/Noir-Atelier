@@ -28,10 +28,12 @@ from .payment import Invoice, Payment, PaymentMethod
 from .product import (
     Category,
     Inventory,
+    InventoryMovement,
     Product,
     ProductImage,
     ProductReview,
     ProductVariant,
+    VariantInventory,
     ProductVector,
     Recommendation,
 )
@@ -60,7 +62,9 @@ __all__ = [
     "Product",
     "ProductImage",
     "ProductVariant",
+    "VariantInventory",
     "Inventory",
+    "InventoryMovement",
     "ProductVector",
     "ProductReview",
     "Recommendation",

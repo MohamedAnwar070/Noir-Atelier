@@ -6,6 +6,9 @@ import { StatePanel, ListSkeleton } from "@/components/ui/StatePanel";
 import { Badge, Button, TextField } from "@/components/ui/Controls";
 import { formatInr, formatPriceRange } from "@noir/utils/formatters.js";
 
+/** Units added by the vault's quick-restock button (per size). */
+const RESTOCK_UNITS = 5;
+
 export function AdminView() {
   const {
     currentActor,
@@ -23,6 +26,9 @@ export function AdminView() {
 
   const [activeTab, setActiveTab] = useState("kpis");
   const [inventoryQuery, setInventoryQuery] = useState("");
+  // Per-size stock rows from /api/inventory/list (thresholds and reservations are per size).
+  const [inventoryRows, setInventoryRows] = useState([]);
+  const [restockSize, setRestockSize] = useState({});
   const [dashboardData, setDashboardData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
@@ -67,6 +73,11 @@ export function AdminView() {
     }
   }, [staffRoles, staffForm.roleCode]);
 
+  const productsById = useMemo(
+    () => new Map((allProducts?.length ? allProducts : catalog || []).map((p) => [p.product_id, p])),
+    [allProducts, catalog]
+  );
+
   const refundStatusMap = useMemo(() => {
     const map = {};
     for (const row of catalogMeta?.refund_statuses || []) {
@@ -99,18 +110,20 @@ export function AdminView() {
     setIsLoading(true);
     setAuthError(null);
     try {
-      const [data, refunds, synRows, usersData, matrixData] = await Promise.all([
+      const [data, refunds, synRows, usersData, matrixData, invRows] = await Promise.all([
         apiClient.getAdminDashboard(),
         apiClient.listRefunds().catch(() => []),
         apiClient.listCatalogSynonyms().catch(() => []),
         apiClient.listAdminUsers().catch(() => ({ staff: [], customers: [] })),
         apiClient.getRbacMatrix().catch(() => ({ roles: [] })),
+        apiClient.listInventory().catch(() => []),
       ]);
       setDashboardData(data);
       setReturnsQueue((Array.isArray(refunds) ? refunds : []).filter(isRefundPending));
       setSynonyms(Array.isArray(synRows) ? synRows : []);
       setStaffUsers(Array.isArray(usersData?.staff) ? usersData.staff : []);
       setRbacMatrix(matrixData || { roles: [] });
+      setInventoryRows(Array.isArray(invRows) ? invRows : []);
     } catch (err) {
       if (err.status === 403 || err.code === "permission_denied") {
         setAuthError(
@@ -167,13 +180,18 @@ export function AdminView() {
     }
   };
 
-  const handleRestockProduct = async (productId) => {
+  const handleRestockProduct = async (row) => {
+    const size = restockSize[row.product_id] || row.sizes?.[0]?.size;
+    if (!size) return;
     try {
-      await apiClient.restockInventory(productId, 5);
+      const updated = await apiClient.restockInventory(row.product_id, size, RESTOCK_UNITS);
+      setInventoryRows((rows) =>
+        rows.map((r) => (r.product_id === row.product_id ? { ...r, ...updated, quantity_available: updated.stock } : r))
+      );
       notify({
         type: "success",
         title: "Inventory Updated",
-        description: `Added 5 units to Atelier vault for ${productId}.`,
+        description: `Added ${RESTOCK_UNITS} units of size ${size} for ${row.product_id}.`,
       });
       await refreshCatalog();
     } catch (err) {
@@ -526,7 +544,7 @@ export function AdminView() {
         <div className="admin-inventory-section">
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", marginBottom: "1rem" }}>
             <h3 className="section-subheading" style={{ margin: 0 }}>
-              Atelier Archive Inventory ({(allProducts?.length ? allProducts : catalog).length} SKUs)
+              Atelier Archive Inventory ({inventoryRows.length} styles)
             </h3>
             <input
               type="search"
@@ -545,45 +563,62 @@ export function AdminView() {
                   <th>Product SKU</th>
                   <th>Garment Name</th>
                   <th>Department / Category</th>
-                  <th>Current Stock</th>
+                  <th>Stock by Size</th>
                   <th>Unit Price</th>
                   <th>Quick Restock</th>
                 </tr>
               </thead>
               <tbody>
-                {(allProducts?.length ? allProducts : catalog)
-                  .filter((prod) => {
+                {inventoryRows
+                  .map((row) => ({ row, prod: productsById.get(row.product_id) }))
+                  .filter(({ row, prod }) => {
                     const q = inventoryQuery.trim().toLowerCase();
                     if (!q) return true;
-                    return (
-                      String(prod.sku || "").toLowerCase().includes(q) ||
-                      String(prod.product_id || "").toLowerCase().includes(q) ||
-                      String(prod.name || "").toLowerCase().includes(q) ||
-                      String(prod.department || "").toLowerCase().includes(q)
-                    );
+                    return [prod?.sku, row.product_id, row.name, prod?.department]
+                      .some((v) => String(v || "").toLowerCase().includes(q));
                   })
-                  .map((prod) => (
-                  <tr key={prod.product_id}>
-                    <td><code>{prod.sku || prod.product_id}</code></td>
-                    <td>{prod.name}</td>
+                  .map(({ row, prod }) => (
+                  <tr key={row.product_id}>
+                    <td><code>{prod?.sku || row.product_id}</code></td>
+                    <td>{row.name}</td>
                     <td>
-                      {prod.department}
-                      {prod.categoryName ? ` · ${prod.categoryName}` : ""}
+                      {prod?.department}
+                      {prod?.categoryName ? ` · ${prod.categoryName}` : ""}
                     </td>
                     <td>
-                      <span className={`badge stock-count-badge ${prod.stock_quantity <= 3 ? "low" : ""}`}>
-                        {prod.stock_quantity} units
-                      </span>
+                      <div className="stock-size-list">
+                        {(row.sizes || []).map((sz) => (
+                          <span
+                            key={sz.size}
+                            className={`badge stock-count-badge ${sz.low_stock_alert ? "low" : ""}`}
+                            title={sz.quantity_reserved ? `${sz.quantity_reserved} held in checkout` : undefined}
+                          >
+                            {sz.size} · {sz.quantity_available}
+                          </span>
+                        ))}
+                      </div>
                     </td>
-                    <td>{formatPriceRange(prod)}</td>
+                    <td>{prod ? formatPriceRange(prod) : "—"}</td>
                     <td>
-                      <button
-                        type="button"
-                        className="btn-pill btn-pill-outline btn-xs"
-                        onClick={() => handleRestockProduct(prod.product_id)}
-                      >
-                        + 5 Units
-                      </button>
+                      <div className="stock-restock-control">
+                        <select
+                          className="select-control"
+                          aria-label={`Size to restock for ${row.name}`}
+                          value={restockSize[row.product_id] || row.sizes?.[0]?.size || ""}
+                          onChange={(e) => setRestockSize((m) => ({ ...m, [row.product_id]: e.target.value }))}
+                        >
+                          {(row.sizes || []).map((sz) => (
+                            <option key={sz.size} value={sz.size}>{sz.size}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="btn-pill btn-pill-outline btn-xs"
+                          onClick={() => handleRestockProduct(row)}
+                        >
+                          + {RESTOCK_UNITS} Units
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

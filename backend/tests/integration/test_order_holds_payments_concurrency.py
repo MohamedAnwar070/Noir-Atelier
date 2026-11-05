@@ -12,7 +12,9 @@ from sqlalchemy.orm import sessionmaker
 from backend.app.config import get_settings
 from backend.app.database import get_db, set_sync_engine
 from backend.app.main import app
-from backend.app.models import Inventory, Order
+from backend.app.models import Order, ProductVariant, VariantInventory
+from backend.app.services import inventory_service
+from backend.app.services.inventory_service import Ref
 from backend.app.utils.hmac_auth import sign_payload
 from backend.scripts.seed_demo import seed_database
 
@@ -61,19 +63,29 @@ class TestOrderHoldsPaymentsConcurrency(unittest.TestCase):
             headers={"Content-Type": "application/json", "X-Signature": header_val},
         )
 
-    def _set_stock(self, product_id: str, available: int, reserved: int = 0) -> None:
+    def _stock_row(self, db, product_id: str, size: str) -> VariantInventory:
+        row = db.scalar(
+            select(VariantInventory)
+            .join(ProductVariant, ProductVariant.variant_id == VariantInventory.variant_id)
+            .where(ProductVariant.product_id == product_id, ProductVariant.size == size)
+        )
+        assert row is not None, (product_id, size)
+        return row
+
+    def _set_stock(self, product_id: str, size: str, available: int, reserved: int = 0) -> None:
+        """Set one size's levels THROUGH the ledger, so invariants stay checkable."""
         with self.SessionLocal() as db:
-            inv = db.scalar(select(Inventory).where(Inventory.product_id == product_id))
-            assert inv is not None
-            inv.quantity_available = available
-            inv.quantity_reserved = reserved
+            row = self._stock_row(db, product_id, size)
+            inventory_service._move(
+                db, row, "adjustment", Ref("admin", "test", "test", "test_setup"),
+                available=available - row.quantity_available, reserved=reserved - row.quantity_reserved,
+            )
             db.commit()
 
-    def _get_stock(self, product_id: str) -> tuple[int, int]:
+    def _get_stock(self, product_id: str, size: str) -> tuple[int, int]:
         with self.SessionLocal() as db:
-            inv = db.scalar(select(Inventory).where(Inventory.product_id == product_id))
-            assert inv is not None
-            return int(inv.quantity_available), int(inv.quantity_reserved)
+            row = self._stock_row(db, product_id, size)
+            return int(row.quantity_available), int(row.quantity_reserved)
 
     def test_01_validation_and_duplicate_line_merging(self) -> None:
         res_empty = self.client.post(
@@ -97,7 +109,7 @@ class TestOrderHoldsPaymentsConcurrency(unittest.TestCase):
         self.assertEqual(res_dup_exceed.status_code, 400)
         self.assertIn("exceeds 99", res_dup_exceed.json()["error"]["message"])
 
-        avail_before, _ = self._get_stock("PRD-001")
+        avail_before, _ = self._get_stock("PRD-001", "M")
         res_dup_valid = self.client.post(
             "/api/orders/hold",
             headers=self._headers(),
@@ -117,13 +129,13 @@ class TestOrderHoldsPaymentsConcurrency(unittest.TestCase):
         self.assertIn(body["locker_number"], range(1, 25))
         self.assertEqual(len(body["pickup_code"]), 4)
 
-        avail_after, res_after = self._get_stock("PRD-001")
+        avail_after, res_after = self._get_stock("PRD-001", "M")
         self.assertEqual(avail_after, avail_before - 3)
         self.assertEqual(res_after, 3)
 
     def test_02_multi_item_shortage_rolls_back_all_and_reports_shortages(self) -> None:
-        self._set_stock("PRD-005", 1)
-        p1_before, _ = self._get_stock("PRD-001")
+        self._set_stock("PRD-005", "8Y", 1)
+        p1_before, _ = self._get_stock("PRD-001", "M")
 
         res = self.client.post(
             "/api/orders/hold",
@@ -144,11 +156,11 @@ class TestOrderHoldsPaymentsConcurrency(unittest.TestCase):
         self.assertEqual(shortages[0]["requested"], 5)
         self.assertEqual(shortages[0]["available"], 1)
 
-        p1_after, _ = self._get_stock("PRD-001")
+        p1_after, _ = self._get_stock("PRD-001", "M")
         self.assertEqual(p1_after, p1_before)
 
     def test_03_ten_concurrent_buyers_for_last_two_units(self) -> None:
-        self._set_stock("PRD-005", 2)
+        self._set_stock("PRD-005", "8Y", 2)
 
         def attempt_buy(idx: int) -> int:
             with TestClient(app) as local_client:
@@ -164,12 +176,12 @@ class TestOrderHoldsPaymentsConcurrency(unittest.TestCase):
 
         self.assertEqual(statuses.count(201), 2)
         self.assertEqual(statuses.count(409), 8)
-        avail, reserved = self._get_stock("PRD-005")
+        avail, reserved = self._get_stock("PRD-005", "8Y")
         self.assertEqual(avail, 0)
         self.assertEqual(reserved, 2)
 
     def test_04_hold_cancel_idempotency_and_expiry_sweeper(self) -> None:
-        avail_before, _ = self._get_stock("PRD-002")
+        avail_before, _ = self._get_stock("PRD-002", "M")
         hold_res = self.client.post(
             "/api/orders/hold",
             headers=self._headers(),
@@ -186,7 +198,7 @@ class TestOrderHoldsPaymentsConcurrency(unittest.TestCase):
         self.assertEqual(c2.status_code, 200)
         self.assertEqual(c2.json()["status"], "cancelled")
 
-        avail_after, res_after = self._get_stock("PRD-002")
+        avail_after, res_after = self._get_stock("PRD-002", "M")
         self.assertEqual(avail_after, avail_before)
         self.assertEqual(res_after, 0)
 
@@ -211,7 +223,7 @@ class TestOrderHoldsPaymentsConcurrency(unittest.TestCase):
         self.assertEqual(cancel_expired.json()["error"]["code"], "not_cancellable")
 
     def test_05_product_order_exact_idempotency_key(self) -> None:
-        avail_before, _ = self._get_stock("PRD-003")
+        avail_before, _ = self._get_stock("PRD-003", "L")
         payload = {
             "items": [{"product_id": "PRD-003", "size": "L", "quantity": 1}],
             "request_key": "auto",
@@ -222,7 +234,7 @@ class TestOrderHoldsPaymentsConcurrency(unittest.TestCase):
         self.assertEqual(r2.status_code, 201)
         self.assertEqual(r1.json()["order_id"], r2.json()["order_id"])
 
-        avail_after, _ = self._get_stock("PRD-003")
+        avail_after, _ = self._get_stock("PRD-003", "L")
         self.assertEqual(avail_after, avail_before - 1)
 
         hdr_key = "idem-header-prd-003-test"
@@ -325,7 +337,7 @@ class TestOrderHoldsPaymentsConcurrency(unittest.TestCase):
         self.assertEqual(res_after_can.json()["order"]["review_reason"], "payment_after_cancel")
         self.assertTrue(res_after_can.json()["order"]["refund_flag"])
 
-        self._set_stock("PRD-005", 1)
+        self._set_stock("PRD-005", "8Y", 1)
         hold_late = self.client.post(
             "/api/orders/hold",
             headers=self._headers(),

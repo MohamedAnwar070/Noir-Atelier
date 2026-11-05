@@ -145,22 +145,3 @@ class FulfillmentTools:
             json_body={"order_id": order_id, "carrier": carrier},
             traces=traces,
         )
-
-    def reserve_inventory(
-        self,
-        product_id: str,
-        quantity: int = 1,
-        *,
-        size: str = "M",
-        trace_id: str = "TRC-000000",
-        traces: Optional[List[ToolCallTrace]] = None,
-    ) -> Tuple[int, Any]:
-        return self.client.call(
-            self.role,
-            "reserve_inventory",
-            "POST",
-            "/api/inventory/reserve",
-            trace_id=trace_id,
-            json_body={"product_id": product_id, "size": size, "quantity": quantity},
-            traces=traces,
-        )

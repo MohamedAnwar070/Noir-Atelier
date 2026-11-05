@@ -48,6 +48,8 @@ def review(draft: Draft, results: WorkerResults, profile: StyleProfile, pricing:
     for fact in listed:
         if not fact.in_stock:
             problems.append(f"{fact.name} is out of stock and must not be recommended.")
+        elif fact.available_in(profile.sizes) is False:
+            problems.append(f"{fact.name} is sold out in the shopper's size ({', '.join(profile.sizes)}).")
         if profile.budget_max_inr is not None and fact.price_min > float(profile.budget_max_inr):
             problems.append(f"{fact.name} costs more than the shopper's budget.")
 
@@ -56,7 +58,8 @@ def review(draft: Draft, results: WorkerResults, profile: StyleProfile, pricing:
         if round(amount, 2) not in allowed:
             problems.append(f"The amount ₹{amount:,.0f} is not a price from the tool results.")
 
-    stocks = {f.stock for f in listed}
+    # A stated count may be the total or one size's count ("only 3 left in M").
+    stocks = {f.stock for f in listed} | {q for f in listed for q in f.stock_by_size.values()}
     for match in _STOCK_CLAIM.finditer(draft.reply):
         claimed = int(match.group(1) or match.group(2))
         if claimed not in stocks:

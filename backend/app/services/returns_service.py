@@ -28,7 +28,8 @@ from ..utils.exceptions import AppError
 from .audit_service import get_idempotent_result, next_entity_id, record_audit, save_idempotent_result
 from .config_service import get_business_config_map
 from .order_service import _assert_order_access
-from .product_service import get_product_by_id_or_sku
+from . import inventory_service as stock
+from .inventory_service import Ref
 
 
 def _determine_approval_tier(
@@ -201,10 +202,11 @@ def initiate_return(db: Session, actor: ActorContext, req: ReturnCreateRequest) 
         rfd_row.payment_refund_id = f"RFD-TXN-{uuid.uuid4().hex[:8].upper()}"
         ret_row.status = "completed"
         order.status = "refunded"
-        for item in order.items:
-            prod = get_product_by_id_or_sku(db, item.product_id)
-            if prod.inventory:
-                prod.inventory.quantity_available += item.quantity
+        # Returned units go back to the exact sizes they were sold from.
+        stock.restock(
+            db, order.items, movement_type="return_restock",
+            ref=Ref("refund", rfd_row.refund_id, actor.actor_id, "return_auto_refunded"),
+        )
 
     record_audit(
         db,
@@ -336,10 +338,10 @@ def process_refund_payout(db: Session, actor: ActorContext, refund_id: str) -> D
     order = db.scalar(select(Order).where(Order.order_id == rfd.order_id))
     if order:
         order.status = "refunded"
-        for item in order.items:
-            prod = get_product_by_id_or_sku(db, item.product_id)
-            if prod.inventory:
-                prod.inventory.quantity_available += item.quantity
+        stock.restock(
+            db, order.items, movement_type="return_restock",
+            ref=Ref("refund", rfd.refund_id, actor.actor_id, "refund_processed"),
+        )
 
     if rfd.return_id:
         ret = db.scalar(select(ReturnRequest).where(ReturnRequest.return_id == rfd.return_id))

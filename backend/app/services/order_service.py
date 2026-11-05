@@ -20,7 +20,6 @@ from ..models import (
     Customer,
     CustomerAddress,
     IdempotencyKey,
-    Inventory,
     Invoice,
     Order,
     OrderItem,
@@ -43,6 +42,8 @@ from .audit_service import get_idempotent_result, next_entity_id, record_audit, 
 from .config_service import get_business_config_map
 from .product_service import get_product_by_id_or_sku
 from .variant_service import build_line_item
+from . import inventory_service as stock
+from .inventory_service import Ref
 from .tax_service import calculate_order_financials
 
 MAX_ORDER_LINES = 25
@@ -202,27 +203,8 @@ def serialize_order(db: Session, order: Order) -> Dict[str, Any]:
     }
 
 
-def _lock_inventories_asc(db: Session, product_ids: List[str]) -> Dict[str, Inventory]:
-    sorted_pids = sorted(set(product_ids))
-    if not sorted_pids:
-        return {}
-    rows = db.scalars(
-        select(Inventory)
-        .where(Inventory.product_id.in_(sorted_pids))
-        .order_by(Inventory.product_id.asc())
-        .with_for_update()
-    ).all()
-    return {inv.product_id: inv for inv in rows}
-
-
-def _release_reserved_stock_for_order(db: Session, order: Order) -> None:
-    pids = [item.product_id for item in order.items]
-    inv_map = _lock_inventories_asc(db, pids)
-    for item in sorted(order.items, key=lambda x: (x.product_id, x.size)):
-        inv = inv_map.get(item.product_id)
-        if inv is not None:
-            inv.quantity_available += int(item.quantity)
-            inv.quantity_reserved = max(0, int(inv.quantity_reserved or 0) - int(item.quantity))
+def _release_hold(db: Session, order: Order, actor_id: str, reason: str) -> None:
+    stock.release_hold(db, order.items, Ref("order", order.order_id, actor_id, reason))
 
 
 def expire_order_if_due(db: Session, order: Order) -> bool:
@@ -231,7 +213,7 @@ def expire_order_if_due(db: Session, order: Order) -> bool:
     now = datetime.now(timezone.utc)
     hold_exp = _ensure_utc(order.hold_expires_at)
     if hold_exp is not None and hold_exp <= now:
-        _release_reserved_stock_for_order(db, order)
+        _release_hold(db, order, "system", "hold_expired")
         order.status = "expired"
         db.commit()
         return True
@@ -247,7 +229,7 @@ def sweep_expired_orders(db: Session) -> Dict[str, Any]:
     for order in pending_orders:
         hold_exp = _ensure_utc(order.hold_expires_at)
         if hold_exp is not None and hold_exp <= now:
-            _release_reserved_stock_for_order(db, order)
+            _release_hold(db, order, "system", "hold_expired_sweep")
             order.status = "expired"
             released_ids.append(order.order_id)
     if released_ids:
@@ -376,41 +358,11 @@ def _create_order_locked(db: Session, actor: ActorContext, req: OrderCreateReque
         if cached is not None:
             return dict(cached.response_snapshot)
 
-    sorted_pids = sorted({line["product_id"] for line in merged_lines})
-    locked_products = {
-        p.product_id: p
-        for p in db.scalars(
-            select(Product).where(Product.product_id.in_(sorted_pids)).order_by(Product.product_id.asc()).with_for_update()
-        ).all()
-    }
-    locked_inventories = _lock_inventories_asc(db, sorted_pids)
-
-    shortages: List[Dict[str, Any]] = []
-    for line in merged_lines:
-        prod = locked_products[line["product_id"]]
-        inv = locked_inventories.get(prod.product_id)
-        avail = int(inv.quantity_available) if inv is not None else 0
-        req_qty = int(line["quantity"])
-        if avail < req_qty:
-            shortages.append(
-                {
-                    "product_id": prod.product_id,
-                    "productId": prod.product_id,
-                    "name": prod.name,
-                    "size": line["size"],
-                    "requested": req_qty,
-                    "available": avail,
-                }
-            )
-
-    if shortages:
-        first = shortages[0]
-        raise AppError(
-            "insufficient_stock",
-            f"Not enough stock for '{first['name']}' ({first['product_id']}): requested {first['requested']}, available {first['available']}.",
-            409,
-            details={"shortages": shortages},
-        )
+    # Per-size stock rows locked FOR UPDATE (variant_id order) until commit — this is
+    # what prevents overselling, also across server processes.
+    wanted = stock.merge_lines(merged_lines)
+    stock_lock = stock.lock_stock(db, wanted)
+    stock_lock.require(db, wanted)
 
     fin = calculate_order_financials(
         db,
@@ -471,11 +423,14 @@ def _create_order_locked(db: Session, actor: ActorContext, req: OrderCreateReque
                 final_sale=cl["final_sale"],
             )
         )
-        inv = locked_inventories[cl["product_id"]]
-        qty = int(cl["quantity"])
-        inv.quantity_available -= qty
-        if req.hold_only:
-            inv.quantity_reserved = int(inv.quantity_reserved or 0) + qty
+
+    stock.take(
+        db,
+        stock_lock,
+        wanted,
+        movement_type="hold" if req.hold_only else "sale",
+        ref=Ref("order", order_id, actor.actor_id, "checkout_hold" if req.hold_only else "order_placed"),
+    )
 
     if req.coupon_code and fin["discount_inr"] > Decimal("0.00"):
         coupon = db.scalar(select(Coupon).where(Coupon.code == req.coupon_code.strip().upper()))
@@ -604,7 +559,7 @@ def cancel_order(
     was_pending_hold = order.status == "pending"
 
     if was_pending_hold:
-        _release_reserved_stock_for_order(db, order)
+        _release_hold(db, order, actor.actor_id, req.reason or "hold_cancelled")
         order.status = "cancelled"
         order.cancelled_at = now
         record_audit(
@@ -624,11 +579,9 @@ def cancel_order(
 
     order.status = "cancelled"
     order.cancelled_at = now
-    inv_map = _lock_inventories_asc(db, [item.product_id for item in order.items])
-    for item in sorted(order.items, key=lambda x: (x.product_id, x.size)):
-        inv = inv_map.get(item.product_id)
-        if inv is not None:
-            inv.quantity_available += item.quantity
+    stock.restock(
+        db, order.items, movement_type="cancel_restock", ref=Ref("order", order.order_id, actor.actor_id, req.reason)
+    )
 
     refund_id = next_entity_id(db, Refund, Refund.refund_id, "refund", start_seq=1001)
     refund = Refund(
@@ -734,7 +687,7 @@ def handle_payment_webhook(
     if order is None:
         raise AppError("order_not_found", f"Order '{order_id}' not found.", 404)
 
-    inv_map = _lock_inventories_asc(db, [item.product_id for item in order.items])
+    webhook_ref = Ref("order", order.order_id, actor.actor_id, f"payment_webhook:{event_id}")
 
     now = datetime.now(timezone.utc)
     hold_exp = _ensure_utc(order.hold_expires_at)
@@ -743,11 +696,7 @@ def handle_payment_webhook(
 
     is_expired = order.status == "expired" or (hold_exp is not None and hold_exp <= now)
     if order.status == "pending" and is_expired:
-        for item in sorted(order.items, key=lambda x: (x.product_id, x.size)):
-            inv = inv_map.get(item.product_id)
-            if inv is not None:
-                inv.quantity_available += int(item.quantity)
-                inv.quantity_reserved = max(0, int(inv.quantity_reserved or 0) - int(item.quantity))
+        stock.release_hold(db, order.items, webhook_ref)
         order.status = "expired"
 
     decision = decide_webhook_outcome(
@@ -765,35 +714,24 @@ def handle_payment_webhook(
         outcome = "ignored"
     elif action == "flag_review":
         if decision.get("release_hold"):
-            for item in sorted(order.items, key=lambda x: (x.product_id, x.size)):
-                inv = inv_map.get(item.product_id)
-                if inv is not None:
-                    inv.quantity_available += int(item.quantity)
-                    inv.quantity_reserved = max(0, int(inv.quantity_reserved or 0) - int(item.quantity))
+            stock.release_hold(db, order.items, webhook_ref)
         order.status = "needs_review"
         order.review_reason = decision["reason"]
         order.refund_flag = bool(decision["refund"])
         outcome = "needs_review"
     elif action == "mark_paid":
-        for item in sorted(order.items, key=lambda x: (x.product_id, x.size)):
-            inv = inv_map.get(item.product_id)
-            if inv is not None:
-                inv.quantity_reserved = max(0, int(inv.quantity_reserved or 0) - int(item.quantity))
+        stock.capture_hold(db, order.items, webhook_ref)
         order.status = "paid"
         order.paid_at = now
         order.paid_amount_paise = amount_paise
         _ensure_invoice_for_order(db, order)
         outcome = "paid"
     elif action == "attempt_late_recovery":
-        can_fulfill_late = all(
-            inv_map.get(item.product_id) is not None
-            and int(inv_map[item.product_id].quantity_available) >= int(item.quantity)
-            for item in order.items
-        )
+        late_wanted = stock.merge_lines(order.items)
+        late_lock = stock.lock_stock(db, late_wanted)
+        can_fulfill_late = not late_lock.shortages(db, late_wanted)
         if can_fulfill_late:
-            for item in sorted(order.items, key=lambda x: (x.product_id, x.size)):
-                inv = inv_map[item.product_id]
-                inv.quantity_available -= int(item.quantity)
+            stock.take(db, late_lock, late_wanted, movement_type="late_capture", ref=webhook_ref)
             order.status = "paid"
             order.paid_at = now
             order.paid_amount_paise = amount_paise

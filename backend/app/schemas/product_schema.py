@@ -25,6 +25,8 @@ class ProductVariantDTO(BaseModel):
     sku: str
     mrp_inr: Decimal
     is_active: bool = True
+    stock: int = 0  # sellable units of this size
+    in_stock: bool = False
 
 
 class PriceRangeDTO(BaseModel):
@@ -50,8 +52,9 @@ class ProductDTO(BaseModel):
     country_of_origin: str
     final_sale: bool
     security_tag_required: bool
-    stock: int
-    size_breakdown: Dict[str, int]
+    stock: int  # total sellable units across active sizes
+    quantity_reserved: int
+    stock_by_size: Dict[str, int]  # {size: sellable units}
     images: List[str]
 
 
@@ -77,6 +80,8 @@ class ProductCreateRequest(BaseModel):
     fabric_and_care: str = "Dry clean or cold gentle wash."
     final_sale: bool = False
     initial_stock: int = Field(default=20, ge=0)
+    # Exact opening stock per size; when omitted, initial_stock is split evenly across sizes.
+    initial_stock_by_size: Optional[Dict[str, int]] = None
 
 
 class ProductUpdateRequest(BaseModel):
@@ -133,15 +138,19 @@ class VariantUpdateRequest(BaseModel):
 
 
 class InventoryUpdateRequest(BaseModel):
-    quantity_available: int = Field(ge=0)
-    size_breakdown: Optional[Dict[str, int]] = None
-    reason: str = "manual_inventory_sync"
+    """Absolute available stock per size, e.g. {"sizes": {"M": 12, "L": 4}}."""
+
+    sizes: Dict[str, int] = Field(min_length=1)
+    reason: str = Field(default="manual_stock_count", min_length=3, max_length=160)
 
 
-class InventoryReserveRequest(BaseModel):
+class InventoryRestockRequest(BaseModel):
+    """Newly received units for one size."""
+
     product_id: str
-    quantity: int = Field(gt=0)
-    order_id: Optional[str] = None
+    size: str = Field(min_length=1, max_length=16)
+    quantity: int = Field(gt=0, le=10000)
+    reason: str = Field(default="units_received", min_length=3, max_length=160)
 
 
 class ProductReviewCreateRequest(BaseModel):

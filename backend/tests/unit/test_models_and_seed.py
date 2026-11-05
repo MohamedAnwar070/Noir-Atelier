@@ -12,7 +12,8 @@ from backend.app.models import (
     Color,
     Customer,
     Department,
-    Inventory,
+    InventoryMovement,
+    VariantInventory,
     Material,
     OrderStatus,
     Policy,
@@ -31,7 +32,7 @@ class TestModelsAndSeed(unittest.TestCase):
 
     def test_50_tables_registered_and_all_foreign_keys_indexed(self) -> None:
         tables = set(Base.metadata.tables.keys())
-        self.assertEqual(len(tables), 50)
+        self.assertEqual(len(tables), 52)
         for required in (
             "customers",
             "customer_addresses",
@@ -51,6 +52,8 @@ class TestModelsAndSeed(unittest.TestCase):
             "product_images",
             "search_synonyms",
             "inventory",
+            "variant_inventory",
+            "inventory_movements",
             "product_vectors",
             "product_reviews",
             "recommendations",
@@ -160,8 +163,10 @@ class TestModelsAndSeed(unittest.TestCase):
                 self.assertEqual(p.sizes_available, [v.size for v in p.variants])
                 self.assertTrue(all(v.sku == f"{p.sku}-{v.size}" for v in p.variants))
 
-            total_stock = session.scalar(select(func.sum(Inventory.quantity_available)))
+            total_stock = session.scalar(select(func.sum(VariantInventory.quantity_available)))
             self.assertEqual(total_stock, 170)
+            # Opening stock went through the ledger: it sums to the live levels.
+            self.assertEqual(session.scalar(select(func.sum(InventoryMovement.delta_available))), 170)
 
             customers = session.scalars(select(Customer)).all()
             self.assertEqual(len(customers), 2)
@@ -190,7 +195,7 @@ class TestModelsAndSeed(unittest.TestCase):
 
         locked_queries = [
             select(Product).where(Product.product_id.in_(["PRD-001", "PRD-004"])).order_by(Product.product_id.asc()).with_for_update(),
-            select(Inventory).where(Inventory.product_id.in_(["PRD-001", "PRD-004"])).order_by(Inventory.product_id.asc()).with_for_update(),
+            select(VariantInventory).where(VariantInventory.variant_id.in_([1, 2])).order_by(VariantInventory.variant_id.asc()).with_for_update(),
             select(Order).where(Order.order_id == "ORD-1001").with_for_update(),
         ]
         for stmt in locked_queries:

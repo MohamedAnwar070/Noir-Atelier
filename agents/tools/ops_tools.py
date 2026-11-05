@@ -31,9 +31,8 @@ class InventoryTools:
     def update_inventory(
         self,
         product_id: str,
-        quantity_available: int,
+        sizes: Dict[str, int],
         *,
-        size_breakdown: Optional[Dict[str, int]] = None,
         reason: str = "agent_stock_adjustment",
         trace_id: str = "TRC-000000",
         traces: Optional[List[ToolCallTrace]] = None,
@@ -44,11 +43,7 @@ class InventoryTools:
             "PUT",
             f"/api/inventory/{product_id}",
             trace_id=trace_id,
-            json_body={
-                "quantity_available": quantity_available,
-                "size_breakdown": size_breakdown,
-                "reason": reason,
-            },
+            json_body={"sizes": sizes, "reason": reason},  # absolute level per size
             traces=traces,
         )
 

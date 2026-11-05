@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Mapping, Optional
 
 from sqlalchemy.orm import Session
 
-from ..models import Product, ProductVariant
+from ..models import Product, ProductVariant, VariantInventory
 from ..utils.exceptions import AppError
 
 # Display order for sizes; unknown sizes sort after these, alphabetically.
@@ -126,6 +126,8 @@ def set_variant_prices(db: Session, product: Product, prices: Mapping[str, Decim
                 mrp_inr=price,
                 position=size_position(size),
                 is_active=True,
+                # Every size owns a stock row from birth; units arrive via inventory_service.
+                stock=VariantInventory(quantity_available=0, quantity_reserved=0, quantity_damaged=0),
             )
             product.variants.append(variant)
             by_size[size] = variant
@@ -153,6 +155,8 @@ def serialize_variants(product: Product) -> List[Dict[str, Any]]:
             "sku": v.sku,
             "mrp_inr": v.mrp_inr,
             "is_active": v.is_active,
+            "stock": v.stock.quantity_available if v.stock else 0,
+            "in_stock": bool(v.is_active and v.stock and v.stock.quantity_available > 0),
         }
         for v in sorted(product.variants, key=lambda v: (v.position, v.size))
     ]

@@ -5,7 +5,7 @@ from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -20,7 +20,6 @@ from backend.app.models import (
     Customer,
     CustomerAddress,
     CustomerPreference,
-    Inventory,
     Material,
     PaymentMethod,
     Policy,
@@ -35,6 +34,7 @@ from backend.app.models import (
 from backend.app.security import hash_password
 from backend.app.storage.object_store import LocalObjectStore
 from backend.app.reference_data import CATEGORIES, FIT_FEEDBACK_OPTIONS, ensure_reference_data
+from backend.app.services.inventory_service import Ref, open_balance
 from backend.app.services.variant_service import set_variant_prices
 
 
@@ -84,7 +84,11 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
         settings = get_settings()
         engine = create_engine(settings.database_sync_url)
 
-    Base.metadata.create_all(bind=engine)
+    # Alembic owns the schema of a migrated database; create_all there would create new
+    # tables behind the migrations' back (without their backfills). Only bootstrap
+    # unmanaged databases (tests, throwaway demos).
+    if "alembic_version" not in inspect(engine).get_table_names():
+        Base.metadata.create_all(bind=engine)
     object_store = LocalObjectStore()
 
     with Session(engine) as session:
@@ -117,8 +121,7 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 "fit_guide": "Tailored regular fit through chest and shoulders. True to size.",
                 "fabric_and_care": "100% Belgian Linen (185 GSM). Cold gentle wash, hang dry in shade.",
                 "final_sale": False,
-                "stock": 40,
-                "size_breakdown": {"S": 8, "M": 14, "L": 12, "XL": 6},
+                "stock_by_size": {"S": 8, "M": 14, "L": 12, "XL": 6},
                 "image_filename": "product.jpg",
                 "remote_image_url": "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=1200&q=85",
                 "accent_tag": "100% European Flax Linen",
@@ -138,8 +141,7 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 "fit_guide": "Structured boxy outerwear cut. Designed to layer over fine knitwear.",
                 "fabric_and_care": "80% Australian Merino Wool, 20% Recycled Polyamide. Dry clean only.",
                 "final_sale": False,
-                "stock": 20,
-                "size_breakdown": {"M": 7, "L": 8, "XL": 5},
+                "stock_by_size": {"M": 7, "L": 8, "XL": 5},
                 "image_filename": "product.jpg",
                 "remote_image_url": "https://images.unsplash.com/photo-1544022613-e87ca75a784a?auto=format&fit=crop&w=1200&q=85",
                 "accent_tag": "Double-Faced Merino Wool",
@@ -159,8 +161,7 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 "fit_guide": "Bias cut contours naturally to the silhouette. True to atelier sizing.",
                 "fabric_and_care": "100% Mulberry Silk Crepe (22 Momme). Specialist dry clean only.",
                 "final_sale": False,
-                "stock": 15,
-                "size_breakdown": {"XS": 3, "S": 5, "M": 5, "L": 2},
+                "stock_by_size": {"XS": 3, "S": 5, "M": 5, "L": 2},
                 "image_filename": "product.jpg",
                 "remote_image_url": "https://images.unsplash.com/photo-1539008835657-9e8e9680c956?auto=format&fit=crop&w=1200&q=85",
                 "accent_tag": "22-Momme Mulberry Silk",
@@ -180,8 +181,7 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 "fit_guide": "Clean straight silhouette. Take your normal size.",
                 "fabric_and_care": "100% Organic Peruvian Pima Cotton (220 GSM). Machine wash cold, dry flat.",
                 "final_sale": False,
-                "stock": 60,
-                "size_breakdown": {"XS": 10, "S": 15, "M": 18, "L": 12, "XL": 5},
+                "stock_by_size": {"XS": 10, "S": 15, "M": 18, "L": 12, "XL": 5},
                 "image_filename": "product.jpg",
                 "remote_image_url": "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=1200&q=85",
                 "accent_tag": "220 GSM Peruvian Pima",
@@ -201,8 +201,7 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 "fit_guide": "Comfort kids cut with ribbed cuffs for room to grow.",
                 "fabric_and_care": "100% Extra-Fine ZQ Merino Wool. Gentle wool cycle 30C, dry flat.",
                 "final_sale": False,
-                "stock": 35,
-                "size_breakdown": {"4Y": 6, "6Y": 8, "8Y": 9, "10Y": 7, "12Y": 5},
+                "stock_by_size": {"4Y": 6, "6Y": 8, "8Y": 9, "10Y": 7, "12Y": 5},
                 "image_filename": "product.jpg",
                 "remote_image_url": "https://images.unsplash.com/photo-1519238263530-99bdd11df2ea?auto=format&fit=crop&w=1200&q=85",
                 "accent_tag": "Superfine ZQ Merino Knit",
@@ -253,16 +252,10 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                     display_order=1,
                 )
             )
-            session.add(
-                Inventory(
-                    product_id=p["product_id"],
-                    quantity_available=p["stock"],
-                    quantity_reserved=0,
-                    quantity_damaged=0,
-                    size_breakdown=p["size_breakdown"],
-                    low_stock_threshold=5,
-                )
-            )
+            # Opening stock per size, through the ledger like every other stock change.
+            seed_ref = Ref("admin", p["product_id"], "seed", "seed_demo_opening_stock")
+            for variant in prod.variants:
+                open_balance(session, variant, p["stock_by_size"].get(variant.size, 0), seed_ref)
             object_store.put_json(
                 "products",
                 p["product_id"],
@@ -643,7 +636,7 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
                 service_account="svc-fulfillment",
                 resource_type="shipments",
                 action="write",
-                allowed_endpoints=["/api/shipments/{id}", "/api/shipments/schedule", "/api/inventory/reserve"],
+                allowed_endpoints=["/api/shipments/{id}", "/api/shipments/schedule"],
             ),
             AgentPermission(
                 agent_type="support_agent",

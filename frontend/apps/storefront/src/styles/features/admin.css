@@ -142,3 +142,22 @@
 .stock-count-badge {
   font-variant-numeric: tabular-nums;
 }
+
+/* Inventory vault: one stock chip per size, and the per-size restock control */
+.stock-size-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.stock-restock-control {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.stock-restock-control .select-control {
+  width: auto;
+  min-height: 30px;
+  padding-block: 0.2rem;
+}
