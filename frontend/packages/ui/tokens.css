@@ -9,6 +9,7 @@
      ------------------------------------------------------------------------ */
   --primitive-stone-25: #fdfcfa;
   --primitive-stone-50: #faf8f4;
+  --primitive-stone-75: #f5f2eb;
   --primitive-stone-100: #f2efe9;
   --primitive-stone-200: #e6e1d8;
   --primitive-stone-300: #c9c2b6;
@@ -22,6 +23,7 @@
   --primitive-stone-950: #0e0e0d;
 
   --primitive-white: #ffffff;
+  --primitive-gold-200: #e6d3b3;
   --primitive-gold-300: #d6bc90;
   --primitive-gold-400: #c5a572;
   --primitive-gold-500: #a68553;
@@ -129,6 +131,11 @@
   --z-drawer: 60;
   --z-modal: 70;
   --z-toast: 90;
+  --z-status: 95; /* offline / slow-network banners: must never be covered */
+
+  /* Layout landmarks referenced by fixed-position UI (toasts, AI launcher) */
+  --header-h: 64px;
+  --widget-offset: 1.25rem;
 
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -174,6 +181,7 @@
   --accent-success: var(--primitive-emerald-500);
   --fill-placeholder: linear-gradient(155deg, #f2efe9 0%, #e6e1d8 100%);
   --focus-ring: rgba(140, 109, 63, 0.28);
+  --focus-ring-error: rgba(220, 38, 38, 0.18);
 
   --state-success-bg: var(--primitive-emerald-50);
   --state-success-text: var(--primitive-emerald-700);
@@ -238,6 +246,7 @@
   --accent-success: #489e73;
   --fill-placeholder: linear-gradient(155deg, #201f1c 0%, #161614 100%);
   --focus-ring: rgba(197, 165, 114, 0.34);
+  --focus-ring-error: rgba(252, 165, 165, 0.26);
 
   --state-success-bg: rgba(39, 103, 73, 0.22);
   --state-success-text: #86d3ac;
@@ -274,26 +283,6 @@
 :focus-visible {
   outline: 2px solid var(--border-focus);
   outline-offset: 2px;
-}
-
-.skip-link {
-  position: fixed;
-  top: -120px;
-  left: var(--space-4);
-  z-index: 999;
-  background: var(--brand-primary);
-  color: var(--text-inverse);
-  padding: var(--space-3) var(--space-5);
-  border-radius: var(--radius-xs);
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  text-decoration: none;
-  transition: top var(--duration-fast) var(--ease-out);
-}
-
-.skip-link:focus {
-  top: var(--space-4);
 }
 
 @media (prefers-reduced-motion: reduce) {

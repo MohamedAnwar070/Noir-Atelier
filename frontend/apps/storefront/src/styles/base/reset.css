@@ -53,3 +53,24 @@ textarea {
   white-space: nowrap;
   border: 0;
 }
+
+/* Keyboard users can jump straight to the main content (a11y). */
+.skip-link {
+  position: fixed;
+  top: -120px;
+  left: var(--space-4);
+  z-index: calc(var(--z-status) + 1);
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-xs);
+  background: var(--brand-primary);
+  color: var(--text-inverse);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: none;
+  transition: top var(--duration-fast) var(--ease-out);
+}
+
+.skip-link:focus {
+  top: var(--space-4);
+}

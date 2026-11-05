@@ -8,11 +8,11 @@ import React from "react";
  * Adapts automatically to Editorial Light & Noir Obsidian themes via CSS variables.
  */
 export function BrandMonogram({ size = 34, reversed = false, className = "" }) {
-  const plaqueFill = reversed ? "#141312" : "var(--bg-surface)";
-  const plaqueStroke = reversed ? "#C5A572" : "var(--text-primary)";
-  const innerStroke = reversed ? "#C5A572" : "var(--accent-gold)";
-  const primaryInk = reversed ? "#F5F2EB" : "var(--text-primary)";
-  const brassInk = reversed ? "#C5A572" : "var(--accent-gold)";
+  const plaqueFill = reversed ? "var(--primitive-stone-900)" : "var(--bg-surface)";
+  const plaqueStroke = reversed ? "var(--primitive-gold-400)" : "var(--text-primary)";
+  const innerStroke = reversed ? "var(--primitive-gold-400)" : "var(--accent-gold)";
+  const primaryInk = reversed ? "var(--primitive-stone-50)" : "var(--text-primary)";
+  const brassInk = reversed ? "var(--primitive-gold-400)" : "var(--accent-gold)";
 
   return (
     <svg
@@ -80,31 +80,31 @@ export function BrandLogo({
 
   if (variant === "wordmark") {
     return (
-      <span className={`brand-lockup brand-lockup--wordmark brand-lockup-wordmark ${className}`}>
-        <span className="brand-wordmark-text brand-lockup-title">{title}</span>
+      <span className={`brand-lockup ${className}`}>
+        <span className="brand-lockup-title">{title}</span>
       </span>
     );
   }
 
   if (variant === "stacked") {
     return (
-      <span className={`brand-lockup brand-lockup--stacked brand-lockup-stacked ${className}`}>
+      <span className={`brand-lockup brand-lockup--stacked ${className}`}>
         <BrandMonogram size={size} reversed={reversed} />
-        <span className="brand-wordmark-stack brand-lockup-text">
-          <span className="brand-wordmark-text brand-lockup-title">{title}</span>
-          {showSubtitle && <span className="brand-submark-text brand-lockup-subtitle">{subtitle}</span>}
+        <span className="brand-lockup-text">
+          <span className="brand-lockup-title">{title}</span>
+          {showSubtitle && <span className="brand-lockup-subtitle">{subtitle}</span>}
         </span>
       </span>
     );
   }
 
   return (
-    <span className={`brand-lockup brand-lockup--horizontal brand-lockup-horizontal ${className}`}>
+    <span className={`brand-lockup ${className}`}>
       <BrandMonogram size={size} reversed={reversed} />
       <span className="brand-lockup-divider" aria-hidden="true" />
-      <span className="brand-wordmark-stack brand-lockup-text">
-        <span className="brand-wordmark-text brand-lockup-title">{title}</span>
-        {showSubtitle && <span className="brand-submark-text brand-lockup-subtitle">{subtitle}</span>}
+      <span className="brand-lockup-text">
+        <span className="brand-lockup-title">{title}</span>
+        {showSubtitle && <span className="brand-lockup-subtitle">{subtitle}</span>}
       </span>
     </span>
   );
@@ -122,7 +122,7 @@ export function GarmentWovenLabel({ sku, origin, composition, brandTitle = "Noir
       <div className="woven-label-tack woven-label-tack--bl" aria-hidden="true" />
       <div className="woven-label-tack woven-label-tack--br" aria-hidden="true" />
       <div className="woven-label-inner">
-        <BrandMonogram size={32} />
+        <BrandMonogram size={32} reversed />
         <div className="woven-label-copy">
           <div className="woven-label-brand">{brandTitle}</div>
           <div className="woven-label-meta">

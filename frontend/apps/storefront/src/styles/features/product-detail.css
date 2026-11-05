@@ -68,50 +68,60 @@
   gap: 0.65rem;
 }
 
-.garment-woven-label {
+/* Woven neck label — a physical object, so it stays dark in both themes
+   (fixed primitives, not theme tokens). Markup: GarmentWovenLabel. */
+.woven-label-specimen {
   position: relative;
   padding: 1rem 1.25rem;
-  background: #141312;
-  color: #faf8f4;
-  border: 1px solid rgba(197, 165, 114, 0.42);
+  background: var(--primitive-stone-900);
+  color: var(--primitive-stone-50);
+  border: 1px solid color-mix(in srgb, var(--primitive-gold-400) 42%, transparent);
   border-radius: 2px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 0.25rem;
 }
 
-.woven-tack {
+.woven-label-tack {
   position: absolute;
   width: 8px;
   height: 2px;
-  background: #c5a572;
+  background: var(--primitive-gold-400);
 }
-.woven-tack.tl { top: 6px; left: 6px; transform: rotate(35deg); }
-.woven-tack.tr { top: 6px; right: 6px; transform: rotate(-35deg); }
-.woven-tack.bl { bottom: 6px; left: 6px; transform: rotate(-35deg); }
-.woven-tack.br { bottom: 6px; right: 6px; transform: rotate(35deg); }
+.woven-label-tack--tl { top: 6px; left: 6px; transform: rotate(35deg); }
+.woven-label-tack--tr { top: 6px; right: 6px; transform: rotate(-35deg); }
+.woven-label-tack--bl { bottom: 6px; left: 6px; transform: rotate(-35deg); }
+.woven-label-tack--br { bottom: 6px; right: 6px; transform: rotate(35deg); }
 
-.woven-label-edition {
-  font-size: 8.5px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: #c5a572;
+.woven-label-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.woven-label-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
 }
 
 .woven-label-brand {
   font-family: var(--font-serif);
   font-size: 1.05rem;
   letter-spacing: 0.22em;
-  color: #faf8f4;
+  color: var(--primitive-stone-50);
 }
 
 .woven-label-meta {
   font-size: 9.5px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #b5afa6;
+  color: var(--primitive-stone-300);
+}
+
+.woven-label-code {
+  font-size: 8.5px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--primitive-gold-400);
 }
 
 .detail-seal-caption {

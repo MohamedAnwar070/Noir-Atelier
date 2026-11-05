@@ -91,13 +91,13 @@
 
 .card-edition-plaque.edition-couture {
   background: rgba(20, 19, 18, 0.9);
-  color: #e6d3b3;
+  color: var(--primitive-gold-200);
   border: 1px solid rgba(197, 165, 114, 0.55);
 }
 
 .card-edition-plaque.edition-reserve {
   background: rgba(250, 248, 244, 0.92);
-  color: #141312;
+  color: var(--primitive-stone-900);
   border: 1px solid rgba(140, 109, 63, 0.45);
 }
 
@@ -105,7 +105,7 @@
   padding: 0.22rem 0.58rem;
   border-radius: 2px;
   background: var(--bg-glass-dark);
-  color: #faf8f4;
+  color: var(--primitive-stone-50);
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.06em;
@@ -143,7 +143,7 @@
 }
 
 .card-wishlist-btn.active {
-  color: #8c6d3f;
+  color: var(--primitive-gold-600);
   border-color: rgba(140, 109, 63, 0.5);
 }
 
@@ -285,7 +285,7 @@
 .card-add-btn.loading:disabled {
   border-color: var(--accent-success);
   background: var(--accent-success);
-  color: #fff;
+  color: var(--primitive-white);
   opacity: 1;
 }
 

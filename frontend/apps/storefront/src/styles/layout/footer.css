@@ -24,6 +24,11 @@
   gap: 0.95rem;
 }
 
+/* Link columns: let long labels wrap instead of widening the grid track */
+.footer-nav-col {
+  min-width: 0;
+}
+
 .footer-manifesto {
   margin: 0;
   max-width: 42ch;

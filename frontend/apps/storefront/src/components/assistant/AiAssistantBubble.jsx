@@ -223,7 +223,7 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
                       <div className="ai-stylist-notes-card">
                         <div className="ai-stylist-notes-header">
                           <span className="ai-stylist-notes-icon">✦</span>
-                          <span className="ai-stylist-notes-title">Sartorial Styling Advice</span>
+                          <span>Sartorial Styling Advice</span>
                         </div>
                         <ul className="ai-stylist-notes-list">
                           {msg.stylistNotes.map((note, idx) => (

@@ -13,7 +13,9 @@ from ..models import (
     Department,
     Inventory,
     Material,
+    Occasion,
     OrderStatus,
+    Palette,
     Product,
     ProductImage,
     ProductMaterial,
@@ -450,6 +452,31 @@ def get_catalog_meta(db: Session) -> Dict[str, Any]:
         ).all()
     ]
 
+    occasions = [
+        {"code": o.code, "name": o.name}
+        for o in db.scalars(
+            select(Occasion).where(Occasion.is_active.is_(True)).order_by(Occasion.display_order, Occasion.code)
+        ).all()
+    ]
+    palettes = [
+        {"code": p.code, "name": p.name}
+        for p in db.scalars(select(Palette).order_by(Palette.display_order, Palette.code)).all()
+    ]
+    # Server-owned synonym vocabulary: every dimension with its valid canonical targets,
+    # so admin tooling never hardcodes (or drifts from) SYNONYM_DIMENSIONS.
+    target_options = {
+        "department": [{"value": d["code"], "label": d["name"]} for d in departments],
+        "product_type": [{"value": c["slug"], "label": c["name"]} for c in categories],
+        "color": [{"value": f["family"], "label": f["label"]} for f in family_acc.values()],
+        "material": [{"value": f["family"], "label": f["label"]} for f in mat_family_acc.values()],
+        "occasion": [{"value": o["code"], "label": o["name"]} for o in occasions],
+        "palette": [{"value": p["code"], "label": p["name"]} for p in palettes],
+    }
+    synonym_dimensions = [
+        {"code": dim, "label": _SYNONYM_TARGETS[dim][2], "options": target_options[dim]}
+        for dim in SYNONYM_DIMENSIONS
+    ]
+
     return {
         "departments": departments,
         "categories": categories,
@@ -463,6 +490,9 @@ def get_catalog_meta(db: Session) -> Dict[str, Any]:
         "refund_statuses": refund_statuses,
         "return_reasons": return_reasons,
         "fit_feedback_options": fit_options,
+        "occasions": occasions,
+        "palettes": palettes,
+        "synonym_dimensions": synonym_dimensions,
     }
 
 
@@ -755,33 +785,32 @@ def list_search_synonyms(db: Session) -> List[Dict[str, Any]]:
     ]
 
 
+# dimension -> (canonical column, case normaliser, label, extra filters).
+# Every SYNONYM_DIMENSION must appear here (asserted below), so a newly added
+# dimension can never silently fall through to another table's lookup.
+_SYNONYM_TARGETS = {
+    "department": (Department.code, str.upper, "Department", (Department.is_active.is_(True),)),
+    "product_type": (Category.slug, str.lower, "Product type", (Category.is_active.is_(True),)),
+    "color": (Color.family, str.lower, "Colour family", ()),
+    "material": (Material.family, str.lower, "Material family", ()),
+    "occasion": (Occasion.code, str.lower, "Occasion", (Occasion.is_active.is_(True),)),
+    "palette": (Palette.code, str.lower, "Palette", ()),
+}
+assert set(_SYNONYM_TARGETS) == set(SYNONYM_DIMENSIONS), "synonym target map out of sync with SYNONYM_DIMENSIONS"
+
+
 def _validate_synonym_target(db: Session, dimension: str, raw_value: str) -> str:
-    if dimension not in SYNONYM_DIMENSIONS:
+    target = _SYNONYM_TARGETS.get(dimension)
+    if target is None:
         raise AppError(
             "invalid_synonym_dimension",
             f"dimension must be one of {', '.join(SYNONYM_DIMENSIONS)}.",
             422,
         )
-    if dimension == "department":
-        val = raw_value.strip().upper()
-        exists_row = db.scalar(select(Department).where(Department.code == val, Department.is_active.is_(True)))
-        if not exists_row:
-            raise AppError("invalid_synonym_target", f"Department '{val}' does not exist.", 422)
-        return val
-    val = raw_value.strip().lower()
-    if dimension == "product_type":
-        exists_row = db.scalar(select(Category).where(Category.slug == val, Category.is_active.is_(True)))
-        if not exists_row:
-            raise AppError("invalid_synonym_target", f"Category slug '{val}' does not exist.", 422)
-        return val
-    if dimension == "color":
-        exists_row = db.scalar(select(Color).where(Color.family == val))
-        if not exists_row:
-            raise AppError("invalid_synonym_target", f"Colour family '{val}' does not exist.", 422)
-        return val
-    exists_row = db.scalar(select(Material).where(Material.family == val))
-    if not exists_row:
-        raise AppError("invalid_synonym_target", f"Material family '{val}' does not exist.", 422)
+    column, normalise, label, filters = target
+    val = normalise(raw_value.strip())
+    if db.scalar(select(column).where(column == val, *filters).limit(1)) is None:
+        raise AppError("invalid_synonym_target", f"{label} '{val}' does not exist.", 422)
     return val
 
 

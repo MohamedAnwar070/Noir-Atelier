@@ -17,10 +17,10 @@ export function AnnouncementBar() {
     <aside className="announcement-bar" role="note" aria-label="Maison client privileges">
       <div className="announcement-bar-inner">
         <span>Complimentary Boutique Delivery over {formatInr(freeShippingMin)}</span>
-        <span className="announcement-dot" aria-hidden="true">·</span>
-        <span>Insured White-Glove Courier over {formatInr(signatureMin)}</span>
-        <span className="announcement-dot" aria-hidden="true">·</span>
-        <span>{returnDays}-Day Security-Seal Returns</span>
+        <span className="announcement-dot announcement-hide-sm" aria-hidden="true">·</span>
+        <span className="announcement-hide-sm">Insured White-Glove Courier over {formatInr(signatureMin)}</span>
+        <span className="announcement-dot announcement-hide-sm" aria-hidden="true">·</span>
+        <span className="announcement-hide-sm">{returnDays}-Day Security-Seal Returns</span>
         <span className="announcement-dot announcement-hide-sm" aria-hidden="true">·</span>
         <span className="announcement-hide-sm">CBIC GST Certified (HSN {hsnChapters})</span>
       </div>
@@ -241,7 +241,8 @@ export function SiteHeader() {
             aria-label={`Shopping bag with ${cartCount} items`}
           >
             <Icon name="bag" size={13} />
-            <span>Bag ({cartCount})</span>
+            <span className="header-bag-label">Bag ({cartCount})</span>
+            <span className="header-bag-count" aria-hidden="true">{cartCount}</span>
           </button>
 
           <button

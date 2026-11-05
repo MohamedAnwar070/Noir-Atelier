@@ -23,12 +23,26 @@
 }
 
 .announcement-dot {
-  color: #c5a572;
+  color: var(--primitive-gold-400);
   opacity: 0.85;
 }
 
 @media (max-width: 768px) {
+  .announcement-bar {
+    padding: 0.35rem var(--space-fluid-md);
+  }
+
+  .announcement-bar-inner {
+    flex-wrap: nowrap;
+    justify-content: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+  }
+
   .announcement-hide-sm {
-    display: none;
+    display: none !important;
   }
 }

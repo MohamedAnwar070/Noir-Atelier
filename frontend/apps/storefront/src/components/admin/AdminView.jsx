@@ -3,15 +3,8 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useStore } from "@/store/StoreProvider";
 import { StatePanel, ListSkeleton } from "@/components/ui/StatePanel";
-import { Button, TextField } from "@/components/ui/Controls";
+import { Badge, Button, TextField } from "@/components/ui/Controls";
 import { formatInr, formatPriceRange } from "@noir/utils/formatters.js";
-
-const SYNONYM_DIMENSIONS = [
-  { id: "product_type", label: "Product Type (Category)" },
-  { id: "color", label: "Colour Family" },
-  { id: "material", label: "Material / Fiber" },
-  { id: "department", label: "Department" },
-];
 
 export function AdminView() {
   const {
@@ -58,6 +51,22 @@ export function AdminView() {
   });
   const [isCreatingStaff, setIsCreatingStaff] = useState(false);
 
+  // Staff-assignable roles come from the RBAC matrix (highest hierarchy first).
+  const staffRoles = useMemo(
+    () => (rbacMatrix.roles || []).filter((r) => r.actor_type === "admin"),
+    [rbacMatrix.roles]
+  );
+  const permissionCount = useMemo(
+    () => new Set((rbacMatrix.roles || []).flatMap((r) => r.permissions || [])).size,
+    [rbacMatrix.roles]
+  );
+
+  useEffect(() => {
+    if (staffRoles.length > 0 && !staffRoles.some((r) => r.role_code === staffForm.roleCode)) {
+      setStaffForm((prev) => ({ ...prev, roleCode: staffRoles[staffRoles.length - 1].role_code }));
+    }
+  }, [staffRoles, staffForm.roleCode]);
+
   const refundStatusMap = useMemo(() => {
     const map = {};
     for (const row of catalogMeta?.refund_statuses || []) {
@@ -66,21 +75,16 @@ export function AdminView() {
     return map;
   }, [catalogMeta?.refund_statuses]);
 
-  const targetOptionsForDimension = useMemo(() => {
-    if (synForm.dimension === "product_type") {
-      return (catalogMeta?.categories || []).map((c) => ({ value: c.slug, label: `${c.name} (${c.slug})` }));
-    }
-    if (synForm.dimension === "color") {
-      return (catalogMeta?.color_families || []).map((cf) => ({ value: cf.family, label: `${cf.label} (${cf.family})` }));
-    }
-    if (synForm.dimension === "material") {
-      return (catalogMeta?.material_families || []).map((mf) => ({ value: mf.family, label: `${mf.label} (${mf.family})` }));
-    }
-    if (synForm.dimension === "department") {
-      return (catalogMeta?.departments || []).map((d) => ({ value: d.code, label: `${d.name} (${d.code})` }));
-    }
-    return [];
-  }, [synForm.dimension, catalogMeta]);
+  // Dimensions and their valid canonical targets come from the server (catalog meta).
+  const synonymDimensions = catalogMeta?.synonym_dimensions || [];
+  const targetOptionsForDimension = useMemo(
+    () =>
+      (synonymDimensions.find((d) => d.code === synForm.dimension)?.options || []).map((o) => ({
+        value: o.value,
+        label: `${o.label} (${o.value})`,
+      })),
+    [synonymDimensions, synForm.dimension]
+  );
 
   useEffect(() => {
     if (targetOptionsForDimension.length > 0 && !targetOptionsForDimension.some((o) => o.value === synForm.value)) {
@@ -618,8 +622,8 @@ export function AdminView() {
                   value={synForm.dimension}
                   onChange={(e) => setSynForm({ ...synForm, dimension: e.target.value, value: "" })}
                 >
-                  {SYNONYM_DIMENSIONS.map((d) => (
-                    <option key={d.id} value={d.id}>{d.label}</option>
+                  {synonymDimensions.map((d) => (
+                    <option key={d.code} value={d.code}>{d.label}</option>
                   ))}
                 </select>
               </div>
@@ -744,14 +748,14 @@ export function AdminView() {
 
       {/* RBAC Governance & Staff Directory */}
       {!isLoading && !authError && activeTab === "rbac" && (
-        <div className="admin-rbac-section form-stack">
+        <div className="form-stack">
           {/* Staff Provisioning Form */}
-          <div className="bag-summary-card" style={{ padding: "1.5rem", marginBottom: "1.5rem" }}>
+          <div className="bag-summary-card" style={{ padding: "1.5rem" }}>
             <span className="hero-eyebrow">Maison Governance</span>
-            <h3 className="section-heading" style={{ marginTop: "0.25rem", marginBottom: "0.5rem" }}>
+            <h3 className="section-subheading">
               Provision Atelier Staff Member
             </h3>
-            <p className="section-subheading" style={{ marginBottom: "1.25rem" }}>
+            <p className="section-subcaption">
               Issue administrative credentials with predefined Role-Based Access Control privileges.
             </p>
             <form onSubmit={handleCreateStaff} className="form-stack">
@@ -782,19 +786,20 @@ export function AdminView() {
                   placeholder="Min 8 chars, mixed case, symbol"
                   required
                 />
-                <div className="text-field-group">
-                  <label className="text-field-label">Atelier RBAC Role</label>
+                <div className="form-field-group">
+                  <label className="field-label" htmlFor="staff-role-select">Atelier RBAC Role</label>
                   <select
-                    className="text-field-input"
+                    id="staff-role-select"
+                    className="select-control"
                     value={staffForm.roleCode}
                     onChange={(e) => setStaffForm({ ...staffForm, roleCode: e.target.value })}
                     required
                   >
-                    <option value="manager">Store Manager (manager)</option>
-                    <option value="catalog_manager">Archive Curator (catalog_manager)</option>
-                    <option value="finance_admin">Finance Controller (finance_admin)</option>
-                    <option value="support_agent">Client Concierge (support_agent)</option>
-                    <option value="super_admin">Executive Super Admin (super_admin)</option>
+                    {staffRoles.map((r) => (
+                      <option key={r.role_code} value={r.role_code}>
+                        {r.name} ({r.role_code})
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -823,9 +828,9 @@ export function AdminView() {
           </div>
 
           {/* Active Staff Directory */}
-          <div className="bag-summary-card" style={{ padding: "1.5rem", marginBottom: "1.5rem" }}>
+          <div className="bag-summary-card" style={{ padding: "1.5rem" }}>
             <span className="hero-eyebrow">Staff Roster</span>
-            <h3 className="section-heading" style={{ margin: "0.25rem 0 1rem" }}>
+            <h3 className="section-subheading">
               Active Atelier Personnel ({staffUsers.length})
             </h3>
 
@@ -847,7 +852,7 @@ export function AdminView() {
                     <tr key={staff.staff_id}>
                       <td>
                         <strong>{staff.name}</strong>
-                        <div style={{ fontSize: "11px", color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
+                        <div style={{ fontSize: "11px", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
                           {staff.staff_id}
                         </div>
                       </td>
@@ -859,21 +864,11 @@ export function AdminView() {
                       </td>
                       <td>{staff.department_scope || "Global Atelier"}</td>
                       <td>
-                        <span
-                          style={{
-                            display: "inline-block",
-                            padding: "2px 8px",
-                            borderRadius: "12px",
-                            fontSize: "11px",
-                            fontWeight: 600,
-                            background: staff.status === "active" ? "rgba(46, 125, 50, 0.12)" : "rgba(211, 47, 47, 0.12)",
-                            color: staff.status === "active" ? "#2e7d32" : "#d32f2f",
-                          }}
-                        >
+                        <Badge tone={staff.status === "active" ? "success" : "error"}>
                           {staff.status === "active" ? "Active" : "Suspended"}
-                        </span>
+                        </Badge>
                       </td>
-                      <td style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>
+                      <td style={{ fontSize: "12px", color: "var(--text-muted)" }}>
                         {staff.last_login_at ? new Date(staff.last_login_at).toLocaleDateString() : "Never"}
                       </td>
                       <td>
@@ -895,11 +890,11 @@ export function AdminView() {
           {/* RBAC Permission Matrix */}
           <div className="bag-summary-card" style={{ padding: "1.5rem" }}>
             <span className="hero-eyebrow">Security Architecture</span>
-            <h3 className="section-heading" style={{ margin: "0.25rem 0 0.5rem" }}>
+            <h3 className="section-subheading">
               Atelier Role &amp; Permission Matrix
             </h3>
-            <p className="section-subheading" style={{ marginBottom: "1.25rem" }}>
-              Fine-grained access controls mapped across 7 canonical roles and 32 atomic permissions.
+            <p className="section-subcaption">
+              Fine-grained access controls mapped across {(rbacMatrix.roles || []).length} roles and {permissionCount} atomic permissions.
             </p>
 
             <div className="rbac-role-cards">
@@ -907,13 +902,13 @@ export function AdminView() {
                 <div key={r.role_code} className="rbac-role-card">
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                     <strong>{r.name}</strong>
-                    <code style={{ fontSize: "11px", color: "var(--color-accent)" }}>{r.role_code}</code>
+                    <code style={{ fontSize: "11px", color: "var(--accent-gold)" }}>{r.role_code}</code>
                   </div>
-                  <p style={{ fontSize: "12px", color: "var(--color-text-muted)", margin: 0 }}>
+                  <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: 0 }}>
                     {r.description}
                   </p>
                   <div>
-                    <span style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-text-muted)" }}>
+                    <span style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)" }}>
                       Granted Permissions ({r.permissions?.length || 0}):
                     </span>
                     <div className="rbac-perm-cloud" style={{ marginTop: "0.35rem" }}>

@@ -178,6 +178,42 @@ class TestCatalogSearchAndReferenceData(unittest.TestCase):
         self.assertIn("green", {c["family"] for c in meta_after["color_families"]})
         self.assertIn("cashmere", {m["family"] for m in meta_after["material_families"]})
 
+    def test_03b_every_synonym_dimension_is_served_and_validated(self) -> None:
+        """Meta serves every dimension with its valid targets; each one round-trips.
+
+        Regression: occasion/palette used to fall through to the material lookup.
+        """
+        from backend.app.models.catalog import SYNONYM_DIMENSIONS
+
+        meta = self.client.get("/api/catalog/meta").json()
+        dims = {d["code"]: d for d in meta["synonym_dimensions"]}
+        self.assertEqual(list(dims), list(SYNONYM_DIMENSIONS))
+
+        for code in ("occasion", "palette"):
+            self.assertTrue(dims[code]["options"], f"{code} has no targets")
+            target = dims[code]["options"][0]["value"]
+            ok = self.client.post(
+                "/api/admin/catalog/synonyms",
+                json={"term": f"test {code} term", "dimension": code, "value": target},
+                headers=self._headers("admin_manager"),
+            )
+            self.assertEqual(ok.status_code, 201, ok.text)
+            self.assertEqual(ok.json()["value"], target)
+
+            # A material family is not a valid occasion/palette target
+            wrong = self.client.post(
+                "/api/admin/catalog/synonyms",
+                json={"term": f"bad {code} term", "dimension": code, "value": "linen"},
+                headers=self._headers("admin_manager"),
+            )
+            self.assertEqual(wrong.status_code, 422)
+            self.assertEqual(wrong.json()["code"], "invalid_synonym_target")
+
+            self.client.delete(
+                f"/api/admin/catalog/synonyms/{ok.json()['synonym_id']}",
+                headers=self._headers("admin_manager"),
+            )
+
     def test_04_db_driven_return_reasons_and_status_metadata(self) -> None:
         order = self.client.post(
             "/api/orders",

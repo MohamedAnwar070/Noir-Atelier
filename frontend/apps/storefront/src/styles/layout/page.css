@@ -13,6 +13,12 @@
   min-width: 0;
 }
 
+@media (max-width: 768px) {
+  .site-main {
+    padding-bottom: calc(4.75rem + var(--safe-bottom, 0px));
+  }
+}
+
 /* Centred content column; pages set only their width via --page-max */
 .page-container {
   width: 100%;
