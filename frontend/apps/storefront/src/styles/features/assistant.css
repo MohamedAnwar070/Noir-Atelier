@@ -323,11 +323,180 @@
   margin-top: 2px;
 }
 
+.ai-persona-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.ai-mode-pill {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--accent-brass-soft);
+  color: var(--accent-gold);
+  border: 1px solid var(--accent-brass-border);
+}
+
 .ai-persona-label {
   font-size: 9.5px;
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
+  color: var(--accent-gold);
+}
+
+/* Editorial Stylist Sartorial Notes Card */
+.ai-stylist-notes-card {
+  background: var(--bg-subtle);
+  border-left: 2px solid var(--accent-gold);
+  border-radius: 0 var(--radius-sm, 4px) var(--radius-sm, 4px) 0;
+  padding: 0.65rem 0.85rem;
+  margin-top: 0.25rem;
+}
+
+.ai-stylist-notes-header {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-gold);
+  margin-bottom: 0.35rem;
+}
+
+.ai-stylist-notes-icon {
+  font-size: 11px;
+  color: var(--accent-gold);
+}
+
+.ai-stylist-notes-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.ai-stylist-note-item {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  position: relative;
+  padding-left: 0.75rem;
+}
+
+.ai-stylist-note-item::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: var(--accent-gold);
+}
+
+/* Ensemble & Capsule Action Bar */
+.ai-ensemble-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-subtle);
+  border: 1px dashed var(--accent-brass-border);
+  border-radius: var(--radius-sm, 4px);
+  margin-top: 0.4rem;
+}
+
+.ai-ensemble-meta {
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-ensemble-count {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ai-ensemble-total {
+  font-weight: 600;
+  color: var(--accent-gold);
+}
+
+.ai-add-ensemble-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.35rem 0.65rem;
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: #141312;
+  background: #c5a572;
+  border: 1px solid #c5a572;
+  border-radius: var(--radius-sm, 3px);
+  cursor: pointer;
+  transition: all 160ms ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ai-add-ensemble-btn:hover {
+  background: #d6bc90;
+  border-color: #d6bc90;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(197, 165, 114, 0.35);
+}
+
+/* Dynamic Contextual Follow-Up Suggestions */
+.ai-contextual-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.55rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.ai-contextual-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.32rem 0.65rem;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+
+.ai-contextual-chip:hover:not(:disabled) {
+  border-color: var(--accent-gold);
+  background: var(--accent-brass-soft);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.ai-contextual-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ai-chip-bullet {
+  font-size: 9px;
   color: var(--accent-gold);
 }
 

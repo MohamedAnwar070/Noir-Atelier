@@ -197,11 +197,31 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
 
                   <div className={`ai-bubble ${msg.role === "user" ? "user-bubble" : "assistant-bubble"}`}>
                     {msg.role === "assistant" && msg.persona && (
-                      <div className="ai-persona-label">
-                        {msg.persona}
+                      <div className="ai-persona-row">
+                        <span className="ai-persona-label">{msg.persona}</span>
+                        {msg.actionFeedback?.badge && (
+                          <span className="ai-mode-pill">{msg.actionFeedback.badge}</span>
+                        )}
                       </div>
                     )}
                     <div className="ai-bubble-text">{msg.content}</div>
+
+                    {/* Editorial Stylist Sartorial Notes Box */}
+                    {Array.isArray(msg.stylistNotes) && msg.stylistNotes.length > 0 && (
+                      <div className="ai-stylist-notes-card">
+                        <div className="ai-stylist-notes-header">
+                          <span className="ai-stylist-notes-icon">✦</span>
+                          <span className="ai-stylist-notes-title">Sartorial Styling Advice</span>
+                        </div>
+                        <ul className="ai-stylist-notes-list">
+                          {msg.stylistNotes.map((note, idx) => (
+                            <li key={idx} className="ai-stylist-note-item">
+                              {note}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
 
                     {/* Action Feedback Card: Item Added */}
                     {msg.actionCard?.type === "item_added" && (
@@ -322,6 +342,52 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
                                 )}
                               </div>
                             </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Ensemble / Capsule Quick Action Bar */}
+                    {Array.isArray(msg.productCards) && msg.productCards.length > 1 && (
+                      <div className="ai-ensemble-bar">
+                        <div className="ai-ensemble-meta">
+                          <span className="ai-ensemble-count">{msg.productCards.length} Curated Pieces</span>
+                          {msg.totalMrpInr && (
+                            <span className="ai-ensemble-total"> · Total: {formatInr(msg.totalMrpInr)}</span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          className="ai-add-ensemble-btn"
+                          onClick={() => {
+                            for (const p of msg.productCards) {
+                              addToBag(p, p.sizes_available?.[0] || "M", 1);
+                            }
+                          }}
+                        >
+                          + Add Complete Look to Bag
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Dynamic Contextual Follow-Up Suggestions */}
+                    {Array.isArray(msg.followUpPrompts) && msg.followUpPrompts.length > 0 && (
+                      <div className="ai-contextual-prompts" role="region" aria-label="Stylist recommendations">
+                        {msg.followUpPrompts.map((chip, idx) => {
+                          const label = typeof chip === "string" ? chip : (chip.label || chip.prompt);
+                          const prompt = typeof chip === "string" ? chip : (chip.prompt || chip.label);
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              className="ai-contextual-chip"
+                              onClick={() => handlePromptClick(prompt)}
+                              disabled={isThinking}
+                              title={prompt}
+                            >
+                              <span className="ai-chip-bullet">✦</span>
+                              <span>{label}</span>
+                            </button>
                           );
                         })}
                       </div>
