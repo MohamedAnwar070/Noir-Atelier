@@ -18,7 +18,7 @@ export const LIMITS = {
 export const ASSISTANT = {
   name: "Personal Fashion Consultant",
   tagline: "Private styling, natural fiber provenance, sizing & client care",
-  inputPlaceholder: "Inquire about drape, fiber origin, Haute Archive pieces, or an order…",
+  inputPlaceholder: "Ask about fabrics, fit, styling advice, or specific garments…",
   welcome:
     "Welcome to Noir Atelier. As your Personal Fashion Consultant, I can guide you through our curated archive—advising on natural fiber provenance, silhouette and fit, styling pairings, or assisting with your bag, orders, and returns.",
   statusBadges: {

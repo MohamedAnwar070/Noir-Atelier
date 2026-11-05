@@ -73,7 +73,11 @@ export function useAssistant({
         if (item.audience === "staff" && !isStaff) return false;
         return Boolean(item.prompt || item.label);
       })
-      .map((item) => (typeof item === "string" ? item : item.prompt || item.label));
+      .map((item) =>
+        typeof item === "string"
+          ? { label: item, prompt: item }
+          : { label: item.label || item.prompt, prompt: item.prompt || item.label }
+      );
   }, [businessConfig, isStaff]);
 
   const send = useCallback(

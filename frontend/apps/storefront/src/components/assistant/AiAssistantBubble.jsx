@@ -7,8 +7,17 @@ import { BrandMonogram } from "@/components/ui/BrandLogo";
 import { ASSISTANT } from "@/config/ui.config";
 import { formatInr, formatPriceRange, getProductImage } from "@noir/utils/formatters.js";
 
+const CURATED_PROMPTS = [
+  { label: "Haute Archive (₹1L+)", prompt: "Show me Haute Archive couture garments above INR 100000" },
+  { label: "Himalayan Cashmere", prompt: "Show me Himalayan cashmere and fine wool garments" },
+  { label: "Mulberry Silk Edit", prompt: "Show me mulberry silk dresses, skirts, and eveningwear" },
+  { label: "Wardrobe Guidance", prompt: "What are your top recommendations for a timeless luxury capsule wardrobe?" },
+  { label: "Sizing & Tailoring", prompt: "How does Noir Atelier sizing work and what tailoring alterations are supported?" },
+  { label: "Delivery & Returns", prompt: "What are the boutique delivery options, white-glove couriers, and 7-day return policies?" },
+];
+
 export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
-  const { currentActor, assistant, addToBag, openDrawer, navigateTo, ui, setOverlay } = useStore();
+  const { assistant, addToBag, openDrawer, navigateTo, ui, setOverlay } = useStore();
   const [input, setInput] = useState("");
 
   const isOpen = Boolean(ui?.chatOpen);
@@ -24,6 +33,18 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
 
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
+
+  // Close with Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setIsOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -49,8 +70,19 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
     sendMessage(prompt);
   };
 
+  const promptList = (quickPrompts && quickPrompts.length > 0) ? quickPrompts : CURATED_PROMPTS;
+
   return (
     <>
+      {/* Backdrop overlay for quick dismissal on all screen sizes */}
+      {isOpen && (
+        <div
+          className="ai-card-backdrop"
+          onClick={() => setIsOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       <div className="ai-widget-container" aria-live="polite">
         {!isOpen && (
           <button
@@ -74,8 +106,22 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
             className="ai-assistant-card"
             role="dialog"
             aria-label="Noir Atelier Personal Fashion Consultant"
-            aria-modal="false"
+            aria-modal="true"
           >
+            {/* Sheet Grabber for Mobile Drawers */}
+            <div
+              className="ai-sheet-grabber"
+              onClick={() => setIsOpen(false)}
+              role="button"
+              aria-label="Dismiss consultation drawer"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  setIsOpen(false);
+                }
+              }}
+            />
+
             {/* Header */}
             <header className="ai-card-header">
               <div className="ai-header-lead">
@@ -83,49 +129,56 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
                   <BrandMonogram size={24} reversed />
                   <span className="ai-online-dot" />
                 </div>
-                <div>
+                <div className="ai-header-text">
                   <h3 className="ai-header-title">{ASSISTANT.name}</h3>
                   <p className="ai-header-subtitle">
-                    Live Maison Archive · {currentActor.label || "Private Client"}
+                    <span className="ai-pulse-dot" /> Grounded in 100-Piece Atelier Archive
                   </p>
                 </div>
               </div>
               <div className="ai-header-actions">
                 <button
                   type="button"
-                  className="icon-btn-subtle"
+                  className="ai-header-btn"
                   onClick={clearHistory}
-                  title="Reset consultation"
-                  aria-label="Reset consultation history"
+                  title="Start new consultation"
+                  aria-label="Start new consultation"
                 >
-                  <Icon name="refresh" size={15} />
+                  <Icon name="refresh" size={13} />
+                  <span className="ai-btn-text">Reset</span>
                 </button>
                 <button
                   type="button"
-                  className="icon-btn-subtle"
+                  className="ai-header-btn ai-close-btn"
                   onClick={() => setIsOpen(false)}
-                  title="Close Consultant"
-                  aria-label="Close Consultant"
+                  title="Close consultation (Esc)"
+                  aria-label="Close consultation"
                 >
-                  <Icon name="close" size={16} />
+                  <Icon name="close" size={15} />
+                  <span className="ai-btn-text">Close</span>
                 </button>
               </div>
             </header>
 
-            {/* Database-Driven Suggested Consultations */}
-            {quickPrompts.length > 0 && (
+            {/* Curated Consultation Quick Suggestions */}
+            {promptList.length > 0 && (
               <div className="ai-prompts-scroller" role="region" aria-label="Suggested consultations">
-                {quickPrompts.slice(0, 5).map((p, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    className="ai-prompt-chip"
-                    onClick={() => handlePromptClick(p)}
-                    disabled={isThinking}
-                  >
-                    {p}
-                  </button>
-                ))}
+                {promptList.slice(0, 6).map((item, idx) => {
+                  const label = typeof item === "string" ? item : (item.label || item.prompt);
+                  const prompt = typeof item === "string" ? item : (item.prompt || item.label);
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      className="ai-prompt-chip"
+                      onClick={() => handlePromptClick(prompt)}
+                      disabled={isThinking}
+                      title={prompt}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
             )}
 
@@ -251,7 +304,7 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
                                 <button
                                   type="button"
                                   className="btn-pill btn-xs"
-                                  onClick={() => addToBag(p, p.sizes_available[0], 1)}
+                                  onClick={() => addToBag(p, p.sizes_available?.[0], 1)}
                                 >
                                   + Bag
                                 </button>
@@ -318,27 +371,45 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
               )}
             </div>
 
-            {/* Input Form */}
-            <form className="ai-input-form" onSubmit={handleSend}>
-              <input
-                ref={inputRef}
-                type="text"
-                className="ai-text-input"
-                placeholder={ASSISTANT.inputPlaceholder}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                disabled={isThinking}
-                aria-label="Consultation query"
-              />
-              <button
-                type="submit"
-                className="ai-send-btn"
-                disabled={!input.trim() || isThinking}
-                aria-label="Send inquiry"
-              >
-                <Icon name="arrow-right" size={16} />
-              </button>
-            </form>
+            {/* Input Form with Ergonomic Controls */}
+            <div className="ai-footer-bar">
+              <form className="ai-input-form" onSubmit={handleSend}>
+                <div className="ai-input-wrapper">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    className="ai-text-input"
+                    placeholder={ASSISTANT.inputPlaceholder}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    disabled={isThinking}
+                    aria-label="Consultation query"
+                  />
+                  {input && (
+                    <button
+                      type="button"
+                      className="ai-input-clear-btn"
+                      onClick={() => setInput("")}
+                      aria-label="Clear input text"
+                    >
+                      <Icon name="close" size={12} />
+                    </button>
+                  )}
+                </div>
+                <button
+                  type="submit"
+                  className="ai-send-btn"
+                  disabled={!input.trim() || isThinking}
+                  aria-label="Send inquiry"
+                  title="Send (Enter)"
+                >
+                  <Icon name="arrow-right" size={16} />
+                </button>
+              </form>
+              <div className="ai-input-hint">
+                Press Enter to send · Live Natural Fiber &amp; Sizing Intelligence
+              </div>
+            </div>
           </section>
         )}
       </div>
