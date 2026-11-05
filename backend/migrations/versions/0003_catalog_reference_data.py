@@ -53,6 +53,14 @@ _PRODUCT_MATERIALS: Dict[str, List[Tuple[str, int]]] = {
     "PRD-005": [("Merino Wool", 100)],
 }
 _LEGACY_CATEGORIES = ("CAT-MEN", "CAT-WMN", "CAT-KID")
+
+# Reference data this revision owns. Frozen: later revisions add their own tables
+# and synonym dimensions, which do not exist yet when this migration runs.
+_REFERENCE_TABLES = (
+    "departments", "categories", "colors", "materials", "search_synonyms",
+    "order_statuses", "refund_statuses", "return_reasons",
+)
+_SYNONYM_DIMENSIONS = ("department", "product_type", "color", "material")
 _FALLBACK_CATEGORY = ("CAT-99", "uncategorised", "Uncategorised")
 
 # FK indexes the original schema was missing (table, column).
@@ -192,7 +200,7 @@ def upgrade() -> None:
         from backend.app.reference_data import ensure_reference_data
 
         session = Session(bind=bind)
-        ensure_reference_data(session)
+        ensure_reference_data(session, tables=_REFERENCE_TABLES, synonym_dimensions=_SYNONYM_DIMENSIONS)
         session.flush()
         _sync_catalog_agent_permissions(bind, include_catalog_api=True)
         return
@@ -208,7 +216,7 @@ def upgrade() -> None:
     from backend.app.reference_data import ensure_reference_data  # single definition of the vocabulary
 
     session = Session(bind=bind)
-    ensure_reference_data(session)
+    ensure_reference_data(session, tables=_REFERENCE_TABLES, synonym_dimensions=_SYNONYM_DIMENSIONS)
     session.flush()
 
     # 3. Backfill products.

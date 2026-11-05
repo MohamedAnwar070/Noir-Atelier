@@ -164,7 +164,8 @@ def upgrade() -> None:
     from backend.app.reference_data import ensure_reference_data
 
     session = Session(bind=bind)
-    ensure_reference_data(session)
+    # Frozen to this revision's tables (see reference_data.ensure_reference_data).
+    ensure_reference_data(session, tables=("roles", "permissions", "role_permissions"))
     session.flush()
 
 

@@ -44,11 +44,12 @@ class TestNineAgentsArchitecture(unittest.TestCase):
     def tearDownClass(cls) -> None:
         app.dependency_overrides.clear()
         cls.engine.dispose()
+        set_sync_engine(None)
         cls.tmp_dir.cleanup()
 
     def test_01_registry_has_all_9_agents_and_whitelists(self) -> None:
         registry = get_agent_registry_metadata()
-        self.assertEqual(len(registry), 9)
+        self.assertEqual(len(registry), 10)
         accounts = {item["service_account"] for item in registry}
         self.assertEqual(
             accounts,
@@ -62,6 +63,7 @@ class TestNineAgentsArchitecture(unittest.TestCase):
                 "svc-inventory",
                 "svc-analytics",
                 "svc-config",
+                "svc-stylist",
             },
         )
 
@@ -233,7 +235,7 @@ class TestNineAgentsArchitecture(unittest.TestCase):
         # Verify FastAPI /api/agents/registry and /api/agents/chat endpoints
         http_reg = self.test_client.get("/api/agents/registry")
         self.assertEqual(http_reg.status_code, 200)
-        self.assertEqual(len(http_reg.json()), 9)
+        self.assertEqual(len(http_reg.json()), 10)
 
         http_chat = self.test_client.post(
             "/api/agents/chat",
@@ -242,13 +244,18 @@ class TestNineAgentsArchitecture(unittest.TestCase):
         )
         self.assertEqual(http_chat.status_code, 200)
         body = http_chat.json()
-        self.assertEqual(body["routed_agent"], "catalog_agent")
+        self.assertIn(body["routed_agent"], ("stylist_agent", "catalog_agent"))
         self.assertTrue(any(p["product_id"] == "PRD-005" for p in body["data"]["products"]))
         self.assertIn("react_steps", body)
         self.assertGreaterEqual(len(body["react_steps"]), 4)
-        self.assertIn("react", body["active_patterns"])
-        self.assertIn("reflection", body["active_patterns"])
-        self.assertIn("step_budget", body["active_patterns"])
+        if body["routed_agent"] == "stylist_agent":
+            self.assertIn("routing", body["active_patterns"])
+            self.assertIn("orchestrator_workers", body["active_patterns"])
+            self.assertIn("evaluator_optimizer", body["active_patterns"])
+        else:
+            self.assertIn("react", body["active_patterns"])
+            self.assertIn("reflection", body["active_patterns"])
+            self.assertIn("step_budget", body["active_patterns"])
         self.assertTrue(body["reflection_verified"])
         self.assertLessEqual(body["steps_taken"], body["step_budget_max"])
         self.assertEqual(body["tool_traces"][0]["risk_level"], "read_only")

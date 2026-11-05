@@ -683,6 +683,20 @@ def seed_database(engine: Optional[Engine] = None) -> dict:
             ),
         ]
         session.add_all(permissions)
+
+        # Baseline style tags for test fixtures (PRD-001..PRD-005)
+        from backend.app.models import ColorPalette, ProductOccasion
+        session.add_all([
+            ProductOccasion(product_id="PRD-001", occasion_code="everyday"),
+            ProductOccasion(product_id="PRD-001", occasion_code="work"),
+            ProductOccasion(product_id="PRD-002", occasion_code="evening"),
+            ProductOccasion(product_id="PRD-003", occasion_code="wedding"),
+            ProductOccasion(product_id="PRD-004", occasion_code="resort"),
+            ProductOccasion(product_id="PRD-005", occasion_code="everyday"),
+        ])
+        for c in session.scalars(select(Color)).all():
+            palette = "dark" if "black" in c.name.lower() or "navy" in c.name.lower() else "neutral"
+            session.add(ColorPalette(color_id=c.color_id, palette_code=palette))
         session.commit()
 
         return {

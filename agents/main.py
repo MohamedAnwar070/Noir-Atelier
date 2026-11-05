@@ -253,6 +253,7 @@ AGENT_PERSONA_LABELS: Dict[str, str] = {
     AgentRole.INVENTORY.value: "Stock Desk",
     AgentRole.ANALYTICS.value: "Insights",
     AgentRole.CONFIG.value: "Store Rules",
+    AgentRole.STYLIST.value: "Personal Stylist",
 }
 
 

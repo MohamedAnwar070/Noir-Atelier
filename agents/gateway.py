@@ -56,6 +56,18 @@ def scrub_pii(text: str) -> str:
 
 
 AGENT_ENDPOINT_WHITELIST: Dict[str, List[Tuple[str, str]]] = {
+    # Conversational stylist: read-only catalogue + its own session profile.
+    # Mirrors the server-side grant in backend/app/reference_data.STYLIST_AGENT_PERMISSION
+    # (defence in depth; a test asserts the two stay identical). DELETE is deliberately
+    # absent — erasing a profile is the shopper's right, not the agent's.
+    AgentRole.STYLIST.value: [
+        ("GET", "/api/catalog/attributes"),
+        ("GET", "/api/catalog/search"),
+        ("GET", "/api/products/{id}"),
+        ("GET", "/api/products/{id}/recommendations"),
+        ("GET", "/api/agents/sessions/{id}/profile"),
+        ("PUT", "/api/agents/sessions/{id}/profile"),
+    ],
     AgentRole.CATALOG.value: [
         ("GET", "/api/products/search"),
         ("GET", "/api/products/{id}"),
@@ -159,7 +171,7 @@ class ToolPolicyGate:
         if agent_role not in AGENT_SERVICE_ACCOUNT_MAP:
             raise ToolPolicyGateError(
                 "unknown_agent_role",
-                f"Agent role '{agent_role}' is not registered in the 9-agent registry.",
+                f"Agent role '{agent_role}' is not registered in the agent registry.",
             )
 
         allowed_list = AGENT_ENDPOINT_WHITELIST.get(agent_role, [])

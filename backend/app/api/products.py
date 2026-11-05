@@ -22,6 +22,7 @@ from ..schemas.product_schema import (
     ProductUpdateRequest,
     VariantUpdateRequest,
 )
+from ..services.catalog_attributes_service import get_catalog_attributes
 from ..services.order_service import get_orders_analytics
 from ..services.product_service import (
     add_product_review,
@@ -51,13 +52,24 @@ def api_get_catalog_meta(
     return get_catalog_meta(db)
 
 
+@router.get("/api/catalog/attributes")
+def api_catalog_attributes(
+    db: Session = Depends(get_db),
+    _actor: ActorContext = Depends(resolve_optional_actor),
+) -> Dict[str, Any]:
+    """Live, countable attributes the stylist (and filters) may use. Deterministic + versioned."""
+    return get_catalog_attributes(db)
+
+
 @router.get("/api/catalog/search")
 def api_search_catalog(
     q: Optional[str] = Query(default=None),
     category: Optional[str] = Query(default=None),
     department: Optional[str] = Query(default=None),
-    color: Optional[str] = Query(default=None),
-    material: Optional[str] = Query(default=None),
+    color: Optional[str] = Query(default=None, description="Colour family; comma-separated for several"),
+    material: Optional[str] = Query(default=None, description="Material family; comma-separated for several"),
+    occasion: Optional[str] = Query(default=None, description="Occasion code; comma-separated for several"),
+    palette: Optional[str] = Query(default=None, description="Palette code; comma-separated for several"),
     min_price: Optional[Decimal] = Query(default=None),
     max_price: Optional[Decimal] = Query(default=None),
     in_stock_only: bool = Query(default=False),
@@ -74,6 +86,8 @@ def api_search_catalog(
         category=category,
         color=color,
         material=material,
+        occasion=occasion,
+        palette=palette,
         min_price=min_price,
         max_price=max_price,
         in_stock_only=in_stock_only,

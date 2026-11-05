@@ -68,11 +68,15 @@ def get_sync_engine() -> Engine:
     return _sync_engine
 
 
-def set_sync_engine(engine: Engine, backend_label: str = "custom") -> None:
+def set_sync_engine(engine: Optional[Engine] = None, backend_label: str = "custom") -> None:
     global _sync_engine, _SessionLocal, _active_db_backend
     _sync_engine = engine
-    _SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, expire_on_commit=False)
-    _active_db_backend = backend_label
+    _SessionLocal = (
+        sessionmaker(bind=engine, autocommit=False, autoflush=False, expire_on_commit=False)
+        if engine is not None
+        else None
+    )
+    _active_db_backend = backend_label if engine is not None else "uninitialized"
 
 
 def get_active_db_backend() -> str:

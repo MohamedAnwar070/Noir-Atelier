@@ -6,8 +6,10 @@ INSERT (or an admin API call), never a code change.
 
     departments ─┐
     categories ──┼── products ── product_materials ── materials
-    colors ──────┘
-    search_synonyms  (term → one dimension/value, e.g. "tee" → product_type:t-shirt)
+    colors ──────┘      └─────── product_occasions ── occasions
+      └── color_palettes ── palettes
+    search_synonyms  (term → one dimension/value, e.g. "tee" → product_type:t-shirt,
+                      "engagement" → occasion:wedding, "calm" → palette:muted)
 """
 
 from decimal import Decimal
@@ -19,8 +21,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from ..database import Base
 from .base import TimestampMixin
 
-# Dimensions a synonym can resolve to. Kept in sync with the CHECK constraint below.
-SYNONYM_DIMENSIONS = ("department", "product_type", "color", "material")
+# Dimensions a synonym can resolve to. The CHECK constraint below is generated from this tuple.
+SYNONYM_DIMENSIONS = ("department", "product_type", "color", "material", "occasion", "palette")
+SYNONYM_DIMENSION_CHECK = "dimension IN ({})".format(", ".join(f"'{d}'" for d in SYNONYM_DIMENSIONS))
 
 
 class Department(Base, TimestampMixin):
@@ -45,6 +48,9 @@ class Color(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
     family: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
     hex_code: Mapped[Optional[str]] = mapped_column(String(7), nullable=True)
+
+    # Moods this colourway belongs to (Ivory → light, neutral, muted).
+    palettes: Mapped[List["ColorPalette"]] = relationship(cascade="all, delete-orphan", lazy="selectin")
 
     __table_args__ = (
         CheckConstraint("family = LOWER(family)", name="ck_colors_family_lower"),
@@ -84,11 +90,60 @@ class ProductMaterial(Base, TimestampMixin):
     )
 
 
+class Occasion(Base, TimestampMixin):
+    """What a garment is worn for (everyday, work, wedding, black_tie …)."""
+
+    __tablename__ = "occasions"
+
+    code: Mapped[str] = mapped_column(String(24), primary_key=True)
+    name: Mapped[str] = mapped_column(String(60), nullable=False)
+    display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    __table_args__ = (CheckConstraint("code = LOWER(code)", name="ck_occasions_code_lower"),)
+
+
+class ProductOccasion(Base, TimestampMixin):
+    """Many-to-many: a product can suit several occasions."""
+
+    __tablename__ = "product_occasions"
+
+    product_id: Mapped[str] = mapped_column(
+        String(16), ForeignKey("products.product_id", ondelete="CASCADE"), primary_key=True
+    )
+    occasion_code: Mapped[str] = mapped_column(
+        String(24), ForeignKey("occasions.code", ondelete="RESTRICT"), primary_key=True, index=True
+    )
+
+
+class Palette(Base, TimestampMixin):
+    """A colour mood shoppers describe ("calm", "earthy", "bold") rather than a hue."""
+
+    __tablename__ = "palettes"
+
+    code: Mapped[str] = mapped_column(String(24), primary_key=True)
+    name: Mapped[str] = mapped_column(String(60), nullable=False)
+    display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    __table_args__ = (CheckConstraint("code = LOWER(code)", name="ck_palettes_code_lower"),)
+
+
+class ColorPalette(Base, TimestampMixin):
+    """Many-to-many: a colourway can belong to several palettes."""
+
+    __tablename__ = "color_palettes"
+
+    color_id: Mapped[int] = mapped_column(ForeignKey("colors.color_id", ondelete="CASCADE"), primary_key=True)
+    palette_code: Mapped[str] = mapped_column(
+        String(24), ForeignKey("palettes.code", ondelete="RESTRICT"), primary_key=True, index=True
+    )
+
+
 class SearchSynonym(Base, TimestampMixin):
     """Maps a shopper's word to exactly one searchable value.
 
     `value` is interpreted per dimension: a department code, a category slug,
-    a colour family or a material family. Admin-managed; validated on write so
+    a colour family, a material family, an occasion code or a palette code. Admin-managed; validated on write so
     a synonym can never point at something that does not exist.
     """
 
@@ -102,10 +157,7 @@ class SearchSynonym(Base, TimestampMixin):
 
     __table_args__ = (
         CheckConstraint("term = LOWER(term)", name="ck_search_synonyms_term_lower"),
-        CheckConstraint(
-            "dimension IN ('department', 'product_type', 'color', 'material')",
-            name="ck_search_synonyms_dimension",
-        ),
+        CheckConstraint(SYNONYM_DIMENSION_CHECK, name="ck_search_synonyms_dimension"),
     )
 
 
@@ -115,5 +167,9 @@ __all__ = [
     "Color",
     "Material",
     "ProductMaterial",
+    "Occasion",
+    "ProductOccasion",
+    "Palette",
+    "ColorPalette",
     "SearchSynonym",
 ]

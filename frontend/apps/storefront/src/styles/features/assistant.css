@@ -330,6 +330,48 @@
   flex-wrap: wrap;
 }
 
+/* Living Style Profile Memory Capsule */
+.ai-brief-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  margin: 0.15rem 0 0.45rem;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-surface);
+  border: 1px solid rgba(197, 165, 114, 0.32);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.ai-brief-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.ai-brief-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent-gold);
+  flex-shrink: 0;
+}
+
+.ai-brief-tag {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-gold);
+}
+
+.ai-brief-text {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
 .ai-mode-pill {
   font-size: 9.5px;
   font-weight: 600;

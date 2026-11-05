@@ -12,9 +12,11 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Dict, List, Optional, Set
 
+from ..models.catalog import SYNONYM_DIMENSIONS
 from .vocabulary import Vocabulary
 
-DIMENSIONS = ("department", "product_type", "color", "material")
+# Same tuple the search_synonyms CHECK constraint is generated from (single source).
+DIMENSIONS = SYNONYM_DIMENSIONS
 
 # Grammar words that carry no product meaning (linguistic, not business data).
 STOP_WORDS = {
@@ -25,6 +27,11 @@ STOP_WORDS = {
     "garment", "wear", "buy", "purchase", "order", "add", "bag", "cart", "shopping", "shop",
     "browse", "all", "available", "price", "priced", "cost", "size", "sizes", "qty", "quantity",
     "inr", "rs",
+    # generic colour words ("calm colours" — the mood word carries the meaning)
+    "colour", "colours", "color", "colors", "tone", "tones", "shade", "shades",
+    # who it is for — captured by the stylist's profile, not a product attribute
+    "sister", "brother", "mother", "mom", "mum", "father", "dad", "wife", "husband",
+    "friend", "son", "daughter", "partner", "her", "him", "she", "he", "likes", "like",
 }
 
 _AMOUNT = r"(?:₹|rs\.?|inr)?\s*(\d[\d,]*(?:\.\d+)?)\s*(k)?"
@@ -88,7 +95,7 @@ def interpret(text: Optional[str], vocab: Vocabulary) -> SearchIntent:
                 i += n
                 break
         else:
-            word = words[i].strip("'")
+            word = re.sub(r"'s$", "", words[i]).strip("'")
             if word and word not in STOP_WORDS and not word.isdigit() and len(word) > 1:
                 intent.text_terms.append(word)
             i += 1

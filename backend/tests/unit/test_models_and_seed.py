@@ -29,9 +29,9 @@ class TestModelsAndSeed(unittest.TestCase):
     def setUp(self) -> None:
         self.engine = create_engine("sqlite:///:memory:")
 
-    def test_46_tables_registered_and_all_foreign_keys_indexed(self) -> None:
+    def test_50_tables_registered_and_all_foreign_keys_indexed(self) -> None:
         tables = set(Base.metadata.tables.keys())
-        self.assertEqual(len(tables), 46)
+        self.assertEqual(len(tables), 50)
         for required in (
             "customers",
             "customer_addresses",
@@ -43,6 +43,10 @@ class TestModelsAndSeed(unittest.TestCase):
             "materials",
             "products",
             "product_materials",
+            "occasions",
+            "product_occasions",
+            "palettes",
+            "color_palettes",
             "product_variants",
             "product_images",
             "search_synonyms",
@@ -171,7 +175,7 @@ class TestModelsAndSeed(unittest.TestCase):
             self.assertEqual(refund_cfg.config_value["tiers"]["tier_2_manager_approval_max_inr"], 25000)
 
             perms = session.scalars(select(AgentPermission)).all()
-            self.assertEqual(len(perms), 9)
+            self.assertEqual(len(perms), 10)
 
             policies = session.scalars(select(Policy)).all()
             self.assertEqual(len(policies), 4)

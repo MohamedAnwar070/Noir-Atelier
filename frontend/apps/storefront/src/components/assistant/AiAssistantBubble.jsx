@@ -204,6 +204,18 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
                         )}
                       </div>
                     )}
+
+                    {/* Living Style Profile Memory Capsule */}
+                    {msg.actionFeedback?.summary && (
+                      <div className="ai-brief-card">
+                        <div className="ai-brief-header">
+                          <span className="ai-brief-dot" aria-hidden="true" />
+                          <span className="ai-brief-tag">Living Style Profile</span>
+                        </div>
+                        <div className="ai-brief-text">{msg.actionFeedback.summary}</div>
+                      </div>
+                    )}
+
                     <div className="ai-bubble-text">{msg.content}</div>
 
                     {/* Editorial Stylist Sartorial Notes Box */}

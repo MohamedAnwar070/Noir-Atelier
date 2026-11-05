@@ -12,7 +12,17 @@ from typing import Dict, List, Set, Tuple
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import Category, Color, Department, Material, SearchSynonym
+from ..models import (
+    Category,
+    Color,
+    ColorPalette,
+    Department,
+    Material,
+    Occasion,
+    Palette,
+    ProductOccasion,
+    SearchSynonym,
+)
 
 # (dimension, value), e.g. ("product_type", "t-shirt"), ("department", "MEN")
 Meaning = Tuple[str, str]
@@ -28,6 +38,9 @@ class Vocabulary:
     slug_by_category_id: Dict[str, str] = field(default_factory=dict)
     department_codes: Set[str] = field(default_factory=set)
     max_term_words: int = 1
+    # Dimensions whose assignments are still empty (e.g. occasion tags awaiting review).
+    # Filtering on them would hide every product, so the service skips them.
+    untagged_dimensions: Set[str] = field(default_factory=set)
 
     def add(self, term: str, meaning: Meaning, *, override: bool = False) -> None:
         term = " ".join(term.lower().replace("-", " ").split())
@@ -89,6 +102,23 @@ def load_vocabulary(db: Session) -> Vocabulary:
         vocab.labels.setdefault(meaning, m.family.capitalize())
         for term in {m.name, m.family}:
             vocab.add(term, meaning)
+
+    for o in db.scalars(select(Occasion).where(Occasion.is_active.is_(True))):
+        meaning = ("occasion", o.code)
+        vocab.labels[meaning] = o.name
+        for term in {*_forms(o.code.replace("_", " ")), o.name}:
+            vocab.add(term, meaning)
+
+    for p in db.scalars(select(Palette)):
+        meaning = ("palette", p.code)
+        vocab.labels[meaning] = p.name
+        for term in {p.code, p.name}:
+            vocab.add(term, meaning)
+
+    if db.scalar(select(ProductOccasion.product_id).limit(1)) is None:
+        vocab.untagged_dimensions.add("occasion")
+    if db.scalar(select(ColorPalette.color_id).limit(1)) is None:
+        vocab.untagged_dimensions.add("palette")
 
     # Synonyms are curated by people, so they win over derived terms.
     for s in db.scalars(select(SearchSynonym).where(SearchSynonym.is_active.is_(True))):

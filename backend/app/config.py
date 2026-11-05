@@ -70,6 +70,8 @@ class Settings:
     openai_api_key: str
     openai_model: str
     llm_timeout_sec: int
+    use_live_llm: bool
+    stylist_enabled: bool
     agent_max_steps: int
     agent_checkpointer: str
 
@@ -149,11 +151,16 @@ def get_settings() -> Settings:
         embedding_dim=int(os.environ.get("EMBEDDING_DIM", "384")),
         llm_provider=os.environ.get("LLM_PROVIDER", "anthropic"),
         anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", ""),
-        llm_model_reasoning=os.environ.get("LLM_MODEL_REASONING", "claude-opus-4-1"),
-        llm_model_fast=os.environ.get("LLM_MODEL_FAST", "claude-sonnet-4-5"),
+        # Stylist reply writer / router + profile extractor. See docs/architecture/stylist.md.
+        llm_model_reasoning=os.environ.get("LLM_MODEL_REASONING", "claude-sonnet-5-5"),
+        llm_model_fast=os.environ.get("LLM_MODEL_FAST", "claude-haiku-5-5"),
         openai_api_key=os.environ.get("OPENAI_API_KEY", ""),
         openai_model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
         llm_timeout_sec=int(os.environ.get("LLM_TIMEOUT_SEC", "30")),
+        # Off by default: the stylist runs its deterministic offline brain (no API cost).
+        use_live_llm=_as_bool(os.environ.get("USE_LIVE_LLM", "0"), False),
+        # Kill switch for the conversational stylist (falls back to the specialist agents).
+        stylist_enabled=_as_bool(os.environ.get("STYLIST_ENABLED", "1"), True),
         agent_max_steps=int(os.environ.get("AGENT_MAX_STEPS", "6")),
         agent_checkpointer=os.environ.get("AGENT_CHECKPOINTER", "postgres"),
         storage_provider=os.environ.get("STORAGE_PROVIDER", "local"),

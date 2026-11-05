@@ -12,7 +12,18 @@ from typing import Dict, List, Optional, Set
 from sqlalchemy import Select, and_, case, exists, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from ..models import Category, Color, Inventory, Material, Product, ProductMaterial, ProductReview, ProductVariant
+from ..models import (
+    Category,
+    Color,
+    ColorPalette,
+    Inventory,
+    Material,
+    Product,
+    ProductMaterial,
+    ProductOccasion,
+    ProductReview,
+    ProductVariant,
+)
 from .interpreter import SearchIntent
 
 # Sort options the engine supports. Exposed to clients via the catalog meta endpoint.
@@ -45,6 +56,18 @@ def _filtered(intent: SearchIntent, category_slugs: Set[str], in_stock_only: boo
         stmt = stmt.where(Product.category_id.in_(select(Category.category_id).where(Category.slug.in_(category_slugs))))
     if f["color"]:
         stmt = stmt.where(Product.color_id.in_(select(Color.color_id).where(Color.family.in_(f["color"]))))
+    if f["palette"]:
+        # Palettes describe colourways, so match through the product's colour.
+        stmt = stmt.where(
+            Product.color_id.in_(select(ColorPalette.color_id).where(ColorPalette.palette_code.in_(f["palette"])))
+        )
+    if f["occasion"]:
+        stmt = stmt.where(
+            exists().where(
+                ProductOccasion.product_id == Product.product_id,
+                ProductOccasion.occasion_code.in_(f["occasion"]),
+            )
+        )
     if f["material"]:
         stmt = stmt.where(
             exists().where(

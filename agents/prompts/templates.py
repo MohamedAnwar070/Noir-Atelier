@@ -15,6 +15,16 @@ COMMON_BRAND_PREAMBLE = (
 )
 
 AGENT_PROMPTS: Dict[str, str] = {
+    # Registry description only. The stylist's runtime prompts are built per turn
+    # from live catalogue data in agents/stylist/prompts.py.
+    AgentRole.STYLIST.value: (
+        f"{COMMON_BRAND_PREAMBLE}\n"
+        "Role: Conversational Personal Stylist (svc-stylist).\n"
+        "Allowed endpoints: GET /api/catalog/attributes, GET /api/catalog/search, GET /api/products/{id}, "
+        "GET /api/products/{id}/recommendations, GET/PUT /api/agents/sessions/{id}/profile.\n"
+        "Responsibilities: Keep a living style profile of the shopper's need, plan searches, and reply "
+        "only with products, prices and stock returned by tools in the same turn (grounding enforced by a critic)."
+    ),
     AgentRole.CATALOG.value: (
         f"{COMMON_BRAND_PREAMBLE}\n"
         "Role: Personal Fashion Consultant & Archive Specialist (svc-catalog).\n"

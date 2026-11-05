@@ -113,6 +113,9 @@ def serialize_product(
         "color": p.color.name,
         "color_family": p.color.family,
         "color_hex": p.color.hex_code,
+        # Curated style attributes (empty until the reviewed tag file is applied).
+        "color_palettes": sorted(cp.palette_code for cp in p.color.palettes),
+        "occasions": sorted(po.occasion_code for po in p.occasions),
         "materials": [
             {"name": pm.material.name, "family": pm.material.family, "percentage": float(pm.percentage)}
             for pm in p.materials

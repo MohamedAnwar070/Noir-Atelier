@@ -1,5 +1,15 @@
 from ..database import Base
-from .catalog import Color, Department, Material, ProductMaterial, SearchSynonym
+from .catalog import (
+    Color,
+    ColorPalette,
+    Department,
+    Material,
+    Occasion,
+    Palette,
+    ProductMaterial,
+    ProductOccasion,
+    SearchSynonym,
+)
 from .customer import Customer, CustomerAddress, CustomerPreference, CustomerVector
 from .fulfillment import Refund, ReturnRequest, Shipment, ShippingZone
 from .governance import (
@@ -35,6 +45,10 @@ __all__ = [
     "Material",
     "ProductMaterial",
     "SearchSynonym",
+    "Occasion",
+    "ProductOccasion",
+    "Palette",
+    "ColorPalette",
     "OrderStatus",
     "RefundStatus",
     "ReturnReason",

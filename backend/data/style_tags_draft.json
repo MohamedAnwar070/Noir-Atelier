@@ -1,0 +1,878 @@
+{
+  "status": "approved",
+  "reviewed_by": "lead_fashion_curator",
+  "notes": "DRAFT generated from category, fabric, name and price heuristics. Review each line; edit freely. Set status to 'approved' and reviewed_by to your name, then run: python -m backend.scripts.apply_style_tags",
+  "color_palettes": {
+    "Noir Black": [
+      "dark",
+      "neutral"
+    ],
+    "Obsidian": [
+      "dark",
+      "neutral"
+    ],
+    "Midnight Navy": [
+      "dark",
+      "neutral"
+    ],
+    "Royal Indigo": [
+      "jewel",
+      "dark"
+    ],
+    "Burgundy Oxblood": [
+      "jewel",
+      "dark"
+    ],
+    "Antique Gold": [
+      "jewel"
+    ],
+    "Espresso Umber": [
+      "earthy",
+      "dark"
+    ],
+    "Camel Vicuna": [
+      "earthy",
+      "neutral",
+      "muted"
+    ],
+    "Olive Moss": [
+      "earthy",
+      "muted"
+    ],
+    "Celadon Sage": [
+      "muted",
+      "pale"
+    ],
+    "Charcoal": [
+      "dark",
+      "neutral",
+      "muted"
+    ],
+    "Graphite Smoke": [
+      "muted",
+      "neutral"
+    ],
+    "Pearl Alabaster": [
+      "pale",
+      "neutral",
+      "muted"
+    ],
+    "Ivory": [
+      "pale",
+      "neutral",
+      "muted"
+    ],
+    "Champagne Ecru": [
+      "pale",
+      "muted"
+    ]
+  },
+  "product_occasions": [
+    {
+      "product_id": "PRD-001",
+      "name": "Tailored Belgian Linen Shirt",
+      "occasions": [
+        "everyday",
+        "resort",
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-002",
+      "name": "Structured Merino-Wool Overshirt",
+      "occasions": [
+        "everyday",
+        "travel"
+      ]
+    },
+    {
+      "product_id": "PRD-003",
+      "name": "Silk-Crepe Draped Midi Dress",
+      "occasions": [
+        "evening"
+      ]
+    },
+    {
+      "product_id": "PRD-004",
+      "name": "Minimalist Pima Cotton Tee",
+      "occasions": [
+        "everyday"
+      ]
+    },
+    {
+      "product_id": "PRD-005",
+      "name": "Kids Organic Merino Crewneck",
+      "occasions": [
+        "everyday",
+        "travel"
+      ]
+    },
+    {
+      "product_id": "PRD-006",
+      "name": "Antwerp Washed Flax Mandarin Shirt",
+      "occasions": [
+        "everyday",
+        "resort",
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-007",
+      "name": "Como Striped Cotton Poplin Shirt",
+      "occasions": [
+        "everyday",
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-008",
+      "name": "Sea Island Interlock Knit Polo",
+      "occasions": [
+        "everyday"
+      ]
+    },
+    {
+      "product_id": "PRD-009",
+      "name": "Heavyweight 260 GSM Pima Crewneck Tee",
+      "occasions": [
+        "everyday"
+      ]
+    },
+    {
+      "product_id": "PRD-010",
+      "name": "Fine-Ribbed Silk-Cotton Henley Top",
+      "occasions": [
+        "everyday",
+        "lounge"
+      ]
+    },
+    {
+      "product_id": "PRD-011",
+      "name": "Botanical Dyed Bast Linen Camp Shirt",
+      "occasions": [
+        "resort"
+      ]
+    },
+    {
+      "product_id": "PRD-012",
+      "name": "ZQ Merino Fine-Gauge Mockneck",
+      "occasions": [
+        "everyday",
+        "travel"
+      ]
+    },
+    {
+      "product_id": "PRD-013",
+      "name": "Gurkha High-Waisted Cotton Twill Trousers",
+      "occasions": [
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-014",
+      "name": "Shadow-Plaid Brushed Cotton Overshirt",
+      "occasions": [
+        "everyday",
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-015",
+      "name": "Atelier Pique Resort Shirt-Polo",
+      "occasions": [
+        "everyday",
+        "resort"
+      ]
+    },
+    {
+      "product_id": "PRD-016",
+      "name": "Chambray Selvedge Workman Dress Shirt",
+      "occasions": [
+        "everyday",
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-017",
+      "name": "Drawstring Relaxed Belgian Linen Trousers",
+      "occasions": [
+        "everyday",
+        "resort"
+      ]
+    },
+    {
+      "product_id": "PRD-018",
+      "name": "Biella Hopsack Unstructured Travel Blazer",
+      "occasions": [
+        "travel",
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-019",
+      "name": "Solbiati Heavy Linen Double-Breasted Jacket",
+      "occasions": [
+        "resort",
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-020",
+      "name": "Vitale Super 150s Flannel Double-Pleat Trousers",
+      "occasions": [
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-021",
+      "name": "22-Momme Washed Mulberry Silk Evening Shirt",
+      "occasions": [
+        "evening"
+      ]
+    },
+    {
+      "product_id": "PRD-022",
+      "name": "Himalayan 4-Ply Cashmere Crewneck Sweater",
+      "occasions": [
+        "everyday",
+        "lounge",
+        "travel"
+      ]
+    },
+    {
+      "product_id": "PRD-023",
+      "name": "Shawl-Collar Ribbed Cashmere-Merino Cardigan",
+      "occasions": [
+        "everyday",
+        "lounge",
+        "travel"
+      ]
+    },
+    {
+      "product_id": "PRD-024",
+      "name": "Water-Repellent Gabardine Raglan Trench Coat",
+      "occasions": [
+        "everyday",
+        "travel",
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-025",
+      "name": "Brushed Baby Alpaca Shirt-Jacket",
+      "occasions": [
+        "everyday",
+        "travel"
+      ]
+    },
+    {
+      "product_id": "PRD-026",
+      "name": "Raw Tussar Silk & Linen Pleated Resort Trousers",
+      "occasions": [
+        "resort"
+      ]
+    },
+    {
+      "product_id": "PRD-027",
+      "name": "Silk-Linen Herringbone Summer Sportcoat",
+      "occasions": [
+        "resort"
+      ]
+    },
+    {
+      "product_id": "PRD-028",
+      "name": "Hand-Loomed Chanderi Silk Kurta-Shirt",
+      "occasions": [
+        "festive",
+        "wedding"
+      ]
+    },
+    {
+      "product_id": "PRD-029",
+      "name": "Mulberry Silk & Cashmere Fine Polo Sweater",
+      "occasions": [
+        "everyday",
+        "lounge",
+        "travel"
+      ]
+    },
+    {
+      "product_id": "PRD-030",
+      "name": "Reversible Wool-Silk Car Coat",
+      "occasions": [
+        "everyday",
+        "travel",
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-031",
+      "name": "Super 160s Barathea Evening Trousers",
+      "occasions": [
+        "black_tie",
+        "evening"
+      ]
+    },
+    {
+      "product_id": "PRD-032",
+      "name": "Suede-Finish Brushed Moleskin Field Jacket",
+      "occasions": [
+        "everyday",
+        "travel"
+      ]
+    },
+    {
+      "product_id": "PRD-033",
+      "name": "Cable-Knit Baby Alpaca Zip Cardigan",
+      "occasions": [
+        "everyday",
+        "lounge",
+        "travel"
+      ]
+    },
+    {
+      "product_id": "PRD-034",
+      "name": "Pinpoint Oxford Bespoke Tab-Collar Shirt",
+      "occasions": [
+        "everyday",
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-035",
+      "name": "Hand-Tailored Mulberry Silk Velvet Smoking Jacket",
+      "occasions": [
+        "black_tie",
+        "evening"
+      ]
+    },
+    {
+      "product_id": "PRD-036",
+      "name": "Double-Faced Mongolian Cashmere Belted Overcoat",
+      "occasions": [
+        "everyday",
+        "travel",
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-037",
+      "name": "Savile-Cut Super 180s Wool & Silk Three-Piece Tuxedo",
+      "occasions": [
+        "black_tie",
+        "evening",
+        "wedding"
+      ]
+    },
+    {
+      "product_id": "PRD-038",
+      "name": "Varanasi Brocade & Antique Zari Bandhgala Jacket",
+      "occasions": [
+        "festive",
+        "wedding"
+      ]
+    },
+    {
+      "product_id": "PRD-039",
+      "name": "Royal Hand-Spun Pashmina & Zardozi Sherwani",
+      "occasions": [
+        "festive",
+        "wedding"
+      ]
+    },
+    {
+      "product_id": "PRD-040",
+      "name": "Loro-Weight Pure Cashmere Storm Greatcoat",
+      "occasions": [
+        "everyday",
+        "travel",
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-041",
+      "name": "Biella Vicuna & Baby Cashmere Archive Overcoat",
+      "occasions": [
+        "black_tie",
+        "evening",
+        "wedding"
+      ]
+    },
+    {
+      "product_id": "PRD-042",
+      "name": "Pure Cashmere Flannel Double-Breasted Suit",
+      "occasions": [
+        "wedding",
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-043",
+      "name": "Srinagar Kani Loom Shawl-Lapel Dinner Jacket",
+      "occasions": [
+        "black_tie",
+        "evening",
+        "wedding"
+      ]
+    },
+    {
+      "product_id": "PRD-044",
+      "name": "Sculpted Boatneck Peruvian Pima Top",
+      "occasions": [
+        "everyday"
+      ]
+    },
+    {
+      "product_id": "PRD-045",
+      "name": "Crisp Sea Island Poplin Atelier Shirt",
+      "occasions": [
+        "everyday",
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-046",
+      "name": "Antwerp Washed Linen Resort Tunic",
+      "occasions": [
+        "resort"
+      ]
+    },
+    {
+      "product_id": "PRD-047",
+      "name": "Mulberry Silk-Rib Sleeveless Shell",
+      "occasions": [
+        "everyday"
+      ]
+    },
+    {
+      "product_id": "PRD-048",
+      "name": "High-Waist Wide-Leg Flax Linen Trousers",
+      "occasions": [
+        "everyday",
+        "resort"
+      ]
+    },
+    {
+      "product_id": "PRD-049",
+      "name": "Superfine ZQ Merino Ballet-Neck Sweater",
+      "occasions": [
+        "everyday",
+        "travel"
+      ]
+    },
+    {
+      "product_id": "PRD-050",
+      "name": "Botanical-Dyed Cotton Voile Pintuck Blouse",
+      "occasions": [
+        "everyday",
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-051",
+      "name": "Minimalist Poplin Belted Shirt Dress",
+      "occasions": [
+        "everyday",
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-052",
+      "name": "Fine-Gauge Merino Cropped Bolero Cardigan",
+      "occasions": [
+        "everyday",
+        "travel"
+      ]
+    },
+    {
+      "product_id": "PRD-053",
+      "name": "Tailored Stretch-Cotton Cigarette Ankle Trousers",
+      "occasions": [
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-054",
+      "name": "Draped Asymmetric Jersey Atelier Top",
+      "occasions": [
+        "everyday",
+        "lounge"
+      ]
+    },
+    {
+      "product_id": "PRD-055",
+      "name": "Boyfriend Striped Belgian Linen Shirt",
+      "occasions": [
+        "everyday",
+        "resort",
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-056",
+      "name": "22-Momme Como Silk Charmeuse Lavalliere Blouse",
+      "occasions": [
+        "evening",
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-057",
+      "name": "Cowl-Back 25-Momme Silk Satin Midi Dress",
+      "occasions": [
+        "evening"
+      ]
+    },
+    {
+      "product_id": "PRD-058",
+      "name": "Sculpted Hourglass Virgin Wool Bar Blazer",
+      "occasions": [
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-059",
+      "name": "Fluid 22-Momme Mulberry Silk Palazzo Trousers",
+      "occasions": [
+        "evening"
+      ]
+    },
+    {
+      "product_id": "PRD-060",
+      "name": "Pure Himalayan Cashmere Belted Wrap Cardigan",
+      "occasions": [
+        "everyday",
+        "lounge",
+        "travel"
+      ]
+    },
+    {
+      "product_id": "PRD-061",
+      "name": "Chanderi Silk-Organza Hand-Block Midi Dress",
+      "occasions": [
+        "festive",
+        "wedding"
+      ]
+    },
+    {
+      "product_id": "PRD-062",
+      "name": "Belted Storm-Flap Cotton-Silk Trench Coat",
+      "occasions": [
+        "everyday",
+        "travel",
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-063",
+      "name": "Baby Alpaca & Silk Turtleneck Poncho Knit",
+      "occasions": [
+        "everyday",
+        "lounge",
+        "travel"
+      ]
+    },
+    {
+      "product_id": "PRD-064",
+      "name": "Solbiati Ecru Linen Double-Breasted Suit Blazer",
+      "occasions": [
+        "resort",
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-065",
+      "name": "Super 160s Wool Crepe High-Waist Pleated Pants",
+      "occasions": [
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-066",
+      "name": "Draped Asymmetric Jersey-Silk Column Midi",
+      "occasions": [
+        "evening"
+      ]
+    },
+    {
+      "product_id": "PRD-067",
+      "name": "Sheer Silk Organza Puff-Sleeve Evening Shirt",
+      "occasions": [
+        "evening"
+      ]
+    },
+    {
+      "product_id": "PRD-068",
+      "name": "Pure Cashmere Boatneck Lounge Tunic",
+      "occasions": [
+        "lounge"
+      ]
+    },
+    {
+      "product_id": "PRD-069",
+      "name": "Liquid 30-Momme Silk Halter Evening Gown",
+      "occasions": [
+        "black_tie",
+        "evening"
+      ]
+    },
+    {
+      "product_id": "PRD-070",
+      "name": "Unlined Double-Faced Wool-Cashmere Short Coat",
+      "occasions": [
+        "everyday",
+        "travel",
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-071",
+      "name": "Handloom Tussar & Mulberry Silk Wrap Dress",
+      "occasions": [
+        "evening"
+      ]
+    },
+    {
+      "product_id": "PRD-072",
+      "name": "Collarless Boucle Tweed Couture Jacket",
+      "occasions": [
+        "evening",
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-073",
+      "name": "Cashmere-Blend Knitted Lounge Wide Trousers",
+      "occasions": [
+        "lounge"
+      ]
+    },
+    {
+      "product_id": "PRD-074",
+      "name": "Hand-Embroidered Parsi Gara Silk Tunic",
+      "occasions": [
+        "festive",
+        "wedding"
+      ]
+    },
+    {
+      "product_id": "PRD-075",
+      "name": "Sculpted Silk Faille Off-Shoulder Opera Gown",
+      "occasions": [
+        "black_tie",
+        "evening"
+      ]
+    },
+    {
+      "product_id": "PRD-076",
+      "name": "Pure Cashmere Double-Faced Belted Maxi Coat",
+      "occasions": [
+        "everyday",
+        "travel",
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-077",
+      "name": "Double-Faced Mongolian Cashmere Opera Cape",
+      "occasions": [
+        "black_tie",
+        "evening",
+        "wedding"
+      ]
+    },
+    {
+      "product_id": "PRD-078",
+      "name": "30-Momme Mulberry Silk Hand-Beaded Column Gown",
+      "occasions": [
+        "black_tie",
+        "evening"
+      ]
+    },
+    {
+      "product_id": "PRD-079",
+      "name": "Banarasi Pure Tissue-Silk Draped Couture Sari Gown",
+      "occasions": [
+        "evening",
+        "festive",
+        "wedding"
+      ]
+    },
+    {
+      "product_id": "PRD-080",
+      "name": "Srinagar Kani Pashmina & Zardozi Opera Coat",
+      "occasions": [
+        "black_tie",
+        "evening",
+        "festive",
+        "wedding"
+      ]
+    },
+    {
+      "product_id": "PRD-081",
+      "name": "Kanchipuram Pure Mulberry & Korvai Zari Couture Lehenga",
+      "occasions": [
+        "festive",
+        "wedding"
+      ]
+    },
+    {
+      "product_id": "PRD-082",
+      "name": "Atelier Sculpted Virgin Wool & Silk Evening Tuxedo",
+      "occasions": [
+        "black_tie",
+        "evening",
+        "wedding"
+      ]
+    },
+    {
+      "product_id": "PRD-083",
+      "name": "Silk Velvet & Organza Sculpted Gown",
+      "occasions": [
+        "black_tie",
+        "evening"
+      ]
+    },
+    {
+      "product_id": "PRD-084",
+      "name": "Baby Alpaca & Cashmere Fur-Free Shearling Coat",
+      "occasions": [
+        "everyday",
+        "travel",
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-085",
+      "name": "Hand-Painted Kalamkari & Mulberry Silk Couture Cape Set",
+      "occasions": [
+        "black_tie",
+        "evening",
+        "festive",
+        "wedding"
+      ]
+    },
+    {
+      "product_id": "PRD-086",
+      "name": "Junior Belgian Flax Mandarin Collar Shirt",
+      "occasions": [
+        "everyday",
+        "resort",
+        "work"
+      ]
+    },
+    {
+      "product_id": "PRD-087",
+      "name": "Organic Peruvian Pima Striped Breton Tee",
+      "occasions": [
+        "everyday"
+      ]
+    },
+    {
+      "product_id": "PRD-088",
+      "name": "Hand-Smocked Sea Island Cotton Party Dress",
+      "occasions": [
+        "evening",
+        "festive"
+      ]
+    },
+    {
+      "product_id": "PRD-089",
+      "name": "ZQ Merino Heirloom Cable Cardigan",
+      "occasions": [
+        "everyday",
+        "travel"
+      ]
+    },
+    {
+      "product_id": "PRD-090",
+      "name": "Junior Tailored Linen-Cotton Pleated Shorts & Trousers",
+      "occasions": [
+        "everyday",
+        "resort"
+      ]
+    },
+    {
+      "product_id": "PRD-091",
+      "name": "Pure Himalayan Cashmere Junior Crewneck",
+      "occasions": [
+        "everyday",
+        "lounge",
+        "travel"
+      ]
+    },
+    {
+      "product_id": "PRD-092",
+      "name": "Chanderi Silk & Mulmul Festive Frock",
+      "occasions": [
+        "festive",
+        "wedding"
+      ]
+    },
+    {
+      "product_id": "PRD-093",
+      "name": "Junior Mulberry Silk Kurta & Bandi Waistcoat Set",
+      "occasions": [
+        "festive",
+        "wedding"
+      ]
+    },
+    {
+      "product_id": "PRD-094",
+      "name": "Miniature Virgin Wool Double-Breasted Pea Coat",
+      "occasions": [
+        "everyday",
+        "travel"
+      ]
+    },
+    {
+      "product_id": "PRD-095",
+      "name": "Heirloom Banarasi Silk Junior Lehenga Set",
+      "occasions": [
+        "festive",
+        "wedding"
+      ]
+    },
+    {
+      "product_id": "PRD-096",
+      "name": "Junior Unstructured Linen-Wool Ceremonial Blazer",
+      "occasions": [
+        "festive",
+        "wedding"
+      ]
+    },
+    {
+      "product_id": "PRD-097",
+      "name": "Pure Mulberry Silk Velvet Winter Party Dress",
+      "occasions": [
+        "evening",
+        "festive"
+      ]
+    },
+    {
+      "product_id": "PRD-098",
+      "name": "Baby Alpaca & Merino Hooded Knit Coat",
+      "occasions": [
+        "everyday",
+        "lounge",
+        "travel"
+      ]
+    },
+    {
+      "product_id": "PRD-099",
+      "name": "Hand-Embroidered Cotton Voile Family Kurta",
+      "occasions": [
+        "festive",
+        "wedding"
+      ]
+    },
+    {
+      "product_id": "PRD-100",
+      "name": "Archive Pashmina & Silk Ceremonial Sherwani Set",
+      "occasions": [
+        "festive",
+        "wedding"
+      ]
+    }
+  ]
+}

@@ -21,7 +21,7 @@ from ..database import Base
 from .base import SoftDeleteMixin, TimestampMixin
 
 if TYPE_CHECKING:  # resolved at runtime via the SQLAlchemy registry
-    from .catalog import Color, ProductMaterial
+    from .catalog import Color, ProductMaterial, ProductOccasion
 
 
 class Category(Base, TimestampMixin, SoftDeleteMixin):
@@ -87,6 +87,7 @@ class Product(Base, TimestampMixin, SoftDeleteMixin):
         cascade="all, delete-orphan",
         order_by="ProductMaterial.percentage.desc()",
     )
+    occasions: Mapped[List["ProductOccasion"]] = relationship(cascade="all, delete-orphan", lazy="selectin")
     images: Mapped[List["ProductImage"]] = relationship(
         back_populates="product", cascade="all, delete-orphan"
     )

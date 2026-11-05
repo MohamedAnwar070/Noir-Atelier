@@ -143,6 +143,7 @@ export function useAssistant({
           stylistNotes: Array.isArray(res.data?.stylist_notes) ? res.data.stylist_notes : [],
           followUpPrompts: Array.isArray(res.data?.follow_up_prompts) ? res.data.follow_up_prompts : [],
           totalMrpInr: res.data?.total_mrp_inr || null,
+          styleProfile: res.data?.style_profile || null,
           // Normalized like catalog products so tiles show the same per-size price range
           productCards: Array.isArray(res.data?.products) ? res.data.products.slice(0, 6).map(normalizeProduct) : [],
           reactSteps: res.react_steps || [],

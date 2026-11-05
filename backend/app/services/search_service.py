@@ -8,7 +8,7 @@ free text implied: a shopper on the Women tab who types "shirt" stays in Women.
 """
 
 from decimal import Decimal
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set
 
 from sqlalchemy.orm import Session
 
@@ -45,6 +45,13 @@ def _resolve_explicit_category(raw_category: str, vocab) -> tuple[Optional[str],
     return lower, None
 
 
+def _csv_values(raw: Optional[str]) -> Set[str]:
+    """'Black, white' → {'black', 'white'}; 'ALL' or empty → empty set."""
+    if not raw or raw.strip().upper() == "ALL":
+        return set()
+    return {part.strip().lower() for part in raw.split(",") if part.strip()}
+
+
 def search_catalog(
     db: Session,
     q: Optional[str] = None,
@@ -53,6 +60,8 @@ def search_catalog(
     category: Optional[str] = None,
     color: Optional[str] = None,
     material: Optional[str] = None,
+    occasion: Optional[str] = None,
+    palette: Optional[str] = None,
     min_price: Optional[Decimal] = None,
     max_price: Optional[Decimal] = None,
     in_stock_only: bool = False,
@@ -67,14 +76,23 @@ def search_catalog(
     dept_val = department.strip().upper() if department and department.strip().upper() != "ALL" else cat_dept
 
     explicit = {
-        "department": dept_val,
-        "product_type": cat_slug,
-        "color": color.strip().lower() if color and color.strip().upper() != "ALL" else None,
-        "material": material.strip().lower() if material and material.strip().upper() != "ALL" else None,
+        "department": {dept_val} if dept_val else set(),
+        "product_type": {cat_slug} if cat_slug else set(),
+        # Comma-separated lists are allowed (e.g. palette=muted,pale) — used by the stylist.
+        "color": _csv_values(color),
+        "material": _csv_values(material),
+        "occasion": _csv_values(occasion),
+        "palette": _csv_values(palette),
     }
-    for dimension, value in explicit.items():
-        if value:
-            intent.filters[dimension] = {value}
+    for dimension, values in explicit.items():
+        if values:
+            intent.filters[dimension] = values
+
+    # A dimension with no curated assignments yet (e.g. occasion tags awaiting
+    # review) would match nothing; skip it and say so instead of hiding the catalogue.
+    skipped = sorted(d for d in vocab.untagged_dimensions if intent.filters.get(d))
+    for dimension in skipped:
+        intent.filters[dimension] = set()
     if min_price is not None:
         intent.min_price = min_price
     if max_price is not None:
@@ -106,5 +124,6 @@ def search_catalog(
             "recognized": intent.recognized,
             "relaxed": page.relaxed,
             "ignored_terms": page.ignored_terms or [],
+            "skipped_dimensions": skipped,
         },
     }

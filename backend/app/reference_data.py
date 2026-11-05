@@ -10,17 +10,20 @@ After the first install this data is owned by the database (admin APIs),
 not by this file.
 """
 
-from typing import Any, Dict, List, Tuple, Type
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Type
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .models import (
+    AgentPermission,
     Category,
     Color,
     Department,
     Material,
+    Occasion,
     OrderStatus,
+    Palette,
     Permission,
     RefundStatus,
     ReturnReason,
@@ -86,6 +89,49 @@ SYNONYMS: List[Dict[str, Any]] = [
     # materials
     *({"term": t, "dimension": "material", "value": "wool"} for t in ("merino", "woolen", "woollen")),
     *({"term": t, "dimension": "material", "value": "linen"} for t in ("flax",)),
+    # occasions — how shoppers describe an event
+    *({"term": t, "dimension": "occasion", "value": "wedding"} for t in ("engagement", "reception", "sangeet", "shaadi", "marriage", "wedding guest", "weddings")),
+    *({"term": t, "dimension": "occasion", "value": "festive"} for t in ("diwali", "eid", "puja", "pooja", "navratri", "onam", "pongal", "festival", "festivals")),
+    *({"term": t, "dimension": "occasion", "value": "evening"} for t in ("party", "parties", "cocktail", "cocktails", "dinner", "date night", "night out")),
+    *({"term": t, "dimension": "occasion", "value": "black_tie"} for t in ("black tie", "black-tie", "gala", "formal", "opera")),
+    *({"term": t, "dimension": "occasion", "value": "work"} for t in ("office", "meeting", "meetings", "business", "interview", "workwear")),
+    *({"term": t, "dimension": "occasion", "value": "resort"} for t in ("vacation", "holiday", "beach", "summer")),
+    *({"term": t, "dimension": "occasion", "value": "travel"} for t in ("flight", "trip", "travelling", "traveling")),
+    *({"term": t, "dimension": "occasion", "value": "lounge"} for t in ("home", "lounging", "loungewear", "relaxed")),
+    *({"term": t, "dimension": "occasion", "value": "everyday"} for t in ("casual", "daily", "weekend")),
+    # palettes — colour moods rather than hues
+    *({"term": t, "dimension": "palette", "value": "muted"} for t in ("calm", "subtle", "understated", "soft", "dusty", "gentle")),
+    *({"term": t, "dimension": "palette", "value": "pale"} for t in ("pastel", "pastels", "airy")),
+    *({"term": t, "dimension": "palette", "value": "jewel"} for t in ("bold", "vibrant", "bright", "jewel tone", "jewel tones", "regal")),
+    *({"term": t, "dimension": "palette", "value": "earthy"} for t in ("earth", "earth tones", "warm")),
+    *({"term": t, "dimension": "palette", "value": "neutral"} for t in ("minimal", "minimalist", "classic", "monochrome")),
+    *({"term": t, "dimension": "palette", "value": "dark"} for t in ("deep", "moody", "darker", "deeper")),
+    *({"term": t, "dimension": "palette", "value": "pale"} for t in ("lighter", "paler")),
+    *({"term": t, "dimension": "palette", "value": "muted"} for t in ("softer", "calmer", "less bright", "toned down")),
+]
+
+# Occasions a garment can be worn to. Product assignments are curated data
+# (see backend/data/style_tags_draft.json), never inferred at runtime.
+OCCASIONS: List[Dict[str, Any]] = [
+    {"code": "everyday", "name": "Everyday", "display_order": 1},
+    {"code": "work", "name": "Work", "display_order": 2},
+    {"code": "travel", "name": "Travel", "display_order": 3},
+    {"code": "resort", "name": "Resort & summer", "display_order": 4},
+    {"code": "lounge", "name": "Lounge", "display_order": 5},
+    {"code": "evening", "name": "Evening & parties", "display_order": 6},
+    {"code": "festive", "name": "Festive", "display_order": 7},
+    {"code": "wedding", "name": "Weddings & engagements", "display_order": 8},
+    {"code": "black_tie", "name": "Black tie", "display_order": 9},
+]
+
+# Colour moods. Colour→palette assignments are curated data (same draft file).
+PALETTES: List[Dict[str, Any]] = [
+    {"code": "muted", "name": "Muted & calm", "display_order": 1},
+    {"code": "neutral", "name": "Neutral", "display_order": 2},
+    {"code": "pale", "name": "Pale & light", "display_order": 3},
+    {"code": "earthy", "name": "Earthy", "display_order": 4},
+    {"code": "dark", "name": "Dark", "display_order": 5},
+    {"code": "jewel", "name": "Jewel tones", "display_order": 6},
 ]
 
 # Every status the order/refund state machines can produce.
@@ -329,6 +375,8 @@ _REGISTRY: List[tuple] = [
     (Category, "category_id", CATEGORIES),
     (Color, "name", COLORS),
     (Material, "name", MATERIALS),
+    (Occasion, "code", OCCASIONS),
+    (Palette, "code", PALETTES),
     (SearchSynonym, "term", SYNONYMS),
     (OrderStatus, "code", ORDER_STATUSES),
     (RefundStatus, "code", REFUND_STATUSES),
@@ -362,8 +410,64 @@ def _insert_missing_role_permissions(session: Session) -> int:
     return len(to_add)
 
 
-def ensure_reference_data(session: Session) -> Dict[str, int]:
-    """Insert any missing reference rows. Returns {table: rows_inserted}."""
-    counts = {model.__tablename__: _insert_missing(session, model, key, rows) for model, key, rows in _REGISTRY}
-    counts[RolePermission.__tablename__] = _insert_missing_role_permissions(session)
+# Least-privilege grant for the conversational stylist: read the catalogue and
+# read/write only its own session profile. Cart, order and refund actions stay
+# with their own agents. Mirrored client-side in agents/gateway.py (defence in
+# depth); a test asserts the two lists are identical.
+STYLIST_AGENT_PERMISSION: Dict[str, Any] = {
+    "agent_type": "stylist_agent",
+    "service_account": "svc-stylist",
+    "resource_type": "catalog",
+    "action": "read",
+    "allowed_endpoints": [
+        "/api/catalog/attributes",
+        "/api/catalog/search",
+        "/api/products/{id}",
+        "/api/products/{id}/recommendations",
+        "/api/agents/sessions/{id}/profile",
+    ],
+}
+
+
+def _insert_missing_agent_permissions(session: Session) -> int:
+    exists = session.scalar(
+        select(AgentPermission).where(AgentPermission.service_account == STYLIST_AGENT_PERMISSION["service_account"])
+    )
+    if exists is not None:
+        return 0
+    session.add(AgentPermission(**STYLIST_AGENT_PERMISSION))
+    session.flush()
+    return 1
+
+
+def ensure_reference_data(
+    session: Session,
+    *,
+    tables: Optional[Iterable[str]] = None,
+    synonym_dimensions: Optional[Iterable[str]] = None,
+) -> Dict[str, int]:
+    """Insert any missing reference rows. Returns {table: rows_inserted}.
+
+    With no arguments (seed / fresh database) everything is ensured. Migrations
+    pass ``tables`` (and ``synonym_dimensions``) to stay frozen at their own
+    revision: they must never write to tables or CHECK values that a *later*
+    revision introduces, or replaying an old database forward would fail.
+    """
+    wanted = set(tables) if tables is not None else None
+    dims = set(synonym_dimensions) if synonym_dimensions is not None else None
+
+    def included(table: str) -> bool:
+        return wanted is None or table in wanted
+
+    counts: Dict[str, int] = {}
+    for model, key, rows in _REGISTRY:
+        if not included(model.__tablename__):
+            continue
+        if model is SearchSynonym and dims is not None:
+            rows = [r for r in rows if r["dimension"] in dims]
+        counts[model.__tablename__] = _insert_missing(session, model, key, rows)
+    if included(RolePermission.__tablename__):
+        counts[RolePermission.__tablename__] = _insert_missing_role_permissions(session)
+    if included(AgentPermission.__tablename__):
+        counts[AgentPermission.__tablename__] = _insert_missing_agent_permissions(session)
     return counts
