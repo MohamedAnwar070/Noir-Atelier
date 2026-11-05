@@ -19,6 +19,7 @@ export function AccountView() {
     logoutAll,
     notify,
     navigateTo,
+    askStylist,
   } = useStore();
 
   const [sessions, setSessions] = useState([]);
@@ -119,32 +120,49 @@ export function AccountView() {
   return (
     <ProtectedRoute
       requireAuth
-      title="Sign In to View Your Maison Account"
-      description="Manage your Noir Atelier profile, RBAC permissions, active security sessions, and delivery addresses."
+      title="Sign In to View Your Maison Profile"
+      description="Access your Noir Atelier client dossier, bespoke wardrobe acquisitions, delivery addresses, and personal fashion consultant."
     >
       <div className="page-container">
         <div className="page-header">
           <div>
-            <span className="hero-eyebrow">Maison Identity &amp; Session Security</span>
+            <span className="hero-eyebrow">Private Client Dossier</span>
             <h1 className="page-heading">{profile?.name || "Client Profile"}</h1>
             <p className="page-subheading">
-              Authenticated as <strong>{profile?.role_name || profile?.role}</strong> · Account ID{" "}
-              <code>{profile?.id}</code>
+              {isStaff ? (
+                <span>Atelier Personnel · Authorized Governance Profile</span>
+              ) : (
+                <span>Maison Private Client · Obsidian Privileged Member</span>
+              )}
             </p>
           </div>
           <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="btn-pill btn-pill-outline btn-sm"
+              onClick={() => askStylist()}
+            >
+              <Icon name="sparkles" size={14} />
+              <span>Consult Stylist</span>
+            </button>
             {isStaff && (
-              <button type="button" className="btn-pill btn-pill-outline btn-sm" onClick={() => navigateTo("admin")}>
+              <button
+                type="button"
+                className="btn-pill btn-pill-outline btn-sm"
+                onClick={() => navigateTo("admin")}
+              >
                 <Icon name="shield" size={14} />
-                <span>Open Governance Console</span>
+                <span>Atelier Governance</span>
               </button>
             )}
-            {isCustomer && (
-              <button type="button" className="btn-pill btn-pill-outline btn-sm" onClick={() => navigateTo("orders")}>
-                <Icon name="package" size={14} />
-                <span>Your Orders</span>
-              </button>
-            )}
+            <button
+              type="button"
+              className="btn-pill btn-pill-outline btn-sm"
+              onClick={() => navigateTo("orders")}
+            >
+              <Icon name="package" size={14} />
+              <span>Orders &amp; Returns</span>
+            </button>
             <button type="button" className="btn-pill btn-sm" onClick={logout}>
               <Icon name="logout" size={14} />
               <span>Sign Out</span>
@@ -153,52 +171,51 @@ export function AccountView() {
         </div>
 
         <div className="account-grid">
-          {/* Identity & RBAC Permissions */}
-          <section className="account-card" aria-label="Identity and RBAC permissions">
+          {/* Private Client Profile & Native AI Stylist */}
+          <section className="account-card" aria-label="Private Client Profile">
             <div className="account-card-header">
-              <h2 className="account-card-title">Identity &amp; RBAC Privileges</h2>
+              <h2 className="account-card-title">Maison Client Profile</h2>
               <span className="badge" data-tone="info">
-                {profile?.role_name || profile?.role}
+                {isStaff ? (profile?.role_name || "Atelier Staff") : (profile?.loyalty_tier || "VIP Obsidian")}
               </span>
             </div>
 
             <dl className="account-kv-list">
               <div className="account-kv">
+                <dt>Client Name</dt>
+                <dd>{profile?.name || "Private Client"}</dd>
+              </div>
+              <div className="account-kv">
                 <dt>Email Address</dt>
                 <dd>{profile?.email || "—"}</dd>
               </div>
               <div className="account-kv">
-                <dt>Maison Identifier</dt>
-                <dd style={{ fontFamily: "var(--font-mono)" }}>{profile?.id}</dd>
+                <dt>Membership Privileges</dt>
+                <dd>Complimentary White-Glove Courier &amp; Security Ribbon Returns</dd>
               </div>
               <div className="account-kv">
-                <dt>Tier / Classification</dt>
-                <dd>{profile?.loyalty_tier || "STANDARD"}</dd>
-              </div>
-              <div className="account-kv">
-                <dt>Account Status</dt>
-                <dd style={{ textTransform: "capitalize" }}>{profile?.status || "active"}</dd>
+                <dt>Personal Stylist (Native AI)</dt>
+                <dd style={{ color: "var(--accent-gold)", fontWeight: 600 }}>Active &amp; Connected</dd>
               </div>
             </dl>
 
-            <div>
-              <div className="auth-eyebrow" style={{ marginBottom: "var(--space-2)" }}>
-                Granted Granular Permissions ({(permissions || []).length})
-              </div>
-              <div className="rbac-perm-cloud">
-                {(permissions || []).map((perm) => (
-                  <span key={perm} className="rbac-perm-chip">
-                    {perm}
-                  </span>
-                ))}
-              </div>
+            <div style={{ marginTop: "var(--space-4)", paddingTop: "var(--space-4)", borderTop: "1px solid var(--border-subtle)" }}>
+              <button
+                type="button"
+                className="btn-pill btn-pill-outline btn-sm"
+                onClick={() => askStylist()}
+                style={{ width: "100%", justifyContent: "center" }}
+              >
+                <Icon name="sparkles" size={14} />
+                <span>Open Personal Fashion Stylist Consultation</span>
+              </button>
             </div>
           </section>
 
-          {/* Active JWT Sessions */}
-          <section className="account-card" aria-label="Active security sessions">
+          {/* Active Signed-In Devices */}
+          <section className="account-card" aria-label="Active Security Sessions">
             <div className="account-card-header">
-              <h2 className="account-card-title">Active JWT Sessions</h2>
+              <h2 className="account-card-title">Signed-In Devices</h2>
               <button
                 type="button"
                 className="btn-pill btn-pill-outline btn-sm"
@@ -209,11 +226,10 @@ export function AccountView() {
             </div>
 
             {loadingSessions ? (
-              <p className="auth-subtitle">Inspecting active refresh-token sessions…</p>
+              <p className="auth-subtitle">Checking active sessions…</p>
             ) : sessions.length === 0 ? (
               <p className="auth-subtitle">
-                Browsing via stateless/demo token. Sign in with your email and password to manage
-                rotating refresh-token sessions.
+                Current browser session is active.
               </p>
             ) : (
               <div className="session-list">
@@ -221,15 +237,14 @@ export function AccountView() {
                   <div key={s.session_id} className="session-row">
                     <div className="session-meta">
                       <strong>
-                        {s.session_id}{" "}
+                        {s.user_agent ? (s.user_agent.includes("Windows") ? "Desktop (Windows)" : s.user_agent.includes("Mac") ? "Desktop (macOS)" : s.user_agent.includes("iPhone") ? "Mobile (iPhone)" : "Web Browser") : "Atelier Web Browser"}{" "}
                         {s.is_current && (
                           <span className="badge" data-tone="success" style={{ marginLeft: 6 }}>
-                            Current
+                            This Device
                           </span>
                         )}
                       </strong>
-                      <span>IP: {s.ip_address}</span>
-                      <span>{(s.user_agent || "Web Browser").slice(0, 64)}</span>
+                      <span>IP Address: {s.ip_address || "Private Boutique Network"}</span>
                     </div>
                     {!s.is_current && (
                       <button
@@ -237,7 +252,7 @@ export function AccountView() {
                         className="btn-pill btn-pill-outline btn-sm"
                         onClick={() => handleRevokeSession(s.session_id)}
                       >
-                        Revoke
+                        Sign Out Device
                       </button>
                     )}
                   </div>

@@ -111,10 +111,11 @@ export function Overlay({
   );
 }
 
-export function Modal({ isOpen, onClose, title, subtitle, children, footer, size = "md" }) {
+export function Modal({ open, isOpen, onClose, title, subtitle, children, footer, size = "md" }) {
+  const isVisible = Boolean(isOpen ?? open);
   return (
     <Overlay
-      open={isOpen}
+      open={isVisible}
       onClose={onClose}
       variant={`modal modal--${size}`}
       title={title}
@@ -126,10 +127,11 @@ export function Modal({ isOpen, onClose, title, subtitle, children, footer, size
   );
 }
 
-export function Drawer({ isOpen, onClose, title, subtitle, children, footer, width }) {
+export function Drawer({ open, isOpen, onClose, title, subtitle, children, footer, width }) {
+  const isVisible = Boolean(isOpen ?? open);
   return (
     <Overlay
-      open={isOpen}
+      open={isVisible}
       onClose={onClose}
       variant="drawer"
       title={title}

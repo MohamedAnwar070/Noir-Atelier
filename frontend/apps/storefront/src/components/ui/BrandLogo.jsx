@@ -69,7 +69,7 @@ export function BrandLogo({
   variant = "horizontal",
   title = "Noir Atelier",
   subtitle = "Maison de Haute Confection",
-  size = 34,
+  size = 26,
   reversed = false,
   showSubtitle = true,
   className = "",
@@ -80,29 +80,31 @@ export function BrandLogo({
 
   if (variant === "wordmark") {
     return (
-      <span className={`brand-lockup brand-lockup--wordmark ${className}`}>
-        <span className="brand-wordmark-text">{title}</span>
+      <span className={`brand-lockup brand-lockup--wordmark brand-lockup-wordmark ${className}`}>
+        <span className="brand-wordmark-text brand-lockup-title">{title}</span>
       </span>
     );
   }
 
   if (variant === "stacked") {
     return (
-      <span className={`brand-lockup brand-lockup--stacked ${className}`}>
+      <span className={`brand-lockup brand-lockup--stacked brand-lockup-stacked ${className}`}>
         <BrandMonogram size={size} reversed={reversed} />
-        <span className="brand-wordmark-text">{title}</span>
-        {showSubtitle && <span className="brand-submark-text">{subtitle}</span>}
+        <span className="brand-wordmark-stack brand-lockup-text">
+          <span className="brand-wordmark-text brand-lockup-title">{title}</span>
+          {showSubtitle && <span className="brand-submark-text brand-lockup-subtitle">{subtitle}</span>}
+        </span>
       </span>
     );
   }
 
   return (
-    <span className={`brand-lockup brand-lockup--horizontal ${className}`}>
+    <span className={`brand-lockup brand-lockup--horizontal brand-lockup-horizontal ${className}`}>
       <BrandMonogram size={size} reversed={reversed} />
       <span className="brand-lockup-divider" aria-hidden="true" />
-      <span className="brand-wordmark-stack">
-        <span className="brand-wordmark-text">{title}</span>
-        {showSubtitle && <span className="brand-submark-text">{subtitle}</span>}
+      <span className="brand-wordmark-stack brand-lockup-text">
+        <span className="brand-wordmark-text brand-lockup-title">{title}</span>
+        {showSubtitle && <span className="brand-submark-text brand-lockup-subtitle">{subtitle}</span>}
       </span>
     </span>
   );

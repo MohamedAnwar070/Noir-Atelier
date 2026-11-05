@@ -171,7 +171,7 @@ export function AuthFormPanel({ initialMode = "login", embedded = false, onSucce
           className={`auth-mode-tab ${mode === "register" ? "active" : ""}`}
           onClick={() => switchMode("register")}
         >
-          Client Signup
+          Create Account
         </button>
         <button
           type="button"
@@ -180,7 +180,7 @@ export function AuthFormPanel({ initialMode = "login", embedded = false, onSucce
           className={`auth-mode-tab ${mode === "register_admin" ? "active" : ""}`}
           onClick={() => switchMode("register_admin")}
         >
-          Staff Signup
+          Staff Provisioning
         </button>
       </div>
 
@@ -385,6 +385,7 @@ export function AuthModal() {
   return (
     <Modal
       open={ui.authModalOpen}
+      isOpen={ui.authModalOpen}
       onClose={closeAuthModal}
       title="Maison Authentication"
       size="md"

@@ -73,6 +73,7 @@ export function SiteHeader() {
           >
             <BrandLogo
               variant="horizontal"
+              size={24}
               title={brandTitle}
               subtitle="MAISON DE HAUTE CONFECTION"
             />
@@ -118,19 +119,6 @@ export function SiteHeader() {
                 Governance
               </button>
             )}
-            <button
-              type="button"
-              className={`nav-link ${activePage === "account" ? "active" : ""}`}
-              onClick={() => {
-                if (isAuthenticated) {
-                  navigateTo("account");
-                } else {
-                  openAuthModal("login");
-                }
-              }}
-            >
-              Maison Profile
-            </button>
           </nav>
         </div>
 
@@ -141,7 +129,7 @@ export function SiteHeader() {
           </span>
           <input
             type="search"
-            placeholder="Search cashmere coat, silk gown, linen shirt, PRD-041…"
+            placeholder="Search cashmere coat, silk gown, PRD-041…"
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
@@ -164,58 +152,67 @@ export function SiteHeader() {
         {/* Client & Maison Controls */}
         <div className="header-actions">
           <div className="header-desktop-controls">
-            {(actorsList || []).length > 0 && (
-              <select
-                className="header-pill-select"
-                value={currentActor?.token || ""}
-                onChange={(e) => switchActor(e.target.value)}
-                aria-label="Switch client or staff profile"
-                title="Persona switcher (demo & testing)"
-              >
-                {(actorsList || []).map((a) => (
-                  <option key={a.token} value={a.token}>
-                    {a.label}
-                  </option>
-                ))}
-              </select>
-            )}
+            {/* Native AI Stylist */}
+            <button
+              type="button"
+              className="header-stylist-btn"
+              onClick={() => askStylist()}
+              aria-label="Consult Personal Fashion Stylist"
+              title="Personal Fashion Consultant (Native AI)"
+            >
+              <BrandMonogram size={14} />
+              <span>Stylist</span>
+            </button>
 
+            {/* Client Account: Sign In / Register OR Active Dossier */}
             {isAuthenticated ? (
-              <button
-                type="button"
-                className={`header-account-btn ${activePage === "account" ? "active" : ""}`}
-                onClick={() => navigateTo("account")}
-                aria-label={`Maison Account: ${authUser?.name || currentActor?.name || currentActor?.label}`}
-                title="Atelier Profile & Active JWT Sessions"
-              >
-                <span className="header-role-dot" aria-hidden="true" />
-                <Icon name={isStaff ? "shield" : "user"} size={13} />
-                <span>{authUser?.name || currentActor?.name || currentActor?.label}</span>
-              </button>
+              <div className="header-auth-group">
+                <button
+                  type="button"
+                  className={`header-auth-link ${activePage === "account" ? "active" : ""}`}
+                  onClick={() => navigateTo("account")}
+                  aria-label={`Maison Account: ${authUser?.name || currentActor?.name || "Client"}`}
+                  title="Private Client Profile"
+                >
+                  <span className="header-role-dot" aria-hidden="true" />
+                  <Icon name={isStaff ? "shield" : "user"} size={13} />
+                  <span>{authUser?.name || currentActor?.name || "Client"}</span>
+                </button>
+                <span className="header-auth-sep" aria-hidden="true">·</span>
+                <button
+                  type="button"
+                  className="header-auth-link"
+                  onClick={() => logout()}
+                  title="Sign out of Atelier"
+                  aria-label="Sign out"
+                >
+                  <Icon name="logout" size={12} />
+                </button>
+              </div>
             ) : (
-              <button
-                type="button"
-                className="header-account-btn"
-                onClick={() => openAuthModal("login")}
-                aria-label="Maison Client Sign In"
-              >
-                <Icon name="lock" size={13} />
-                <span>Sign In</span>
-              </button>
+              <div className="header-auth-group">
+                <button
+                  type="button"
+                  className="header-auth-link"
+                  onClick={() => openAuthModal("login")}
+                  aria-label="Maison Client Sign In"
+                >
+                  <Icon name="lock" size={12} />
+                  <span>Sign In</span>
+                </button>
+                <span className="header-auth-sep" aria-hidden="true">·</span>
+                <button
+                  type="button"
+                  className="header-auth-link"
+                  onClick={() => openAuthModal("register")}
+                  aria-label="Register Client Profile"
+                >
+                  <span>Register</span>
+                </button>
+              </div>
             )}
 
-            {isAuthenticated && (
-              <button
-                type="button"
-                className="header-icon-btn"
-                onClick={() => logout()}
-                aria-label="Sign out of Atelier"
-                title="Sign out of active session"
-              >
-                <Icon name="logout" size={13} />
-              </button>
-            )}
-
+            {/* Atelier Theme Switcher */}
             <button
               type="button"
               className="header-icon-btn"
@@ -223,18 +220,7 @@ export function SiteHeader() {
               aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} atelier theme`}
               title={theme === "dark" ? "Switch to Alabaster Light" : "Switch to Noir Obsidian"}
             >
-              <Icon name={theme === "dark" ? "sun" : "moon"} size={14} />
-              <span>{theme === "dark" ? "Alabaster" : "Noir"}</span>
-            </button>
-
-            <button
-              type="button"
-              className="header-icon-btn"
-              onClick={() => askStylist()}
-              aria-label="Consult Personal Fashion Consultant"
-            >
-              <BrandMonogram size={15} />
-              <span>Stylist</span>
+              <Icon name={theme === "dark" ? "sun" : "moon"} size={13} />
             </button>
           </div>
 
@@ -244,17 +230,17 @@ export function SiteHeader() {
             onClick={() => navigateTo("orders")}
             aria-label="Orders and returns"
           >
-            <Icon name="package" size={14} />
+            <Icon name="package" size={13} />
             <span>Orders</span>
           </button>
 
           <button
             type="button"
-            className="btn-pill header-action-btn"
+            className="btn-pill header-bag-btn"
             onClick={() => openDrawer("bag")}
             aria-label={`Shopping bag with ${cartCount} items`}
           >
-            <Icon name="bag" size={14} />
+            <Icon name="bag" size={13} />
             <span>Bag ({cartCount})</span>
           </button>
 
@@ -357,21 +343,44 @@ export function SiteHeader() {
         </div>
 
         <div className="mobile-nav-controls">
-          <select
-            className="header-pill-select"
-            value={currentActor?.token || ""}
-            onChange={(e) => {
-              switchActor(e.target.value);
-              setMobileMenuOpen(false);
-            }}
-            aria-label="Mobile credential switcher"
-          >
-            {(actorsList || []).map((a) => (
-              <option key={a.token} value={a.token}>
-                {a.label}
-              </option>
-            ))}
-          </select>
+          {isAuthenticated ? (
+            <button
+              type="button"
+              className="chip-pill"
+              onClick={() => {
+                logout();
+                setMobileMenuOpen(false);
+              }}
+            >
+              <Icon name="logout" size={13} />
+              <span>Sign Out</span>
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="chip-pill"
+                onClick={() => {
+                  openAuthModal("login");
+                  setMobileMenuOpen(false);
+                }}
+              >
+                <Icon name="lock" size={13} />
+                <span>Sign In</span>
+              </button>
+              <button
+                type="button"
+                className="chip-pill"
+                onClick={() => {
+                  openAuthModal("register");
+                  setMobileMenuOpen(false);
+                }}
+              >
+                <Icon name="user" size={13} />
+                <span>Register</span>
+              </button>
+            </>
+          )}
           <button
             type="button"
             className="chip-pill"

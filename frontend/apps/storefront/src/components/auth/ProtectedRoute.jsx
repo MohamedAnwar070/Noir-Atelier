@@ -39,7 +39,7 @@ export function ProtectedRoute({
       <div className="page-container">
         <section className="protected-gate" aria-live="polite">
           <BrandMonogram size={42} />
-          <span className="auth-eyebrow">Private Client &amp; Governance Access</span>
+          <span className="auth-eyebrow">Maison Private Client Suite</span>
           <h1 className="auth-heading">{title}</h1>
           <p className="auth-subtitle">{description}</p>
           <div className="protected-gate-actions">
@@ -64,7 +64,7 @@ export function ProtectedRoute({
               className="btn-pill btn-pill-outline"
               onClick={() => navigateTo("shop")}
             >
-              <span>Return to Archive</span>
+              <span>Explore The Archive</span>
             </button>
           </div>
         </section>
@@ -82,34 +82,28 @@ export function ProtectedRoute({
     return (
       <div className="page-container">
         <section className="protected-gate" role="alert" aria-live="assertive">
-          <Icon name="shield" size={32} />
-          <span className="auth-eyebrow">RBAC Policy Enforcement · HTTP 403</span>
-          <h1 className="auth-heading">Insufficient Role Permissions</h1>
+          <Icon name="shield" size={36} />
+          <span className="auth-eyebrow">Private Atelier Access</span>
+          <h1 className="auth-heading">Atelier Staff Access Restricted</h1>
           <p className="auth-subtitle">
-            Your active session is authenticated as{" "}
-            <strong>{currentActor?.name || currentActor?.id}</strong>, which does not carry the
-            role permissions required for this section.
+            This section is reserved for authorized Noir Atelier curatorial staff and store directors.
+            If you are a member of our team, please sign in with your administrative profile.
           </p>
-          <div className="protected-role-meta">
-            Active Role: {currentActor?.role_name || currentActor?.role} ({currentActor?.role})
-            {requiredPermissions.length > 0 && (
-              <> · Required: {requiredPermissions.join(", ")}</>
-            )}
-          </div>
           <div className="protected-gate-actions">
             <button
               type="button"
               className="btn-pill"
-              onClick={() => navigateTo("shop")}
+              onClick={() => openAuthModal("login")}
             >
-              <span>Explore Curated Archive</span>
+              <Icon name="lock" size={14} />
+              <span>Sign In with Staff Account</span>
             </button>
             <button
               type="button"
               className="btn-pill btn-pill-outline"
-              onClick={() => navigateTo("account")}
+              onClick={() => navigateTo("shop")}
             >
-              <span>View Account Permissions</span>
+              <span>Return to Archive</span>
             </button>
           </div>
         </section>
