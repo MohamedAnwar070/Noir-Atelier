@@ -8,15 +8,32 @@ import { normalizeProduct } from "@/store/normalizers";
 
 const SESSION_KEY = "noir_chat_session";
 
+/** Unguessable per-tab chat session id (the server binds its history to the signed-in shopper). */
+function newSessionId() {
+  const random =
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID().replace(/-/g, "")
+      : Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+  return `SES-${random.toUpperCase()}`;
+}
+
 function resolveSessionId() {
   try {
     const existing = typeof window !== "undefined" ? window.sessionStorage.getItem(SESSION_KEY) : null;
-    if (existing) return existing;
-    const created = `SES-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
+    if (existing && existing.length >= 20) return existing;
+    const created = newSessionId();
     if (typeof window !== "undefined") window.sessionStorage.setItem(SESSION_KEY, created);
     return created;
   } catch {
-    return `SES-${Date.now().toString(36).toUpperCase()}`;
+    return newSessionId();
+  }
+}
+
+function rememberSessionId(sessionId) {
+  try {
+    if (sessionId && typeof window !== "undefined") window.sessionStorage.setItem(SESSION_KEY, sessionId);
+  } catch {
+    /* storage unavailable: the server issues a fresh session next time */
   }
 }
 
@@ -27,7 +44,6 @@ export function useAssistant({
   api,
   actor,
   businessConfig,
-  agentRegistry = [],
   isStaff = false,
   onAfterAction,
   onActionCompleted,
@@ -53,16 +69,6 @@ export function useAssistant({
       clientRef.current.setToken(actor.token);
     }
   }, [actor?.token]);
-
-  const personaByAgent = useMemo(() => {
-    const map = {};
-    for (const entry of agentRegistry || []) {
-      if (entry?.agent_name) {
-        map[entry.agent_name] = entry.persona || entry.agent_name;
-      }
-    }
-    return map;
-  }, [agentRegistry]);
 
   const quickPrompts = useMemo(() => {
     const rawPrompts = businessConfig?.storefront_ui?.ai_quick_prompts || [];
@@ -105,17 +111,18 @@ export function useAssistant({
           sessionId: resolveSessionId(),
         });
 
-        const feedback = res.data?.action_feedback || null;
+        rememberSessionId(res.session_id);
+        const feedback = res.action_feedback || null;
         let actionCard = null;
 
         if (feedback) {
-          if (feedback.action === "order_placed" || res.routed_agent === "order_agent") {
+          if (feedback.action === "order_placed") {
             actionCard = {
               type: "order_placed",
-              orderId: feedback.details?.order_id || res.data?.order?.order_id || "ORD-NEW",
-              grandTotal: feedback.details?.grand_total_inr ?? res.data?.order?.grand_total_inr ?? feedback.details?.grand_total,
+              orderId: feedback.details?.order_id || "ORD-NEW",
+              grandTotal: feedback.details?.grand_total_inr ?? feedback.details?.grand_total,
             };
-          } else if (feedback.action === "cart_updated" || res.routed_agent === "cart_agent") {
+          } else if (feedback.action === "cart_updated") {
             actionCard = {
               type: "item_added",
               name: feedback.details?.name || feedback.summary,
@@ -123,7 +130,7 @@ export function useAssistant({
               size: feedback.details?.size,
               quantity: feedback.details?.quantity,
             };
-          } else if (feedback.action === "return_submitted" || res.routed_agent === "returns_agent") {
+          } else if (feedback.action === "return_submitted") {
             actionCard = {
               type: "return_initiated",
               tier: feedback.details?.refund_tier || "1",
@@ -134,20 +141,18 @@ export function useAssistant({
         const agentMsg = {
           id: nextId(),
           role: "assistant",
-          content: res.reply || "I have coordinated with our atelier agents.",
+          content: res.reply || "I couldn't put an answer together just now. Please try again.",
           status: res.status,
-          persona: personaByAgent[res.routed_agent] || ASSISTANT.name,
+          persona: res.persona || ASSISTANT.name,
+          referenceId: res.reference_id || null,
           actionCard,
-          actionFeedback: res.data?.action_feedback || null,
-          stylistMode: res.data?.stylist_mode || null,
-          stylistNotes: Array.isArray(res.data?.stylist_notes) ? res.data.stylist_notes : [],
-          followUpPrompts: Array.isArray(res.data?.follow_up_prompts) ? res.data.follow_up_prompts : [],
-          totalMrpInr: res.data?.total_mrp_inr || null,
-          styleProfile: res.data?.style_profile || null,
+          actionFeedback: feedback,
+          stylistMode: res.stylist_mode || null,
+          stylistNotes: Array.isArray(res.stylist_notes) ? res.stylist_notes : [],
+          followUpPrompts: Array.isArray(res.follow_up_prompts) ? res.follow_up_prompts : [],
+          totalMrpInr: res.total_mrp_inr || null,
           // Normalized like catalog products so tiles show the same per-size price range
-          productCards: Array.isArray(res.data?.products) ? res.data.products.slice(0, 6).map(normalizeProduct) : [],
-          reactSteps: res.react_steps || [],
-          agentName: res.routed_agent || "supervisor",
+          productCards: Array.isArray(res.products) ? res.products.slice(0, 6).map(normalizeProduct) : [],
           timestamp: Date.now(),
         };
 
@@ -169,7 +174,7 @@ export function useAssistant({
         setBusy(false);
       }
     },
-    [api, actor, personaByAgent, onAfterAction, onActionCompleted]
+    [api, actor, onAfterAction, onActionCompleted]
   );
 
   const reset = useCallback(() => {

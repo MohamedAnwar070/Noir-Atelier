@@ -14,6 +14,7 @@ class AgentRole(str, Enum):
     ANALYTICS = "analytics_agent"
     CONFIG = "config_agent"
     STYLIST = "stylist_agent"
+    ASSISTANT = "shopping_assistant"
 
 
 class ToolRiskLevel(str, Enum):
@@ -35,6 +36,7 @@ AGENT_SERVICE_ACCOUNT_MAP: Dict[str, str] = {
     AgentRole.ANALYTICS.value: "svc-analytics",
     AgentRole.CONFIG.value: "svc-config",
     AgentRole.STYLIST.value: "svc-stylist",
+    AgentRole.ASSISTANT.value: "svc-assistant",
 }
 
 

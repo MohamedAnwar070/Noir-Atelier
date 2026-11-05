@@ -79,7 +79,6 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     demoMode: false,
   });
   const [catalogMeta, setCatalogMeta] = useState(EMPTY_CATALOG_META);
-  const [agentRegistry, setAgentRegistry] = useState([]);
   const [availableRoles, setAvailableRoles] = useState([]);
   const [actors, setActors] = useState([]);
   const [actor, setActor] = useState(null);
@@ -468,12 +467,11 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     setBoot({ status: "loading", error: null });
     setCatalog((prev) => ({ ...prev, status: "loading", error: null }));
     try {
-      const [cfg, meta, searchRes, fullArchiveRes, registry, health, rolesRes] = await Promise.all([
+      const [cfg, meta, searchRes, fullArchiveRes, health, rolesRes] = await Promise.all([
         api.getPoliciesAndConfig(),
         api.getCatalogMeta(),
         api.searchCatalog({ sort: DEFAULT_FILTERS.sort, limit: pageSize, offset: 0 }),
         api.searchCatalog({ sort: DEFAULT_FILTERS.sort, limit: 100, offset: 0 }).catch(() => null),
-        api.getAgentsRegistry().catch(() => []),
         api.getHealth().catch(() => ({})),
         api.listRoles().catch(() => []),
       ]);
@@ -567,7 +565,6 @@ export function StoreProvider({ children, initialPage = "shop" }) {
       catalogMetaRef.current = mergedMeta;
       setCatalogMeta(mergedMeta);
       setCategories(Array.isArray(mergedMeta.categories) ? mergedMeta.categories : []);
-      setAgentRegistry(Array.isArray(registry) ? registry : []);
 
       setConfig({
         business: cfg.business_config || {},
@@ -1130,9 +1127,8 @@ export function StoreProvider({ children, initialPage = "shop" }) {
   const refreshAfterAssistant = useCallback(
     async (res) => {
       await Promise.all([loadCart(), loadOrders(), fetchProducts(filtersRef.current, { silent: true })]);
-      const feedback = res?.data?.action_feedback;
-      const acted = ["action_completed", "pending_approval", "escalated"].includes(res?.status);
-      if (feedback && acted) notify({ title: feedback.title, message: feedback.summary });
+      const feedback = res?.action_feedback;
+      if (feedback) notify({ title: feedback.title, message: feedback.summary });
     },
     [fetchProducts, loadCart, loadOrders, notify]
   );
@@ -1143,7 +1139,6 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     api,
     actor,
     businessConfig: business,
-    agentRegistry,
     isStaff,
     onAfterAction: refreshAfterAssistant,
   });
@@ -1267,7 +1262,6 @@ export function StoreProvider({ children, initialPage = "shop" }) {
     taxRules,
     catalogMeta,
     refreshCatalogMeta,
-    agentRegistry,
     actors,
     actorsList: actors,
     availableRoles,

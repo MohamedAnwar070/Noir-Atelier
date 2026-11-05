@@ -1763,7 +1763,7 @@ function renderAiConciergeDrawer() {
     `<option value="">Supervisor Auto-Router (All 9 Agents)</option>`,
     ...state.agentRegistry.map(
       (a) =>
-        `<option value="${a.agent_name}" ${state.agentPreferred === a.agent_name ? "selected" : ""}>${a.agent_name} (${a.service_account})</option>`
+        `<option value="${a.agent_name}" ${state.agentPreferred === a.agent_name ? "selected" : ""}>${a.persona}</option>`
     ),
   ].join("");
 
@@ -1818,21 +1818,13 @@ function renderAiConciergeDrawer() {
                   </div>`
                 : state.agentMessages
                     .map((m) => {
-                      const friendlyAgentTitle =
-                        state.agentRegistry.find((a) => a.agent_name === m.routed_agent)?.persona ||
-                        m.routed_agent ||
-                        "Atelier Assistant";
+                      const friendlyAgentTitle = m.persona || "Atelier Assistant";
 
                       const statusBadgeLabel =
                         {
-                          action_completed: "Action Completed",
-                          pending_approval: "Sent for Approval",
-                          escalated: "Concierge Assigned",
-                          clarify_missing_info: "Needs Details",
-                          blocked_unauthorized: "Access Restricted",
-                          blocked_prompt_injection: "Security Guardrail",
-                          error: "Action Failed",
                           answer: "Verified Answer",
+                          blocked: "Not Permitted",
+                          unavailable: "Unavailable",
                         }[m.status] || "Verified";
 
                       const fb = m.data?.action_feedback;
@@ -1912,25 +1904,6 @@ function renderAiConciergeDrawer() {
                                   )
                                   .join("")}
                               </div>`
-                            : ""
-                        }
-                        ${
-                          m.role === "agent" && (m.react_steps?.length || m.tool_traces?.length)
-                            ? `<details style="margin-top:0.55rem;padding-top:0.4rem;border-top:1px dashed var(--border-subtle);font-size:10px;color:var(--text-secondary);">
-                                <summary style="cursor:pointer;user-select:none;font-family:var(--font-mono);">
-                                  Technical Trace (${m.routed_agent} · Steps ${m.steps_taken ?? 1}/${m.step_budget_max ?? 10})
-                                </summary>
-                                <div style="margin-top:6px;font-family:var(--font-mono);">
-                                  ${(m.react_steps || []).map((s) => `<div>[${s.layer.toUpperCase()}] ${s.thought}</div>`).join("")}
-                                  ${
-                                    m.tool_traces?.length
-                                      ? `<div style="margin-top:4px;">${m.tool_traces
-                                          .map((t) => `${t.http_method} ${t.endpoint} [${t.risk_level || "read_only"}] → ${t.status_code} (${t.latency_ms}ms)`)
-                                          .join(" · ")}</div>`
-                                      : ""
-                                  }
-                                </div>
-                              </details>`
                             : ""
                         }
                       </div>
@@ -2593,18 +2566,13 @@ async function sendAgentChatMessage(message) {
       actorRole: state.actor.role,
       preferredAgent: state.agentPreferred || null,
     });
+    // The chat API returns only shopper-facing fields (no routing or tool internals).
     state.agentMessages.push({
       role: "agent",
-      routed_agent: res.routed_agent,
-      service_account: res.service_account,
+      persona: res.persona,
       status: res.status,
-      trace_id: res.trace_id,
       text: res.reply,
-      data: res.data || {},
-      tool_traces: res.tool_traces || [],
-      react_steps: res.react_steps || [],
-      steps_taken: res.steps_taken ?? 1,
-      step_budget_max: res.step_budget_max ?? 10,
+      data: { products: res.products || [], action_feedback: res.action_feedback || null },
     });
     const [searchRes, updatedCart, updatedOrders] = await Promise.all([
       api
@@ -2638,11 +2606,8 @@ async function sendAgentChatMessage(message) {
   } catch (err) {
     state.agentMessages.push({
       role: "agent",
-      routed_agent: "gateway_error",
-      service_account: "none",
-      status: "error",
-      trace_id: err.trace_id || "TRC-ERR",
-      text: err.message || "Could not reach /api/agents/chat.",
+      status: "unavailable",
+      text: "I couldn't reach the atelier just now. Please try again in a moment.",
     });
   } finally {
     state.agentBusy = false;

@@ -39,7 +39,7 @@ def _new_trace_id() -> str:
 
 
 def classify_agent_role(req: AgentRequest) -> str:
-    if req.preferred_agent and req.preferred_agent in AGENT_SERVICE_ACCOUNT_MAP:
+    if req.preferred_agent and req.preferred_agent in NODE_DISPATCH:
         return req.preferred_agent
 
     msg = req.message.lower()
@@ -254,6 +254,7 @@ AGENT_PERSONA_LABELS: Dict[str, str] = {
     AgentRole.ANALYTICS.value: "Insights",
     AgentRole.CONFIG.value: "Store Rules",
     AgentRole.STYLIST.value: "Personal Stylist",
+    AgentRole.ASSISTANT.value: "Noir Concierge",
 }
 
 

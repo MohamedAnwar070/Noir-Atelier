@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..auth import ActorContext
+from ..auth import ActorContext, assert_customer_access
 from ..config import get_settings
 from ..models import (
     Cart,
@@ -125,12 +125,7 @@ def build_product_order_idempotency_key(
 
 
 def _assert_order_access(actor: ActorContext, order: Order) -> None:
-    if actor.actor_type == "admin":
-        return
-    if actor.actor_type == "customer" and actor.actor_id != order.customer_id:
-        raise AppError("forbidden_order_access", "You do not have permission to access this order.", 403)
-    if actor.actor_type == "agent" and actor.on_behalf_of and actor.on_behalf_of != order.customer_id:
-        raise AppError("forbidden_order_access", "Order ownership verification failed for this customer.", 403)
+    assert_customer_access(actor, order.customer_id, "order")
 
 
 def serialize_order(db: Session, order: Order) -> Dict[str, Any]:
@@ -506,8 +501,9 @@ def list_customer_orders(
     customer_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     target_cust = customer_id or actor.on_behalf_of or (actor.actor_id if actor.actor_type == "customer" else None)
-    if actor.actor_type == "customer" and target_cust != actor.actor_id:
-        raise AppError("forbidden", "Cannot list another customer's orders.", 403)
+    if actor.actor_type != "admin" and (target_cust or actor.customer_scoped or actor.actor_type == "customer"):
+        # Shoppers list their own orders; agents only the shopper they act for.
+        assert_customer_access(actor, target_cust, "order history")
 
     stmt = select(Order).order_by(Order.order_date.desc())
     if target_cust:

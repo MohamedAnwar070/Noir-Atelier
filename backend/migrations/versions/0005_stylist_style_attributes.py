@@ -22,6 +22,7 @@ Data
   applied with backend/scripts/apply_style_tags.py once approved. Until then the
   search engine ignores these two dimensions rather than returning nothing.
 """
+from datetime import datetime, timezone
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -56,8 +57,34 @@ def upgrade() -> None:
     from backend.app.reference_data import ensure_reference_data  # single definition of the vocabulary
 
     session = Session(bind=bind)
-    ensure_reference_data(session, tables=("occasions", "palettes", "search_synonyms", "agent_permissions"))
+    ensure_reference_data(session, tables=("occasions", "palettes", "search_synonyms"))
     session.flush()
+    _insert_stylist_permission(bind)
+
+
+# Frozen at this revision: the ORM model gained columns later (0007 customer_scoped),
+# so this row is written with plain SQL that only names columns existing here.
+_STYLIST_ENDPOINTS = [
+    "/api/catalog/attributes",
+    "/api/catalog/search",
+    "/api/products/{id}",
+    "/api/products/{id}/recommendations",
+    "/api/agents/sessions/{id}/profile",
+]
+
+
+def _insert_stylist_permission(bind) -> None:
+    import json
+
+    exists = bind.execute(sa.text("SELECT 1 FROM agent_permissions WHERE service_account = 'svc-stylist'")).first()
+    if exists is None:
+        bind.execute(
+            sa.text(
+                "INSERT INTO agent_permissions (agent_type, service_account, resource_type, action, allowed_endpoints, "
+                "created_at, updated_at) VALUES ('stylist_agent', 'svc-stylist', 'catalog', 'read', :e, :t, :t)"
+            ),
+            {"e": json.dumps(_STYLIST_ENDPOINTS), "t": datetime.now(timezone.utc)},
+        )
 
 
 def _create_tables() -> None:

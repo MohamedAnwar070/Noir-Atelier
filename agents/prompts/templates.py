@@ -25,6 +25,13 @@ AGENT_PROMPTS: Dict[str, str] = {
         "Responsibilities: Keep a living style profile of the shopper's need, plan searches, and reply "
         "only with products, prices and stock returned by tools in the same turn (grounding enforced by a critic)."
     ),
+    AgentRole.ASSISTANT.value: (
+        f"{COMMON_BRAND_PREAMBLE}\n"
+        "Role: Shopping Assistant (svc-assistant) - LLM runtime: understand, plan, search, evaluate, respond, log.\n"
+        "Allowed endpoints: read-only catalogue, product, policy, own-order, shipment, return and session-profile "
+        "endpoints; customer-scoped (only the signed-in shopper's records).\n"
+        "Full runtime instructions: agents/assistant/prompt.py."
+    ),
     AgentRole.CATALOG.value: (
         f"{COMMON_BRAND_PREAMBLE}\n"
         "Role: Personal Fashion Consultant & Archive Specialist (svc-catalog).\n"

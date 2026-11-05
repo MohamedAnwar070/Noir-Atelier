@@ -32,7 +32,7 @@ class TestModelsAndSeed(unittest.TestCase):
 
     def test_50_tables_registered_and_all_foreign_keys_indexed(self) -> None:
         tables = set(Base.metadata.tables.keys())
-        self.assertEqual(len(tables), 52)
+        self.assertEqual(len(tables), 53)
         for required in (
             "customers",
             "customer_addresses",
@@ -79,6 +79,7 @@ class TestModelsAndSeed(unittest.TestCase):
             "business_config",
             "policies",
             "agent_permissions",
+            "agent_traces",
             "agent_sessions",
             "idempotency_keys",
             "roles",
@@ -180,7 +181,7 @@ class TestModelsAndSeed(unittest.TestCase):
             self.assertEqual(refund_cfg.config_value["tiers"]["tier_2_manager_approval_max_inr"], 25000)
 
             perms = session.scalars(select(AgentPermission)).all()
-            self.assertEqual(len(perms), 10)
+            self.assertEqual(len(perms), 11)  # 9 seeded + svc-stylist + svc-assistant
 
             policies = session.scalars(select(Policy)).all()
             self.assertEqual(len(policies), 4)

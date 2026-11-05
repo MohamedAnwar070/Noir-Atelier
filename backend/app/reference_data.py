@@ -273,6 +273,7 @@ PERMISSIONS: List[Dict[str, Any]] = [
     {"code": "audit:write", "resource": "audit", "action": "write", "description": "Record administrative compliance audit entries."},
     {"code": "users:read", "resource": "users", "action": "read", "description": "View staff directory, client accounts, and RBAC permission matrix."},
     {"code": "users:manage_roles", "resource": "users", "action": "manage_roles", "description": "Provision staff accounts, assign RBAC roles, and suspend/reactivate users."},
+    {"code": "agents:trace_read", "resource": "agents", "action": "trace_read", "description": "Inspect internal shopping-assistant traces (tool calls, checks, errors) for audit and debugging."},
 ]
 
 _ALL_PERMISSION_CODES: List[str] = [p["code"] for p in PERMISSIONS]
@@ -332,6 +333,7 @@ ROLE_PERMISSION_MAP: Dict[str, List[str]] = {
         "config:write",
         "audit:read",
         "users:read",
+        "agents:trace_read",
     ],
     "finance_admin": [
         "catalog:read",
@@ -426,18 +428,41 @@ STYLIST_AGENT_PERMISSION: Dict[str, Any] = {
         "/api/products/{id}/recommendations",
         "/api/agents/sessions/{id}/profile",
     ],
+    "customer_scoped": True,
 }
+
+# The shopping assistant (LLM agent runtime): read-only, and customer-scoped — it can
+# read a shopper's orders, shipments and returns only while acting for that shopper.
+# Mirrored client-side in agents/gateway.py; a test asserts the two stay identical.
+ASSISTANT_AGENT_PERMISSION: Dict[str, Any] = {
+    "agent_type": "shopping_assistant",
+    "service_account": "svc-assistant",
+    "resource_type": "storefront",
+    "action": "read",
+    "allowed_endpoints": [
+        "/api/catalog/attributes",
+        "/api/catalog/search",
+        "/api/products/{id}",
+        "/api/products/{id}/recommendations",
+        "/api/config/policies",
+        "/api/orders",
+        "/api/orders/{id}",
+        "/api/shipments/{id}",
+        "/api/returns/{id}",
+        "/api/agents/sessions/{id}/profile",
+    ],
+    "customer_scoped": True,
+}
+
+AGENT_PERMISSIONS: List[Dict[str, Any]] = [STYLIST_AGENT_PERMISSION, ASSISTANT_AGENT_PERMISSION]
 
 
 def _insert_missing_agent_permissions(session: Session) -> int:
-    exists = session.scalar(
-        select(AgentPermission).where(AgentPermission.service_account == STYLIST_AGENT_PERMISSION["service_account"])
-    )
-    if exists is not None:
-        return 0
-    session.add(AgentPermission(**STYLIST_AGENT_PERMISSION))
+    existing = set(session.scalars(select(AgentPermission.service_account)).all())
+    missing = [p for p in AGENT_PERMISSIONS if p["service_account"] not in existing]
+    session.add_all(AgentPermission(**p) for p in missing)
     session.flush()
-    return 1
+    return len(missing)
 
 
 def ensure_reference_data(

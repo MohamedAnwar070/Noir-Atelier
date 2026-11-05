@@ -405,26 +405,6 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
                       </div>
                     )}
 
-                    {/* Collapsible Grounded Archive & Governance Trace */}
-                    {Array.isArray(msg.reactSteps) && msg.reactSteps.length > 0 && (
-                      <details className="ai-trace-disclosure">
-                        <summary className="ai-trace-summary">
-                          <span>Verified Archive &amp; Policy Trace</span>
-                          <span className="ai-trace-meta">
-                            {msg.reactSteps.length} checks · {msg.agentName || "consultant"}
-                          </span>
-                        </summary>
-                        <div className="ai-trace-content">
-                          {msg.reactSteps.map((step, idx) => (
-                            <div key={idx} className="ai-trace-step">
-                              <span className="step-tag">{step.tag || step.layer || `STEP ${idx + 1}`}</span>
-                              <span className="step-body">{step.content || step.thought || step.detail}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </details>
-                    )}
-
                     <span className="ai-bubble-time">
                       {new Date(msg.timestamp).toLocaleTimeString([], {
                         hour: "2-digit",

@@ -78,7 +78,11 @@ def _session(db: Session, session_id: str) -> Optional[AgentSession]:
 
 def _authorize(actor: ActorContext, row: Optional[AgentSession], action: str) -> None:
     if actor.actor_type == "agent":
-        return  # endpoint access is enforced by agent_permissions (svc-stylist only)
+        # Endpoint access is enforced by agent_permissions; a customer-scoped agent may
+        # only use a session that is anonymous or belongs to the shopper it acts for.
+        if actor.customer_scoped and row is not None and row.customer_id not in (None, actor.on_behalf_of):
+            raise AppError("forbidden", "This session belongs to another shopper.", 403)
+        return
     if actor.actor_type == "customer":
         if action == "write":
             raise AppError("forbidden", "Only the stylist can update a style profile.", 403)

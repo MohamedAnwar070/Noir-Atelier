@@ -72,6 +72,9 @@ class Settings:
     llm_timeout_sec: int
     use_live_llm: bool
     stylist_enabled: bool
+    agent_runtime: str
+    assistant_effort: str
+    assistant_turn_deadline_sec: int
     agent_max_steps: int
     agent_checkpointer: str
 
@@ -161,6 +164,13 @@ def get_settings() -> Settings:
         use_live_llm=_as_bool(os.environ.get("USE_LIVE_LLM", "0"), False),
         # Kill switch for the conversational stylist (falls back to the specialist agents).
         stylist_enabled=_as_bool(os.environ.get("STYLIST_ENABLED", "1"), True),
+        # Chat brain: "llm" = shopping-assistant runtime (understand → plan → search →
+        # evaluate → respond → log); "legacy" = keyword-routed specialist agents.
+        agent_runtime=os.environ.get("AGENT_RUNTIME", "llm").strip().lower(),
+        # Reasoning effort for the assistant loop (low suits chat latency; raise if quality needs it).
+        assistant_effort=os.environ.get("ASSISTANT_EFFORT", "low").strip().lower(),
+        # Hard wall-clock ceiling for one assistant turn, all model and tool calls included.
+        assistant_turn_deadline_sec=int(os.environ.get("ASSISTANT_TURN_DEADLINE_SEC", "45")),
         agent_max_steps=int(os.environ.get("AGENT_MAX_STEPS", "6")),
         agent_checkpointer=os.environ.get("AGENT_CHECKPOINTER", "postgres"),
         storage_provider=os.environ.get("STORAGE_PROVIDER", "local"),

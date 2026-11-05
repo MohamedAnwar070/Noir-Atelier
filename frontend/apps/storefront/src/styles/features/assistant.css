@@ -1,6 +1,6 @@
 /* ==========================================================================
    Personal Fashion Consultant — Noir Atelier Native AI Concierge
-   Launcher, Floating Consultation Salon, Mobile Bottom Sheet, Product Dossiers, Trace
+   Launcher, Floating Consultation Salon, Mobile Bottom Sheet, Product Dossiers
    ========================================================================== */
 
 /* Backdrop overlay scrim for quick dismissal on all screens */
@@ -697,63 +697,6 @@
 .ai-tile-actions {
   display: flex;
   gap: 0.35rem;
-}
-
-/* Grounded Archive & Governance Trace Disclosure */
-.ai-trace-disclosure {
-  margin-top: 0.4rem;
-  border-top: 1px solid var(--border-subtle);
-  padding-top: 0.42rem;
-  font-size: 10.5px;
-}
-
-.ai-trace-summary {
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  color: var(--text-secondary);
-  font-weight: 500;
-  user-select: none;
-}
-
-.ai-trace-summary:hover {
-  color: var(--text-primary);
-}
-
-.ai-trace-meta {
-  font-size: 9.5px;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-}
-
-.ai-trace-content {
-  margin-top: 0.45rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  background: var(--bg-subtle);
-  padding: 0.55rem;
-  border-radius: 2px;
-}
-
-.ai-trace-step {
-  display: flex;
-  gap: 0.4rem;
-  line-height: 1.4;
-}
-
-.step-tag {
-  color: var(--accent-gold);
-  flex-shrink: 0;
-  font-weight: 600;
-}
-
-.step-body {
-  color: var(--text-secondary);
-  word-break: break-word;
 }
 
 /* Typing Indicator */

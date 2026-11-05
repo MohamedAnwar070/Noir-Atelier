@@ -1,6 +1,6 @@
 # Noir Atelier — AI-Native Commerce Plan
 
-Status: **Phase 1 done (2026-11-05) · Phase 2 next** · Owner: engineering · Last updated: 2026-11-05
+Status: **Phase 1 + Phase 2 done (2026-11-05) · Phase 3 next** · Phase 2 design: [docs/architecture/assistant.md](../architecture/assistant.md) · Owner: engineering · Last updated: 2026-11-05
 
 This plan makes two things true:
 
@@ -70,7 +70,7 @@ cancel_restock, return_restock, restock, adjustment, damage, late_capture`
 quantities. A check script enforces this (1.6).
 
 **`inventory`** (product level) is no longer read or written by code after this phase.
-It is dropped in a later contract migration (`0007`) once production has run cleanly
+It is dropped in a later contract migration (`0008`) once production has run cleanly
 on the new tables. Pattern: expand → backfill → switch → contract.
 
 ### 1.2 Backfill rules (in `0006`)
@@ -151,7 +151,14 @@ Guarantees:
 
 ---
 
-## Phase 2 — Agent runtime (understand → plan → search → evaluate → respond → log)
+## Phase 2 — Agent runtime (understand → plan → search → evaluate → respond → log) ✅
+
+Delivered as designed below, plus security fixes found on the way:
+- **Customer scope, enforced server-side.** Agents could read *any* order with no `X-On-Behalf-Of`, list any customer's orders, and read *any* shipment. Now `auth.assert_customer_access` applies, and `agent_permissions.customer_scoped` is set for svc-assistant and svc-stylist.
+- **Internals removed from the chat API.** It returned `tool_traces`, `react_steps` and `memory`, and the UI rendered a "trace" panel. The public agent registry exposed system prompts and endpoints. Both are now staff-only.
+- **Sessions.** Guessable `Math.random` session ids, and a shared default `SES-1001`, are replaced by UUIDs. A session's history is never loaded for another shopper.
+- **Search.** An occasion or palette *inferred* from words ("summer" → resort) no longer zeroes out results. It is relaxed and reported (`relaxed_dimensions`).
+- Migration `0007_agent_runtime`. The contract migration that drops `inventory` is renumbered to `0008`.
 
 One bounded tool-use loop replaces keyword routing.
 
@@ -177,7 +184,8 @@ One bounded tool-use loop replaces keyword routing.
   Traces are readable only through an admin endpoint (`agents:trace_read`).
 - **Fallback (LLM down or over budget):** the message goes straight to the search engine as a query,
   with an honest notice and human handoff. No intent keywords.
-- **Rollout:** behind `AGENT_RUNTIME=llm`. The keyword agents remain until Phase 4 evals pass, then are deleted.
+- **Rollout:** behind `AGENT_RUNTIME=llm` (default). The keyword agents remain until Phase 4 evals pass, then are deleted.
+- **Known follow-ups:** stream replies to the UI; migration 0005 uses `ALTER CONSTRAINT`, so migrations are Postgres-only (SQLite tests use `create_all`).
 
 ## Phase 3 — Safe actions
 
@@ -206,5 +214,5 @@ One bounded tool-use loop replaces keyword routing.
 | Keep "available = sellable now" semantics | no behaviour change for holds/payments, so the smallest risk |
 | No `committed` (shipped vs unshipped) state yet | there is no fulfilment stock flow today; it can be added later without a redesign |
 | Remove `/api/inventory/reserve` | duplicated holds without an order, unsafe clamp, no audit |
-| Drop the old `inventory` table only in `0007` | lets a bad deploy roll back without data loss |
+| Drop the old `inventory` table only in `0008` | lets a bad deploy roll back without data loss |
 | Startup seed no longer runs `create_all` on an Alembic-managed DB | in demo mode it created the new tables behind the migration's back on the dev DB |

@@ -52,6 +52,10 @@ def _csv_values(raw: Optional[str]) -> Set[str]:
     return {part.strip().lower() for part in raw.split(",") if part.strip()}
 
 
+# Descriptive tags inferred from free text that may be relaxed when nothing matches.
+SOFT_DIMENSIONS = ("occasion", "palette")
+
+
 def search_catalog(
     db: Session,
     q: Optional[str] = None,
@@ -99,15 +103,31 @@ def search_catalog(
         intent.max_price = max_price
 
     limit = max(1, min(int(limit), MAX_PAGE_SIZE))
-    page = run_search(
-        db,
-        intent,
-        category_subtree=vocab.category_subtree,
-        in_stock_only=in_stock_only,
-        sort=sort,
-        limit=limit,
-        offset=max(0, int(offset)),
-    )
+
+    def search():
+        return run_search(
+            db,
+            intent,
+            category_subtree=vocab.category_subtree,
+            in_stock_only=in_stock_only,
+            sort=sort,
+            limit=limit,
+            offset=max(0, int(offset)),
+        )
+
+    page = search()
+    # Occasion and palette are curated, sparse "mood" tags. When one was only INFERRED
+    # from the shopper's words ("summer" -> resort) and nothing matches, keep the hard
+    # constraints (garment, colour, material, price) and say what was relaxed — never
+    # drop a filter the caller set explicitly.
+    relaxed_dimensions = []
+    if page.total == 0:
+        relaxed_dimensions = sorted(d for d in SOFT_DIMENSIONS if intent.filters.get(d) and not explicit[d])
+        if relaxed_dimensions:
+            for dimension in relaxed_dimensions:
+                intent.filters[dimension] = set()
+            page = search()
+            page.relaxed = page.relaxed or page.total > 0
     reviews = load_reviews(db, [p.product_id for p in page.products])
 
     return {
@@ -125,5 +145,6 @@ def search_catalog(
             "relaxed": page.relaxed,
             "ignored_terms": page.ignored_terms or [],
             "skipped_dimensions": skipped,
+            "relaxed_dimensions": relaxed_dimensions,
         },
     }

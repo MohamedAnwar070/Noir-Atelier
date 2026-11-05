@@ -14,6 +14,7 @@ from .customer import Customer, CustomerAddress, CustomerPreference, CustomerVec
 from .fulfillment import Refund, ReturnRequest, Shipment, ShippingZone
 from .governance import (
     AgentPermission,
+    AgentTrace,
     AgentSession,
     AuditLog,
     BusinessConfig,
@@ -87,6 +88,7 @@ __all__ = [
     "BusinessConfig",
     "Policy",
     "AgentPermission",
+    "AgentTrace",
     "AgentSession",
     "IdempotencyKey",
     "Role",

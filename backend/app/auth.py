@@ -56,6 +56,8 @@ class ActorContext:
     email: Optional[str] = None
     name: Optional[str] = None
     session_id: Optional[str] = None
+    # Agent only: may touch customer records solely for the shopper in on_behalf_of.
+    customer_scoped: bool = False
 
     def has_permission(self, permission_code: str) -> bool:
         if self.role == "super_admin":
@@ -96,7 +98,8 @@ def _match_endpoint_pattern(pattern: str, actual_path: str) -> bool:
     return bool(re.match(regex_str, actual_path.rstrip("/") or "/"))
 
 
-def _verify_agent_permission(db: Session, service_account: str, request_path: str) -> None:
+def _verify_agent_permission(db: Session, service_account: str, request_path: str) -> bool:
+    """Raise unless the service account may call ``request_path``; return its customer scope."""
     perms = db.scalars(
         select(AgentPermission).where(AgentPermission.service_account == service_account)
     ).all()
@@ -116,6 +119,32 @@ def _verify_agent_permission(db: Session, service_account: str, request_path: st
             message=f"Service account '{service_account}' is not whitelisted for '{request_path}'.",
             status_code=403,
         )
+    return any(p.customer_scoped for p in perms)
+
+
+def assert_customer_access(actor: "ActorContext", owner_customer_id: Optional[str], what: str = "record") -> None:
+    """The single ownership rule for a shopper's records (orders, shipments, returns, sessions).
+
+    admin            governed by its own RBAC permissions (checked by the caller's route)
+    customer         only their own records
+    agent            only the shopper it acts for (X-On-Behalf-Of); a customer-scoped
+                     agent with no shopper may not touch any customer record
+    """
+    if actor.actor_type == "admin":
+        return
+    if actor.actor_type == "customer":
+        if owner_customer_id != actor.actor_id:
+            raise AppError("forbidden_order_access", f"You do not have permission to access this {what}.", 403)
+        return
+    if actor.actor_type == "agent":
+        if actor.on_behalf_of:
+            if owner_customer_id != actor.on_behalf_of:
+                raise AppError("forbidden_order_access", f"This {what} belongs to another customer.", 403)
+            return
+        if actor.customer_scoped:
+            raise AppError("forbidden_order_access", f"Sign-in is required to access this {what}.", 403)
+        return
+    raise AppError("forbidden_order_access", f"You do not have permission to access this {what}.", 403)
 
 
 def resolve_actor(
@@ -168,7 +197,7 @@ def resolve_actor(
                 permissions=get_role_permissions(db, "customer"),
             )
         if token.startswith("svc-"):
-            _verify_agent_permission(db, token, request.url.path)
+            scoped = _verify_agent_permission(db, token, request.url.path)
             return ActorContext(
                 actor_type="agent",
                 actor_id=token,
@@ -176,6 +205,7 @@ def resolve_actor(
                 on_behalf_of=x_on_behalf_of,
                 trace_id=trace_id,
                 permissions=get_role_permissions(db, "service_account"),
+                customer_scoped=scoped,
             )
         if token in ("admin_manager", "manager_001"):
             return ActorContext(
@@ -241,8 +271,9 @@ def resolve_actor(
             role = staff.role_code
             email = staff.email
             name = staff.name
-    elif actor_type == "agent":
-        _verify_agent_permission(db, actor_id, request.url.path)
+    customer_scoped = False
+    if actor_type == "agent":
+        customer_scoped = _verify_agent_permission(db, actor_id, request.url.path)
 
     return ActorContext(
         actor_type=actor_type,
@@ -254,6 +285,7 @@ def resolve_actor(
         email=email,
         name=name,
         session_id=str(session_id) if session_id else None,
+        customer_scoped=customer_scoped,
     )
 
 

@@ -68,6 +68,23 @@ AGENT_ENDPOINT_WHITELIST: Dict[str, List[Tuple[str, str]]] = {
         ("GET", "/api/agents/sessions/{id}/profile"),
         ("PUT", "/api/agents/sessions/{id}/profile"),
     ],
+    # Shopping assistant (LLM runtime): read-only and customer-scoped. Mirrors the
+    # server-side grant in backend/app/reference_data.ASSISTANT_AGENT_PERMISSION
+    # (a test asserts the two stay identical). No write endpoints: actions that change
+    # a cart, order or return are confirmed by the shopper in the UI, never by the model.
+    AgentRole.ASSISTANT.value: [
+        ("GET", "/api/catalog/attributes"),
+        ("GET", "/api/catalog/search"),
+        ("GET", "/api/products/{id}"),
+        ("GET", "/api/products/{id}/recommendations"),
+        ("GET", "/api/config/policies"),
+        ("GET", "/api/orders"),
+        ("GET", "/api/orders/{id}"),
+        ("GET", "/api/shipments/{id}"),
+        ("GET", "/api/returns/{id}"),
+        ("GET", "/api/agents/sessions/{id}/profile"),
+        ("PUT", "/api/agents/sessions/{id}/profile"),
+    ],
     AgentRole.CATALOG.value: [
         ("GET", "/api/products/search"),
         ("GET", "/api/products/{id}"),

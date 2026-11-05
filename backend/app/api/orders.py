@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Header, Query, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..auth import ActorContext, require_agent_or_admin, require_authenticated, require_permissions, resolve_actor
+from ..auth import ActorContext, assert_customer_access, require_agent_or_admin, require_authenticated, require_permissions, resolve_actor
 from ..config import get_settings
 from ..database import get_db
 from ..models import Invoice, Order, Shipment
@@ -174,12 +174,14 @@ def api_schedule_shipment(
 
 
 def _assert_order_record_access(db: Session, actor: ActorContext, order_id: str) -> None:
-    if actor.actor_type == "agent" or actor.has_permission("orders:read_all"):
-        return
+    if actor.actor_type == "admin":
+        if actor.has_permission("orders:read_all"):
+            return
+        raise AppError("forbidden_order_access", "You are not authorized to access this order's records.", 403)
     ord_row = db.scalar(select(Order).where(Order.order_id == order_id))
-    if ord_row is not None and actor.actor_type == "customer" and ord_row.customer_id == actor.actor_id:
-        return
-    raise AppError("forbidden_order_access", "You are not authorized to access this order's records.", 403)
+    if ord_row is None:
+        raise AppError("forbidden_order_access", "You are not authorized to access this order's records.", 403)
+    assert_customer_access(actor, ord_row.customer_id, "order's records")
 
 
 @router.get("/api/shipments/{identifier}")

@@ -49,11 +49,12 @@ class TestNineAgentsArchitecture(unittest.TestCase):
 
     def test_01_registry_has_all_9_agents_and_whitelists(self) -> None:
         registry = get_agent_registry_metadata()
-        self.assertEqual(len(registry), 10)
+        self.assertEqual(len(registry), 11)
         accounts = {item["service_account"] for item in registry}
         self.assertEqual(
             accounts,
             {
+                "svc-assistant",
                 "svc-catalog",
                 "svc-cart",
                 "svc-order",
@@ -232,11 +233,13 @@ class TestNineAgentsArchitecture(unittest.TestCase):
         self.assertEqual(cfg_res.service_account, "svc-config")
         self.assertIn("POL-RET-01", cfg_res.policy_citations)
 
-        # Verify FastAPI /api/agents/registry and /api/agents/chat endpoints
+        # Public registry: display names only (prompts and endpoints are internal).
         http_reg = self.test_client.get("/api/agents/registry")
         self.assertEqual(http_reg.status_code, 200)
-        self.assertEqual(len(http_reg.json()), 10)
+        self.assertEqual(len(http_reg.json()), 11)
+        self.assertEqual(set(http_reg.json()[0]), {"agent_name", "persona"})
 
+        # Chat returns only shopper-facing fields — no routing, tool or reasoning internals.
         http_chat = self.test_client.post(
             "/api/agents/chat",
             json={"message": "Show me Kids garments", "customer_id": "CUS-001"},
@@ -244,21 +247,9 @@ class TestNineAgentsArchitecture(unittest.TestCase):
         )
         self.assertEqual(http_chat.status_code, 200)
         body = http_chat.json()
-        self.assertIn(body["routed_agent"], ("stylist_agent", "catalog_agent"))
-        self.assertTrue(any(p["product_id"] == "PRD-005" for p in body["data"]["products"]))
-        self.assertIn("react_steps", body)
-        self.assertGreaterEqual(len(body["react_steps"]), 4)
-        if body["routed_agent"] == "stylist_agent":
-            self.assertIn("routing", body["active_patterns"])
-            self.assertIn("orchestrator_workers", body["active_patterns"])
-            self.assertIn("evaluator_optimizer", body["active_patterns"])
-        else:
-            self.assertIn("react", body["active_patterns"])
-            self.assertIn("reflection", body["active_patterns"])
-            self.assertIn("step_budget", body["active_patterns"])
-        self.assertTrue(body["reflection_verified"])
-        self.assertLessEqual(body["steps_taken"], body["step_budget_max"])
-        self.assertEqual(body["tool_traces"][0]["risk_level"], "read_only")
+        self.assertTrue(any(p["product_id"] == "PRD-005" for p in body["products"]))
+        for internal in ("routed_agent", "service_account", "tool_traces", "react_steps", "active_patterns", "data"):
+            self.assertNotIn(internal, body)
 
     def test_07_natural_language_product_purchase_and_action_feedback(self) -> None:
         browse_res = self.orchestrator.invoke(

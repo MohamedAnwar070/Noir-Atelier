@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -117,6 +118,10 @@ class AgentPermission(Base, TimestampMixin):
     action: Mapped[str] = mapped_column(String(24), nullable=False)
     allowed_endpoints: Mapped[List[str]] = mapped_column(JSON, default=list, nullable=False)
     max_value_inr: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Customer-facing agents (shopping assistant, stylist) may touch a shopper's own
+    # records only, and only while acting for that shopper (X-On-Behalf-Of). Enforced
+    # server-side by auth.assert_customer_access, never trusted to the agent.
+    customer_scoped: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
 
 
 class AgentSession(Base, TimestampMixin):
@@ -130,6 +135,53 @@ class AgentSession(Base, TimestampMixin):
     failed_verifications: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_locked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     state_snapshot: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+
+
+# Outcome of one assistant turn (CHECK constraint generated from this tuple).
+AGENT_TRACE_STATUSES = ("answered", "fallback", "error", "blocked")
+
+
+class AgentTrace(Base):
+    """Internal, structured record of ONE assistant turn — never shown to shoppers.
+
+    Holds what the runtime understood, planned, called, checked and replied, so a
+    conversation can be audited and debugged. Free text is PII-scrubbed before it is
+    stored. Readable only with the `agents:trace_read` permission.
+    """
+
+    __tablename__ = "agent_traces"
+
+    trace_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    session_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    customer_id: Mapped[Optional[str]] = mapped_column(
+        String(16), ForeignKey("customers.customer_id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    runtime: Mapped[str] = mapped_column(String(16), nullable=False)  # llm | offline
+    model: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    intent: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)  # reported by the model
+    plan_note: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
+    user_message: Mapped[str] = mapped_column(Text, nullable=False)
+    reply: Mapped[str] = mapped_column(Text, nullable=False)
+    product_ids: Mapped[List[str]] = mapped_column(JSON, default=list, nullable=False)
+    tool_calls: Mapped[List[Dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
+    evaluation: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    errors: Mapped[List[str]] = mapped_column(JSON, default=list, nullable=False)
+    usage: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now, server_default=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN (" + ", ".join(f"'{s}'" for s in AGENT_TRACE_STATUSES) + ")",
+            name="ck_agent_traces_status",
+        ),
+        Index("ix_agent_traces_session_created", "session_id", "created_at"),
+        Index("ix_agent_traces_created", "created_at"),
+        Index("ix_agent_traces_status_created", "status", "created_at"),
+    )
 
 
 class IdempotencyKey(Base, TimestampMixin):
