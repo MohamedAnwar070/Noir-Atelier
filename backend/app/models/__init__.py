@@ -28,7 +28,6 @@ from .order import Cart, Coupon, CouponUsage, Order, OrderItem
 from .payment import Invoice, Payment, PaymentMethod
 from .product import (
     Category,
-    Inventory,
     InventoryMovement,
     Product,
     ProductImage,
@@ -64,7 +63,6 @@ __all__ = [
     "ProductImage",
     "ProductVariant",
     "VariantInventory",
-    "Inventory",
     "InventoryMovement",
     "ProductVector",
     "ProductReview",

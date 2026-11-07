@@ -32,7 +32,7 @@ class TestModelsAndSeed(unittest.TestCase):
 
     def test_50_tables_registered_and_all_foreign_keys_indexed(self) -> None:
         tables = set(Base.metadata.tables.keys())
-        self.assertEqual(len(tables), 53)
+        self.assertEqual(len(tables), 52)
         for required in (
             "customers",
             "customer_addresses",
@@ -51,7 +51,6 @@ class TestModelsAndSeed(unittest.TestCase):
             "product_variants",
             "product_images",
             "search_synonyms",
-            "inventory",
             "variant_inventory",
             "inventory_movements",
             "product_vectors",

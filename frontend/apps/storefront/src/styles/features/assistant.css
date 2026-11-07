@@ -723,6 +723,14 @@
   animation-delay: 0.4s;
 }
 
+/* Live progress label shown while the assistant works (streamed status) */
+.ai-typing-status {
+  margin-left: 0.5rem;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
 /* Consultation Footer & Ergonomic Input Bar */
 .ai-footer-bar {
   background: var(--bg-surface);

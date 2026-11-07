@@ -57,6 +57,8 @@ export function useAssistant({
     },
   ]);
   const [busy, setBusy] = useState(false);
+  // Live progress from the streamed turn (e.g. "Searching the collection…").
+  const [statusLabel, setStatusLabel] = useState("");
   const busyRef = useRef(false);
 
   const clientRef = useRef(api || null);
@@ -104,11 +106,12 @@ export function useAssistant({
 
       try {
         const client = api || clientRef.current;
-        const res = await client.chatWithAgents({
+        const res = await client.chatWithAgentsStream({
           message: text,
-          customerId: actor?.role === "customer" ? (actor.id || actor.customerId || "CUS-001") : null,
+          customerId: actor?.role === "customer" ? (actor.id || actor.customerId || null) : null,
           actorRole: actor?.role || "customer",
           sessionId: resolveSessionId(),
+          onStatus: setStatusLabel,
         });
 
         rememberSessionId(res.session_id);
@@ -172,6 +175,7 @@ export function useAssistant({
       } finally {
         busyRef.current = false;
         setBusy(false);
+        setStatusLabel("");
       }
     },
     [api, actor, onAfterAction, onActionCompleted]
@@ -192,6 +196,7 @@ export function useAssistant({
     messages,
     busy,
     isThinking: busy,
+    statusLabel,
     send,
     sendMessage: send,
     reset,

@@ -185,7 +185,8 @@ One bounded tool-use loop replaces keyword routing.
 - **Fallback (LLM down or over budget):** the message goes straight to the search engine as a query,
   with an honest notice and human handoff. No intent keywords.
 - **Rollout:** behind `AGENT_RUNTIME=llm` (default). The keyword agents remain until Phase 4 evals pass, then are deleted.
-- **Known follow-ups:** stream replies to the UI; migration 0005 uses `ALTER CONSTRAINT`, so migrations are Postgres-only (SQLite tests use `create_all`).
+- **Follow-ups done (2026-11-07):** streamed progress over SSE; migration `0008` dropped the legacy `inventory` table (rollback rebuilds it from live stock); credentials via the Anthropic CLI (`ant auth login`), checked with `python -m agents.llm.check`.
+- **Known limitation:** migration 0005 uses `ALTER CONSTRAINT`, so migrations are Postgres-only (SQLite tests use `create_all`).
 
 ## Phase 3 — Safe actions
 

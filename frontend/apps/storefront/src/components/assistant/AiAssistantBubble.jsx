@@ -26,6 +26,7 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
   const {
     messages,
     isThinking,
+    statusLabel,
     sendMessage,
     clearHistory,
     quickPrompts,
@@ -420,10 +421,11 @@ export function AiAssistantBubble({ onOpenProduct, onOpenBag }) {
                   <div className="ai-bot-avatar" aria-hidden="true">
                     <BrandMonogram size={17} reversed />
                   </div>
-                  <div className="ai-bubble assistant-bubble ai-typing-bubble">
-                    <span className="typing-dot" />
-                    <span className="typing-dot" />
-                    <span className="typing-dot" />
+                  <div className="ai-bubble assistant-bubble ai-typing-bubble" role="status" aria-live="polite">
+                    <span className="typing-dot" aria-hidden="true" />
+                    <span className="typing-dot" aria-hidden="true" />
+                    <span className="typing-dot" aria-hidden="true" />
+                    {statusLabel && <span className="ai-typing-status">{statusLabel}</span>}
                   </div>
                 </div>
               )}

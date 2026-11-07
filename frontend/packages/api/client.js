@@ -620,6 +620,64 @@ export class NoirApiClient {
     return data;
   }
 
+  /**
+   * Chat over Server-Sent Events: `onStatus(label)` receives live progress while the
+   * assistant works; resolves with the final, already-verified reply (same shape as
+   * chatWithAgents). Falls back to the plain endpoint if streaming is unavailable.
+   */
+  async chatWithAgentsStream({ message, customerId, actorRole, sessionId = null, onStatus = null }) {
+    const body = {
+      message,
+      customer_id: customerId,
+      actor_role: actorRole,
+      session_id: sessionId || undefined,
+    };
+    const headers = { "Content-Type": "application/json", Accept: "text/event-stream" };
+    if (this.token) headers.Authorization = `Bearer ${this.token}`;
+
+    let res;
+    try {
+      res = await fetch(new URL("/api/agents/chat/stream", this.baseUrl).toString(), {
+        method: "POST",
+        headers,
+        credentials: "include",
+        body: JSON.stringify(body),
+      });
+    } catch {
+      return this.chatWithAgents({ message, customerId, actorRole, sessionId });
+    }
+    if (!res.ok || !res.body || typeof res.body.getReader !== "function") {
+      // Auth refresh, error mapping and offline handling live in request(): reuse them.
+      return this.chatWithAgents({ message, customerId, actorRole, sessionId });
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+      let boundary;
+      while ((boundary = buffer.indexOf("\n\n")) !== -1) {
+        const block = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        let event = "message";
+        let data = "";
+        for (const line of block.split("\n")) {
+          if (line.startsWith("event: ")) event = line.slice(7);
+          else if (line.startsWith("data: ")) data += line.slice(6);
+        }
+        if (!data) continue; // comments / keep-alives
+        const payload = JSON.parse(data);
+        if (event === "status") onStatus?.(payload.label);
+        else if (event === "reply") return payload;
+        else if (event === "error") throw { status: 503, code: "assistant_unavailable", message: payload.message };
+      }
+      if (done) break;
+    }
+    throw { status: 502, code: "stream_incomplete", message: "The reply was interrupted. Please try again." };
+  }
+
   async chatWithAgents({ message, customerId, actorRole, sessionId = null, preferredAgent = null }) {
     const { data } = await this.request("POST", "/api/agents/chat", {
       body: {

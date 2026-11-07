@@ -65,6 +65,7 @@ class Settings:
 
     llm_provider: str
     anthropic_api_key: str
+    claude_cli_path: str
     llm_model_reasoning: str
     llm_model_fast: str
     openai_api_key: str
@@ -152,8 +153,10 @@ def get_settings() -> Settings:
         embedding_provider=os.environ.get("EMBEDDING_PROVIDER", "local"),
         embedding_model=os.environ.get("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5"),
         embedding_dim=int(os.environ.get("EMBEDDING_DIM", "384")),
-        llm_provider=os.environ.get("LLM_PROVIDER", "anthropic"),
+        llm_provider=os.environ.get("LLM_PROVIDER", "anthropic").strip().lower(),
         anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", ""),
+        # LLM_PROVIDER=claude_code only: path to the Claude Code CLI (auto-detected when empty).
+        claude_cli_path=os.environ.get("CLAUDE_CLI_PATH", ""),
         # Stylist reply writer / router + profile extractor. See docs/architecture/stylist.md.
         llm_model_reasoning=os.environ.get("LLM_MODEL_REASONING", "claude-sonnet-5-5"),
         llm_model_fast=os.environ.get("LLM_MODEL_FAST", "claude-haiku-5-5"),

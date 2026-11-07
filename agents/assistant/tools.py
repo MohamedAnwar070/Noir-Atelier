@@ -560,6 +560,20 @@ TOOLS: List[ToolSpec] = [
 
 TOOLS_BY_NAME: Dict[str, ToolSpec] = {t.name: t for t in TOOLS}
 
+# What the shopper sees while a tool runs (streamed progress) — never the tool name.
+PROGRESS_LABELS: Dict[str, str] = {
+    "search_products": "Searching the collection…",
+    "get_product": "Looking at the details…",
+    "get_pairings": "Finding pieces that pair well…",
+    "get_store_policies": "Checking our store policies…",
+    "list_my_orders": "Looking up your orders…",
+    "get_order": "Looking up your order…",
+    "track_shipment": "Checking your delivery…",
+    "get_return_status": "Checking your return…",
+    "get_style_profile": "Recalling your preferences…",
+    "save_style_profile": "Noting your preferences…",
+}
+
 
 def tools_for(ctx: ChatContext) -> List[ToolSpec]:
     """Guests never see order tools (the model cannot even try them)."""

@@ -124,11 +124,19 @@ class ClaudeGateway:
         except anthropic.PermissionDeniedError as exc:
             raise LlmError("permission_denied", str(exc)) from exc
         except anthropic.BadRequestError as exc:
+            if "credit balance" in str(exc).lower():
+                raise LlmError("billing", "Anthropic account has no API credits (Console > Plans & Billing)") from exc
             raise LlmError("bad_request", str(exc)) from exc
         except anthropic.APIStatusError as exc:
             raise LlmError(f"api_{exc.status_code}", str(exc)) from exc
         except anthropic.APIConnectionError as exc:
             raise LlmError("connection", str(exc)) from exc
+        except TypeError as exc:
+            # The SDK raises a plain TypeError when no credential resolves at all
+            # (no API key, auth token or `ant auth login` profile).
+            if "authentication" in str(exc).lower():
+                raise LlmError("auth", "no Anthropic credentials found (run `ant auth login` or set ANTHROPIC_API_KEY)") from exc
+            raise
 
     @staticmethod
     def _system(system_blocks: List[str]) -> List[Dict[str, Any]]:
@@ -246,26 +254,42 @@ def _block_dict(block: Any) -> Dict[str, Any]:
 
 
 @lru_cache(maxsize=1)
-def build_llm() -> Optional[ClaudeGateway]:
-    """Live gateway when USE_LIVE_LLM is on for a supported provider, else None (offline).
+def build_llm():
+    """The configured provider (LLM_PROVIDER in .env), or None for the offline reply.
 
-    Cached per process so the SDK's HTTP connection pool is reused across turns.
+        anthropic    Anthropic API — credentials: ANTHROPIC_API_KEY or an `ant auth login` profile
+        claude_code  local Claude Code CLI — development only, refused when APP_ENV=production
+
+    Cached per process (the API client reuses its connection pool across turns).
     """
     from backend.app.config import get_settings
 
     settings = get_settings()
     if not settings.use_live_llm:
         return None
-    if settings.llm_provider != "anthropic":
-        logger.warning("LLM_PROVIDER=%s is not supported by this gateway; running offline", settings.llm_provider)
-        return None
+    provider = settings.llm_provider
     try:
-        return ClaudeGateway(
-            fast_model=settings.llm_model_fast,
-            reasoning_model=settings.llm_model_reasoning,
-            timeout_sec=float(settings.llm_timeout_sec),
-            api_key=settings.anthropic_api_key or None,
-        )
-    except Exception as exc:  # SDK missing or misconfigured: run offline rather than fail requests
-        logger.warning("Live LLM disabled: %s", exc)
+        if provider == "anthropic":
+            return ClaudeGateway(
+                fast_model=settings.llm_model_fast,
+                reasoning_model=settings.llm_model_reasoning,
+                timeout_sec=float(settings.llm_timeout_sec),
+                api_key=settings.anthropic_api_key or None,
+            )
+        if provider == "claude_code":
+            if settings.app_env.strip().lower() in ("production", "prod"):
+                logger.error("LLM_PROVIDER=claude_code is for local development only; refusing it in production")
+                return None
+            from .claude_code import ClaudeCodeGateway
+
+            return ClaudeCodeGateway(
+                fast_model=settings.llm_model_fast,
+                reasoning_model=settings.llm_model_reasoning,
+                timeout_sec=float(settings.llm_timeout_sec),
+                cli_path=settings.claude_cli_path or None,
+            )
+    except Exception as exc:  # misconfigured provider: run offline rather than fail requests
+        logger.warning("Live LLM disabled (%s): %s", provider, exc)
         return None
+    logger.warning("Unknown LLM_PROVIDER=%s; running offline", provider)
+    return None

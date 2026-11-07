@@ -1,6 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import (
     Boolean,
@@ -91,9 +91,6 @@ class Product(Base, TimestampMixin, SoftDeleteMixin):
     occasions: Mapped[List["ProductOccasion"]] = relationship(cascade="all, delete-orphan", lazy="selectin")
     images: Mapped[List["ProductImage"]] = relationship(
         back_populates="product", cascade="all, delete-orphan"
-    )
-    inventory: Mapped[Optional["Inventory"]] = relationship(
-        back_populates="product", uselist=False, cascade="all, delete-orphan"
     )
     variants: Mapped[List["ProductVariant"]] = relationship(
         back_populates="product",
@@ -235,34 +232,6 @@ class InventoryMovement(Base):
         ),
         Index("ix_inventory_movements_variant_created", "variant_id", "created_at"),
         Index("ix_inventory_movements_reference", "reference_type", "reference_id"),
-    )
-
-
-class Inventory(Base, TimestampMixin):
-    """DEPRECATED product-level stock (replaced by VariantInventory in migration 0006).
-
-    No code reads or writes it any more; kept only so a rollback of 0006 loses
-    nothing. Dropped by the contract migration 0007.
-    """
-
-    __tablename__ = "inventory"
-
-    inventory_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    product_id: Mapped[str] = mapped_column(
-        String(16), ForeignKey("products.product_id", ondelete="CASCADE"), unique=True, nullable=False, index=True
-    )
-    quantity_available: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    quantity_reserved: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    quantity_damaged: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    size_breakdown: Mapped[Dict[str, int]] = mapped_column(JSON, default=dict, nullable=False)
-    low_stock_threshold: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
-    last_sync: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    product: Mapped["Product"] = relationship(back_populates="inventory")
-
-    __table_args__ = (
-        CheckConstraint("quantity_available >= 0", name="ck_inventory_avail_non_negative"),
-        CheckConstraint("quantity_reserved >= 0", name="ck_inventory_reserved_non_negative"),
     )
 
 

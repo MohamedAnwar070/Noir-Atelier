@@ -1,10 +1,14 @@
+import json
 import logging
+import queue
 import re
+import threading
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import StreamingResponse
 
 from agents.assistant import AssistantRuntime, ChatContext, ChatReply, ConversationTurn
 from agents.client import PlatformApiClient
@@ -28,6 +32,7 @@ router = APIRouter()
 
 _SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 _SHARED_DEFAULT_SESSION = "SES-1001"  # AgentRequest's default; never let shoppers share it
+_STREAM_HEARTBEAT_SEC = 15  # keep proxies from closing an idle stream
 
 
 @router.get("/api/agents/registry")
@@ -51,6 +56,70 @@ def api_agents_chat(
     actor: ActorContext = Depends(resolve_optional_actor),
 ) -> ChatReply:
     """Shopper chat. Returns ONLY the shopper-facing reply; the internal trace is stored, never returned."""
+    return _chat_turn(req, request, actor, db)
+
+
+@router.post("/api/agents/chat/stream")
+def api_agents_chat_stream(
+    req: AgentRequest,
+    request: Request,
+    actor: ActorContext = Depends(resolve_optional_actor),
+) -> StreamingResponse:
+    """Same turn as /api/agents/chat, as Server-Sent Events.
+
+    Events:  status {label}   live progress while the assistant works (shopper wording only)
+             reply  ChatReply the final, already-verified answer
+             error  {message} the turn could not complete
+    Model tokens are deliberately NOT streamed: every reply is verified against the
+    tool results before a shopper may see it.
+    """
+    events: "queue.Queue[Optional[str]]" = queue.Queue()
+
+    def send(event: str, payload: Dict[str, Any]) -> None:
+        events.put(f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False, default=str)}\n\n")
+
+    def work() -> None:
+        provider = request.app.dependency_overrides.get(get_db, get_db)
+        sessions = provider()
+        db = next(sessions)  # own session: the request's dependencies close before streaming ends
+        try:
+            reply = _chat_turn(req, request, actor, db, on_progress=lambda label: send("status", {"label": label}))
+            send("reply", reply.model_dump(mode="json"))
+        except Exception:
+            logger.exception("streamed assistant turn failed")
+            send("error", {"message": "I couldn't reach the atelier just now. Please try again in a moment."})
+        finally:
+            sessions.close()
+            events.put(None)
+
+    threading.Thread(target=work, name="assistant-turn", daemon=True).start()
+
+    def stream():
+        yield ": stream open\n\n"  # flush headers immediately
+        while True:
+            try:
+                chunk = events.get(timeout=_STREAM_HEARTBEAT_SEC)
+            except queue.Empty:
+                yield ": keep-alive\n\n"
+                continue
+            if chunk is None:
+                return
+            yield chunk
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+def _chat_turn(
+    req: AgentRequest,
+    request: Request,
+    actor: ActorContext,
+    db: Session,
+    on_progress: Optional[Callable[[str], None]] = None,
+) -> ChatReply:
     from fastapi.testclient import TestClient
 
     settings = get_settings()
@@ -80,7 +149,7 @@ def api_agents_chat(
         deadline_sec=settings.assistant_turn_deadline_sec,
         effort=settings.assistant_effort,
     )
-    result = runtime.handle(req.message, ctx)
+    result = runtime.handle(req.message, ctx, on_progress=on_progress)
     try:
         save_trace(db, result.trace.to_record())
         append_history(db, session_id, customer_id, [vars(t) for t in result.remember])

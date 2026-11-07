@@ -9,7 +9,7 @@ import os
 import tempfile
 import unittest
 from itertools import count
-from typing import Any, Callable, Dict, List
+from typing import Any, Dict, List
 from unittest import mock
 
 from fastapi.testclient import TestClient
@@ -310,6 +310,31 @@ class TestAssistantRuntime(unittest.TestCase):
         denied = self.http.get(f"/api/admin/agents/traces/{body['reference_id']}",
                                headers={"Authorization": "Bearer demo_CUS-001"})
         self.assertEqual(denied.status_code, 403)
+
+    def test_17_stream_sends_progress_then_the_verified_reply(self) -> None:
+        price = self.low_price(self.prd001)
+        llm = FakeLlm([
+            tool_turn(("search_products", {"query": "linen shirt"})),
+            reply_turn(f"From ₹{price:,.0f}.", ["PRD-001"]),
+        ])
+        with mock.patch("backend.app.api.agents.build_llm", return_value=llm):
+            res = self.http.post("/api/agents/chat/stream", json={"message": "linen shirt", "session_id": "SES-STREAMTEST1"},
+                                 headers={"Authorization": "Bearer demo_CUS-001"})
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.headers["content-type"].startswith("text/event-stream"))
+        events = []
+        for block in res.text.split("\n\n"):
+            lines = dict(line.split(": ", 1) for line in block.splitlines() if line and not line.startswith(":"))
+            if "event" in lines:
+                events.append((lines["event"], json.loads(lines["data"])))
+        kinds = [e for e, _ in events]
+        self.assertEqual(kinds[-1], "reply")
+        labels = [d["label"] for e, d in events if e == "status"]
+        self.assertEqual(labels, ["Understanding your request…", "Searching the collection…", "Checking the details…"])
+        self.assertFalse(any("_" in label for label in labels))  # never a tool name
+        reply = events[-1][1]
+        self.assertEqual([p["product_id"] for p in reply["products"]], ["PRD-001"])
+        self.assertNotIn("tool_calls", reply)
 
     def test_16_another_shoppers_session_history_is_never_loaded(self) -> None:
         llm = FakeLlm([text_turn("Hi!"), text_turn("Hello!")])

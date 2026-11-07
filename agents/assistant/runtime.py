@@ -29,7 +29,7 @@ from .evidence import Evidence
 from .fallback import offline_reply, template_from_evidence
 from .grounding import MAX_CARDS, is_internal, review
 from .prompt import INSTRUCTIONS, shopper_context, vocabulary_block, vocabulary_values
-from .tools import REPLY_TOOL, ROLE, TOOLS_BY_NAME, ToolEnv, ToolInputError, ToolOutcome, ToolSpec, tools_for
+from .tools import PROGRESS_LABELS, REPLY_TOOL, ROLE, ToolEnv, ToolInputError, ToolOutcome, ToolSpec, tools_for
 
 logger = logging.getLogger("noir.assistant")
 
@@ -39,6 +39,9 @@ MAX_REWRITES = 1
 MAX_TOKENS = 8000
 MAX_HISTORY_TURNS = 12
 TOOL_WORKERS = 4
+
+
+Progress = Callable[[str], None]
 
 
 class _TurnBudgetExceeded(RuntimeError):
@@ -74,10 +77,13 @@ class AssistantRuntime:
         self.deadline_sec = float(deadline_sec)
         self.effort = effort
         self.clock = clock
+        self._progress: Optional[Progress] = None
 
     # ================================================================== entry point
 
-    def handle(self, message: str, ctx: ChatContext) -> TurnResult:
+    def handle(self, message: str, ctx: ChatContext, on_progress: Optional[Progress] = None) -> TurnResult:
+        """Run one turn. ``on_progress`` receives shopper-safe status labels while it works."""
+        self._progress = on_progress
         started = self.clock()
         text = scrub_pii((message or "").strip())[:MAX_INPUT_CHARS]
         trace = TurnTrace(
@@ -100,6 +106,7 @@ class AssistantRuntime:
         if self.llm is None:
             final = self._offline(env, text, trace)
         else:
+            self._emit("Understanding your request…")
             try:
                 final = self._loop(env, text, attributes, trace, started)
                 trace.status = "fallback" if final.template else "answered"
@@ -186,6 +193,8 @@ class AssistantRuntime:
             replies = [u for u in turn.tool_uses if u.name == REPLY_TOOL]
             others = [u for u in turn.tool_uses if u.name != REPLY_TOOL]
             if others:
+                for label in dict.fromkeys(PROGRESS_LABELS.get(u.name, "Working on it…") for u in others):
+                    self._emit(label)
                 results, tool_calls = self._run_tools(others, allowed, env, trace, tool_calls, started)
                 results += [
                     _tool_result(u.id, {"error": "Call reply_to_customer alone, after reading the tool results."}, True)
@@ -200,6 +209,7 @@ class AssistantRuntime:
                 messages.append({"role": "user", "content": [_tool_result(call.id, {"error": problem}, True)]
                                  + [_tool_result(u.id, {"error": "Only one reply per turn."}, True) for u in extra]})
                 continue
+            self._emit("Checking the details…" if not rewrites else "Double-checking the details…")
             verdict = review(final.message, final.product_ids, env.evidence, self._sizes(env))
             trace.evaluation.attempts += 1
             trace.intent, trace.plan_note = final.intent, final.plan_note
@@ -296,7 +306,17 @@ class AssistantRuntime:
 
     # ================================================================== fallbacks & helpers
 
+    def _emit(self, label: str) -> None:
+        """Send a progress label; a broken listener must never break the turn."""
+        if self._progress is None:
+            return
+        try:
+            self._progress(label)
+        except Exception:  # pragma: no cover - listener failure is non-fatal
+            logger.warning("progress listener failed", exc_info=True)
+
     def _offline(self, env: ToolEnv, text: str, trace: TurnTrace) -> _Final:
+        self._emit(PROGRESS_LABELS["search_products"])
         message, ids, error = offline_reply(env, text)
         trace.tool_calls.append(ToolCallRecord("search_products", {"query": text[:120]}, "error" if error else "ok",
                                                summary={"product_ids": ids}, error=error))

@@ -45,11 +45,22 @@ AssistantRuntime.handle (agents/assistant/runtime.py)
 - **Degrades, never breaks.** If the model is unavailable (`USE_LIVE_LLM=0`, missing key, timeout, refusal, rate limit), the shopper gets a search-based reply and the trace records `llm:<reason>`.
 - **Prompt-injection posture.** Tool results and product text are data, by instruction. Even a successful injection can only *read* the current shopper's own records, because no write tool exists. Changes to a cart, order or return are made by the shopper in the UI.
 
+## Streaming (`POST /api/agents/chat/stream`)
+
+Server-Sent Events for the same turn. `status {label}` events report live progress in the shopper's own words ("Searching the collection…", "Checking the details…"; never tool names). Then one `reply` event carries the final `ChatReply`, or an `error` event if the turn fails. Model tokens are deliberately **not** streamed, because a reply is shown only after it passes the grounding check. The storefront's `chatWithAgentsStream` shows the labels in the typing bubble and falls back to `/api/agents/chat` if streaming is unavailable.
+
 ## Trace record (`agent_traces`)
 
 `trace_id, session_id, customer_id, runtime (llm|offline), model, status (answered|fallback|error|blocked), intent (reported by the model), plan_note, user_message, reply, product_ids, tool_calls[{name, input, status, http_status, latency_ms, summary, error}], evaluation{passed, attempts, problems, template_used}, errors[], usage{model_calls, tokens, request_ids}, latency_ms, created_at`
 
 Free text is PII-scrubbed before storage. Query with `GET /api/admin/agents/traces?session_id=&status=&customer_id=&before=&limit=` and `GET /api/admin/agents/traces/{trace_id}`.
+
+## Providers (switch in .env, no code changes)
+
+| `LLM_PROVIDER` | Use | Notes |
+|---|---|---|
+| `anthropic` | **Production** | Anthropic API: native tool calls, prompt caching, refusal fallback. Needs API credits. Credentials come from `ANTHROPIC_API_KEY` or `ant auth login`. |
+| `claude_code` | **Local development only** | `agents/llm/claude_code.py` runs `claude -p` on the developer's Claude Code login, with no API credits. Tools are described in the prompt and the model answers in JSON, which is adapted to the same `LlmTurn`, and the grounding check still applies. The CLI runs with its built-in tools, MCP and settings disabled, in a temp folder. Slower (one process per call). Refused when `APP_ENV=production`. |
 
 ## Configuration (.env)
 
@@ -57,12 +68,14 @@ Free text is PII-scrubbed before storage. Query with `GET /api/admin/agents/trac
 |---|---|---|
 | `AGENT_RUNTIME` | `llm` | `llm` = this runtime; `legacy` = keyword-routed agents (removed in Phase 4) |
 | `USE_LIVE_LLM` | `0` | `1` to call the model; otherwise the offline search reply |
-| `LLM_PROVIDER` / `ANTHROPIC_API_KEY` | `anthropic` / – | Provider and key (an `ant auth` profile also works) |
+| `LLM_PROVIDER` / `ANTHROPIC_API_KEY` | `anthropic` / empty | Provider. Leave the key empty to use the Anthropic CLI sign-in (`ant auth login`); a non-empty key wins over the profile. `ANTHROPIC_PROFILE` picks a named profile. |
 | `LLM_MODEL_REASONING` / `LLM_MODEL_FAST` | `claude-sonnet-5-5` / `claude-haiku-5-5` | Loop model / cheap-task model |
 | `ASSISTANT_EFFORT` | `low` | Reasoning effort for the loop |
 | `AGENT_MAX_STEPS` | `6` | Tool calls per turn |
 | `ASSISTANT_TURN_DEADLINE_SEC` | `45` | Wall-clock ceiling per turn |
 | `LLM_TIMEOUT_SEC` | `30` | Per model call |
+
+Check the configuration end to end with `python -m agents.llm.check` (one tiny live call). Test suites force `USE_LIVE_LLM=0` (`backend/tests/__init__.py`, `agents/tests/__init__.py`), so they never call a paid model.
 
 ## Tests
 
